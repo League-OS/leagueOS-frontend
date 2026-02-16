@@ -4,6 +4,7 @@ import {
   clubSchema,
   courtSchema,
   gameSchema,
+  gameParticipantSchema,
   leaderboardEntrySchema,
   loginRequestSchema,
   profileSchema,
@@ -14,6 +15,7 @@ import {
   type Club,
   type Court,
   type Game,
+  type GameParticipant,
   type LeaderboardEntry,
   type LoginRequest,
   type Profile,
@@ -133,6 +135,15 @@ export class LeagueOsApiClient {
     return profileSchema.parse(data);
   }
 
+  async profileClubs(token: string, clubId: number): Promise<Club[]> {
+    const data = await this.request<unknown[]>('/profile/clubs', {
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+    return data.map((d) => clubSchema.parse(d));
+  }
+
   async clubs(token: string, clubId: number): Promise<Club[]> {
     const data = await this.request<unknown[]>('/clubs', {
       token,
@@ -206,6 +217,24 @@ export class LeagueOsApiClient {
       body: payload,
     });
     return gameSchema.parse(data);
+  }
+
+  async games(token: string, clubId: number, sessionId?: number): Promise<Game[]> {
+    const data = await this.request<unknown[]>('/games', {
+      token,
+      clubId,
+      query: { club_id: clubId, session_id: sessionId },
+    });
+    return data.map((d) => gameSchema.parse(d));
+  }
+
+  async gameParticipants(token: string, clubId: number, gameId: number): Promise<GameParticipant[]> {
+    const data = await this.request<unknown[]>(`/games/${gameId}/participants`, {
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+    return data.map((d) => gameParticipantSchema.parse(d));
   }
 
   async upsertGameParticipants(
