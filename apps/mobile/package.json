@@ -1,0 +1,28 @@
+{
+  "name": "@leagueos/mobile",
+  "version": "0.0.1",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@leagueos/api": "workspace:*",
+    "@leagueos/config": "workspace:*",
+    "@leagueos/schemas": "workspace:*",
+    "expo": "~51.0.28",
+    "expo-secure-store": "~13.0.2",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "^18.3.11",
+    "typescript": "^5.6.2"
+  }
+}
