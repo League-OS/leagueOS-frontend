@@ -5,6 +5,11 @@ import { LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
 import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import {
+  combineSessionDateAndTimeToIso,
+  listOpenSeasons,
+  selectSingleOpenSession,
+} from '../components/addGameLogic';
+import {
   LeaderboardView,
   type EloHistoryRow,
   type HomeGameRow,
@@ -21,15 +26,6 @@ const CLUB_NAME_FALLBACK: Record<number, string> = {
   3: 'SuperGiants Badminton Club',
   4: 'Redhawks Badminton Club',
 };
-
-function pickWritableSession(sessions: Session[]): Session | null {
-  const sorted = [...sessions].sort((a, b) => {
-    const byDate = b.session_date.localeCompare(a.session_date);
-    if (byDate !== 0) return byDate;
-    return b.id - a.id;
-  });
-  return sorted.find((s) => s.status === 'OPEN') ?? sorted.find((s) => s.status === 'CLOSED') ?? null;
-}
 
 function formatMonthDay(dateish: string): string {
   const value = new Date(dateish);
@@ -92,8 +88,13 @@ export default function Page() {
   const [selectedClubId, setSelectedClubId] = useState(DEFAULT_CLUB_ID);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [recordClubId, setRecordClubId] = useState(DEFAULT_CLUB_ID);
   const [recordSession, setRecordSession] = useState<Session | null>(null);
   const [recordSeasonId, setRecordSeasonId] = useState<number | null>(null);
+  const [recordSeasons, setRecordSeasons] = useState<Season[]>([]);
+  const [recordPlayers, setRecordPlayers] = useState<Player[]>([]);
+  const [recordCourts, setRecordCourts] = useState<Court[]>([]);
+  const [recordContextError, setRecordContextError] = useState<string | null>(null);
   const [sessionsBySeason, setSessionsBySeason] = useState<Record<number, Session[]>>({});
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -154,17 +155,24 @@ export default function Page() {
       } else {
         throw seasonsRes.reason;
       }
+      const openRecordSeasons = listOpenSeasons(seasonsRes.value);
+      setRecordSeasons(openRecordSeasons);
+      setRecordClubId(clubId);
 
       if (playersRes.status === 'fulfilled') {
         setPlayers(playersRes.value);
+        setRecordPlayers(playersRes.value);
       } else {
         setPlayers([]);
+        setRecordPlayers([]);
       }
 
       if (courtsRes.status === 'fulfilled') {
         setCourts(courtsRes.value);
+        setRecordCourts(courtsRes.value);
       } else {
         setCourts([]);
+        setRecordCourts([]);
       }
 
       const seasonList = seasonsRes.value;
@@ -176,6 +184,7 @@ export default function Page() {
         setSelectedSession(null);
         setRecordSession(null);
         setRecordSeasonId(null);
+        setRecordContextError('No open seasons available for this club.');
         setSessionsBySeason({});
         setLeaderboard([]);
         setRecentGames([]);
@@ -211,13 +220,17 @@ export default function Page() {
         clubById.set(club.id, club);
       }
 
-      // Record Game season defaults to currently selected season.
-      setRecordSeasonId(seasonToLoad);
-      const inSelectedSeason = pickWritableSession(nextSessionsBySeason[seasonToLoad] ?? []);
-      const inAnySeason = seasonList
-        .map((s) => pickWritableSession(nextSessionsBySeason[s.id] ?? []))
-        .find((s): s is Session => Boolean(s));
-      setRecordSession(inSelectedSeason ?? inAnySeason ?? null);
+      if (!openRecordSeasons.length) {
+        setRecordSeasonId(null);
+        setRecordSession(null);
+        setRecordContextError('No open seasons available for this club.');
+      } else {
+        const initialRecordSeasonId = openRecordSeasons[0].id;
+        setRecordSeasonId(initialRecordSeasonId);
+        const picked = selectSingleOpenSession(nextSessionsBySeason[initialRecordSeasonId] ?? []);
+        setRecordSession(picked.session);
+        setRecordContextError(picked.error);
+      }
 
       const [gamesRes, eloBySeasonRes] = await Promise.all([
         client.games(token, clubId),
@@ -408,32 +421,39 @@ export default function Page() {
   }
 
   async function handleRecordGame(payload: {
-    courtId: number;
-    startTimeIso: string;
+    courtId: number | null;
+    startTimeLocal: string;
     scoreA: number;
     scoreB: number;
     sideAPlayerIds: [number, number];
     sideBPlayerIds: [number, number];
   }) {
     if (!auth) return;
-    const sessionToUse = recordSession ?? selectedSession;
+    const sessionToUse = recordSession;
     if (!sessionToUse) {
-      throw new Error('No open/closed session available. Create or open a session first.');
+      throw new Error('No open session available. Open one session before recording games.');
+    }
+    if (sessionToUse.status !== 'OPEN') {
+      throw new Error('Selected session is not open. Choose a season with one open session.');
     }
 
-    const aligned = new Date(payload.startTimeIso);
-    const mins = aligned.getUTCMinutes();
-    aligned.setUTCMinutes(Math.floor(mins / 5) * 5, 0, 0);
+    const startTimeIso = combineSessionDateAndTimeToIso(sessionToUse.session_date, payload.startTimeLocal);
+    if (!startTimeIso) {
+      throw new Error('Invalid start time. Please pick a valid time in 5-minute increments.');
+    }
+    if (!payload.courtId) {
+      throw new Error('Please select a court.');
+    }
 
-    const game = await client.createGame(auth.token, auth.clubId, {
+    const game = await client.createGame(auth.token, recordClubId, {
       session_id: sessionToUse.id,
       court_id: payload.courtId,
-      start_time: aligned.toISOString(),
+      start_time: startTimeIso,
       score_a: payload.scoreA,
       score_b: payload.scoreB,
     });
 
-    await client.upsertGameParticipants(auth.token, auth.clubId, game.id, [
+    await client.upsertGameParticipants(auth.token, recordClubId, game.id, [
       { player_id: payload.sideAPlayerIds[0], side: 'A' },
       { player_id: payload.sideAPlayerIds[1], side: 'A' },
       { player_id: payload.sideBPlayerIds[0], side: 'B' },
@@ -445,14 +465,79 @@ export default function Page() {
 
   async function handleRecordSeasonChange(seasonId: number) {
     if (!auth) return;
-    setRecordSeasonId(seasonId);
+    try {
+      setRecordSeasonId(seasonId);
+      setRecordContextError(null);
 
-    let seasonSessions = sessionsBySeason[seasonId];
-    if (!seasonSessions) {
-      seasonSessions = await client.sessions(auth.token, auth.clubId, seasonId);
-      setSessionsBySeason((prev) => ({ ...prev, [seasonId]: seasonSessions ?? [] }));
+      let seasonSessions = sessionsBySeason[seasonId];
+      if (!seasonSessions) {
+        seasonSessions = await client.sessions(auth.token, recordClubId, seasonId);
+        setSessionsBySeason((prev) => ({ ...prev, [seasonId]: seasonSessions ?? [] }));
+      }
+      const picked = selectSingleOpenSession(seasonSessions ?? []);
+      setRecordSession(picked.session);
+      setRecordContextError(picked.error);
+    } catch (e) {
+      setRecordSession(null);
+      setRecordContextError(e instanceof Error ? e.message : 'Failed to load session for the selected season.');
     }
-    setRecordSession(pickWritableSession(seasonSessions ?? []));
+  }
+
+  async function handleRecordClubChange(clubId: number) {
+    if (!auth) return;
+    try {
+      setRecordClubId(clubId);
+      setRecordContextError(null);
+
+      const [seasonsRes, playersRes, courtsRes] = await Promise.allSettled([
+        client.seasons(auth.token, clubId, true),
+        client.players(auth.token, clubId),
+        client.courts(auth.token, clubId),
+      ]);
+
+      if (playersRes.status === 'fulfilled') {
+        setRecordPlayers(playersRes.value);
+      } else {
+        setRecordPlayers([]);
+      }
+
+      if (courtsRes.status === 'fulfilled') {
+        setRecordCourts(courtsRes.value);
+      } else {
+        setRecordCourts([]);
+      }
+
+      if (seasonsRes.status !== 'fulfilled') {
+        setRecordSeasons([]);
+        setRecordSeasonId(null);
+        setRecordSession(null);
+        setRecordContextError(seasonsRes.reason instanceof Error ? seasonsRes.reason.message : 'Failed to load open seasons.');
+        return;
+      }
+
+      const openSeasons = listOpenSeasons(seasonsRes.value);
+      setRecordSeasons(openSeasons);
+
+      if (!openSeasons.length) {
+        setRecordSeasonId(null);
+        setRecordSession(null);
+        setRecordContextError('No open seasons available for this club.');
+        return;
+      }
+
+      const nextSeasonId = openSeasons[0].id;
+      setRecordSeasonId(nextSeasonId);
+      const sessions = await client.sessions(auth.token, clubId, nextSeasonId);
+      setSessionsBySeason((prev) => ({ ...prev, [nextSeasonId]: sessions ?? [] }));
+      const picked = selectSingleOpenSession(sessions ?? []);
+      setRecordSession(picked.session);
+      setRecordContextError(picked.error);
+    } catch (e) {
+      setRecordSeasons([]);
+      setRecordSeasonId(null);
+      setRecordSession(null);
+      setRecordContextError(e instanceof Error ? e.message : 'Failed to load add game options.');
+    }
   }
 
   if (!auth) {
@@ -467,20 +552,23 @@ export default function Page() {
       selectedClubId={selectedClubId}
       selectedSeasonId={selectedSeasonId}
       selectedSession={selectedSession}
+      recordClubId={recordClubId}
       recordSession={recordSession}
       recordSeasonId={recordSeasonId}
       leaderboard={leaderboard}
       loading={loading}
       error={error}
-      recordSeasons={seasons}
-      players={players}
-      courts={courts}
+      recordSeasons={recordSeasons}
+      players={recordPlayers}
+      courts={recordCourts}
+      recordContextError={recordContextError}
       profileStats={profileStats}
       eloHistory={eloHistory}
       recentGames={recentGames}
       allGames={allGames}
       upcomingSessions={upcomingSessions}
       allUpcomingSessions={allUpcomingSessions}
+      onRecordClubChange={handleRecordClubChange}
       onClubChange={handleClubChange}
       onSeasonChange={handleSeasonChange}
       onRefresh={refresh}
@@ -508,8 +596,13 @@ export default function Page() {
         setAllUpcomingSessions([]);
         setSelectedSeasonId(null);
         setSelectedSession(null);
+        setRecordClubId(DEFAULT_CLUB_ID);
         setRecordSession(null);
         setRecordSeasonId(null);
+        setRecordSeasons([]);
+        setRecordPlayers([]);
+        setRecordCourts([]);
+        setRecordContextError(null);
         setSessionsBySeason({});
         setLeaderboard([]);
         setError(null);

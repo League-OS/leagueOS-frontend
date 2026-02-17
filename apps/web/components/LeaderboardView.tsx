@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@leagueos/api';
 import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import { floorToFiveMinuteIncrement, validateAddGameInput } from './addGameLogic';
 
 type TabKey = 'home' | 'leaderboard' | 'profile';
-type HomeMode = 'main' | 'allGames' | 'gameDetail' | 'allUpcoming' | 'upcomingDetail';
+type HomeMode = 'main' | 'addGame' | 'allGames' | 'gameDetail' | 'allUpcoming' | 'upcomingDetail';
 
 export type HomeGameRow = {
   id: number;
@@ -57,6 +58,7 @@ type Props = {
   selectedClubId: number;
   selectedSeasonId: number | null;
   selectedSession: Session | null;
+  recordClubId: number;
   recordSession: Session | null;
   recordSeasonId: number | null;
   leaderboard: LeaderboardEntry[];
@@ -65,18 +67,20 @@ type Props = {
   courts: Court[];
   loading: boolean;
   error: string | null;
+  recordContextError: string | null;
   profileStats: ProfileStatSummary;
   eloHistory: EloHistoryRow[];
   recentGames: HomeGameRow[];
   allGames: HomeGameRow[];
   upcomingSessions: UpcomingRow[];
   allUpcomingSessions: UpcomingRow[];
+  onRecordClubChange: (clubId: number) => Promise<void>;
   onClubChange: (clubId: number) => Promise<void>;
   onSeasonChange: (seasonId: number) => Promise<void>;
   onRefresh: () => Promise<void>;
   onRecordGame: (payload: {
-    courtId: number;
-    startTimeIso: string;
+    courtId: number | null;
+    startTimeLocal: string;
     scoreA: number;
     scoreB: number;
     sideAPlayerIds: [number, number];
@@ -94,6 +98,7 @@ export function LeaderboardView(props: Props) {
     selectedClubId,
     selectedSeasonId,
     selectedSession,
+    recordClubId,
     recordSession,
     recordSeasonId,
     leaderboard,
@@ -102,12 +107,14 @@ export function LeaderboardView(props: Props) {
     courts,
     loading,
     error,
+    recordContextError,
     profileStats,
     eloHistory,
     recentGames,
     allGames,
     upcomingSessions,
     allUpcomingSessions,
+    onRecordClubChange,
     onClubChange,
     onSeasonChange,
     onRefresh,
@@ -126,7 +133,10 @@ export function LeaderboardView(props: Props) {
       {tab === 'home' ? (
         <HomeScreen
           profile={profile}
+          clubs={clubs}
+          recordClubId={recordClubId}
           selectedSession={recordSession}
+          recordContextError={recordContextError}
           recordSeasonId={recordSeasonId}
           seasons={recordSeasons}
           players={players}
@@ -135,6 +145,7 @@ export function LeaderboardView(props: Props) {
           allGames={allGames}
           upcomingSessions={upcomingSessions}
           allUpcomingSessions={allUpcomingSessions}
+          onRecordClubChange={onRecordClubChange}
           onRecordGame={onRecordGame}
           onRecordSeasonChange={onRecordSeasonChange}
           onGoHome={() => setTab('home')}
@@ -327,7 +338,10 @@ export function LeaderboardView(props: Props) {
 
 function HomeScreen({
   profile,
+  clubs,
+  recordClubId,
   selectedSession,
+  recordContextError,
   recordSeasonId,
   seasons,
   players,
@@ -336,6 +350,7 @@ function HomeScreen({
   allGames,
   upcomingSessions,
   allUpcomingSessions,
+  onRecordClubChange,
   onRecordGame,
   onRecordSeasonChange,
   onGoHome,
@@ -344,7 +359,10 @@ function HomeScreen({
   onLogout,
 }: {
   profile: Profile | null;
+  clubs: Club[];
+  recordClubId: number;
   selectedSession: Session | null;
+  recordContextError: string | null;
   recordSeasonId: number | null;
   seasons: Season[];
   players: Player[];
@@ -353,9 +371,10 @@ function HomeScreen({
   allGames: HomeGameRow[];
   upcomingSessions: UpcomingRow[];
   allUpcomingSessions: UpcomingRow[];
+  onRecordClubChange: (clubId: number) => Promise<void>;
   onRecordGame: (payload: {
-    courtId: number;
-    startTimeIso: string;
+    courtId: number | null;
+    startTimeLocal: string;
     scoreA: number;
     scoreB: number;
     sideAPlayerIds: [number, number];
@@ -367,7 +386,6 @@ function HomeScreen({
   onGoProfile: () => void;
   onLogout: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [homeMode, setHomeMode] = useState<HomeMode>('main');
   const [activeGame, setActiveGame] = useState<HomeGameRow | null>(null);
   const [activeUpcoming, setActiveUpcoming] = useState<UpcomingRow | null>(null);
@@ -395,26 +413,11 @@ function HomeScreen({
 
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => setHomeMode('addGame')}
           style={{ width: '100%', border: 0, borderRadius: 18, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '18px 14px', fontSize: 18, fontWeight: 700, boxShadow: '0 12px 28px rgba(20,184,166,.35)', cursor: 'pointer' }}
         >
-          + Record Game
+          + Add Game
         </button>
-
-        <RecordGameModal
-          open={open}
-          onClose={() => setOpen(false)}
-          session={selectedSession}
-          recordSeasonId={recordSeasonId}
-          seasons={seasons}
-          players={players}
-          courts={courts}
-          onRecordSeasonChange={onRecordSeasonChange}
-          onSubmit={async (payload) => {
-            await onRecordGame(payload);
-            setOpen(false);
-          }}
-        />
 
         {homeMode === 'main' ? (
           <>
@@ -448,6 +451,26 @@ function HomeScreen({
               }))}
             />
           </>
+        ) : null}
+
+        {homeMode === 'addGame' ? (
+          <AddGameScreen
+            clubs={clubs}
+            recordClubId={recordClubId}
+            session={selectedSession}
+            recordContextError={recordContextError}
+            recordSeasonId={recordSeasonId}
+            seasons={seasons}
+            players={players}
+            courts={courts}
+            onRecordClubChange={onRecordClubChange}
+            onRecordSeasonChange={onRecordSeasonChange}
+            onBack={() => setHomeMode('main')}
+            onSubmit={async (payload) => {
+              await onRecordGame(payload);
+              setHomeMode('main');
+            }}
+          />
         ) : null}
 
         {homeMode === 'allGames' ? (
@@ -580,28 +603,34 @@ function DetailGrid({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
-function RecordGameModal({
-  open,
-  onClose,
+function AddGameScreen({
+  clubs,
+  recordClubId,
   session,
+  recordContextError,
   recordSeasonId,
   seasons,
   players,
   courts,
+  onRecordClubChange,
   onRecordSeasonChange,
+  onBack,
   onSubmit,
 }: {
-  open: boolean;
-  onClose: () => void;
+  clubs: Club[];
+  recordClubId: number;
   session: Session | null;
+  recordContextError: string | null;
   recordSeasonId: number | null;
   seasons: Season[];
   players: Player[];
   courts: Court[];
+  onRecordClubChange: (clubId: number) => Promise<void>;
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
+  onBack: () => void;
   onSubmit: (payload: {
-    courtId: number;
-    startTimeIso: string;
+    courtId: number | null;
+    startTimeLocal: string;
     scoreA: number;
     scoreB: number;
     sideAPlayerIds: [number, number];
@@ -609,11 +638,10 @@ function RecordGameModal({
   }) => Promise<void>;
 }) {
   const nowLocal = new Date();
-  nowLocal.setSeconds(0, 0);
-  const localValue = new Date(nowLocal.getTime() - nowLocal.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const defaultTime = floorToFiveMinuteIncrement(`${String(nowLocal.getHours()).padStart(2, '0')}:${String(nowLocal.getMinutes()).padStart(2, '0')}`);
 
-  const [courtId, setCourtId] = useState<number>(courts[0]?.id ?? 0);
-  const [startTime, setStartTime] = useState(localValue);
+  const [courtId, setCourtId] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState(defaultTime);
   const [scoreA, setScoreA] = useState(21);
   const [scoreB, setScoreB] = useState(17);
   const [a1, setA1] = useState<number>(players[0]?.id ?? 0);
@@ -623,45 +651,69 @@ function RecordGameModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!open) return null;
-
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
-  const courtOptions = courts.length ? courts : [{ id: 0, name: 'No courts', club_id: 0, is_active: false, created_at: '' }];
+
+  useEffect(() => {
+    setA1(players[0]?.id ?? 0);
+    setA2(players[1]?.id ?? 0);
+    setB1(players[2]?.id ?? 0);
+    setB2(players[3]?.id ?? 0);
+  }, [players]);
+
+  useEffect(() => {
+    setCourtId(null);
+  }, [courts, recordClubId, recordSeasonId]);
 
   return (
-    <div style={modalBackdrop}>
-      <div style={modalCard}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 22 }}>Record Game</h3>
-          <button onClick={onClose} style={outlineBtn}>Close</button>
-        </div>
+    <div style={{ marginTop: 16, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: 20 }}>Add Game</h2>
+        <button onClick={onBack} style={outlineBtn}>← Back</button>
+      </div>
 
-        <p style={{ marginTop: 8, color: '#4b5563' }}>Session: {session ? `${session.session_date} (${session.status})` : 'No session selected'}</p>
+      <p style={{ marginTop: 8, color: '#4b5563' }}>
+        Session Date: {session ? session.session_date : 'No open session selected'}
+      </p>
+      {recordContextError ? <p style={{ marginTop: 6, color: 'var(--bad)', fontSize: 14 }}>{recordContextError}</p> : null}
 
-        <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span>Season</span>
-            <select value={recordSeasonId ?? ''} onChange={(e) => { const next = Number(e.target.value); if (!Number.isNaN(next)) void onRecordSeasonChange(next); }} style={modalInput} disabled={!seasons.length}>
-              {!seasons.length ? <option value="">No seasons</option> : null}
-              {seasons.map((season) => (
-                <option key={season.id} value={season.id}>{season.name}</option>
-              ))}
-            </select>
-          </label>
+      <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Club</span>
+          <select value={recordClubId} onChange={(e) => void onRecordClubChange(Number(e.target.value))} style={modalInput}>
+            {!clubs.length ? <option value={recordClubId}>Club {recordClubId}</option> : null}
+            {clubs.map((club) => (
+              <option key={club.id} value={club.id}>{club.name}</option>
+            ))}
+          </select>
+        </label>
 
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span>Court</span>
-            <select value={courtId} onChange={(e) => setCourtId(Number(e.target.value))} style={modalInput}>
-              {courtOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Season (open only)</span>
+          <select value={recordSeasonId ?? ''} onChange={(e) => { const next = Number(e.target.value); if (!Number.isNaN(next)) void onRecordSeasonChange(next); }} style={modalInput} disabled={!seasons.length}>
+            {!seasons.length ? <option value="">No open seasons</option> : null}
+            {seasons.map((season) => (
+              <option key={season.id} value={season.id}>{season.name}</option>
+            ))}
+          </select>
+        </label>
 
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span>Start Time</span>
-            <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} style={modalInput} />
-          </label>
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Court</span>
+          <select value={courtId ?? ''} onChange={(e) => setCourtId(e.target.value ? Number(e.target.value) : null)} style={modalInput}>
+            <option value="">Select court</option>
+            {courts.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Start Time</span>
+          <input type="time" step={300} value={startTime} onChange={(e) => setStartTime(floorToFiveMinuteIncrement(e.target.value))} style={modalInput} />
+        </label>
+
+        <div style={{ border: '1px solid var(--border)', borderRadius: 14, background: '#f8fafc', padding: 12, display: 'grid', gap: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Teams and Score</h3>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <label style={{ display: 'grid', gap: 6 }}>
@@ -689,63 +741,56 @@ function RecordGameModal({
               <select value={b2} onChange={(e) => setB2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
             </div>
           </div>
-
-          {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
-
-          <button
-            style={{ border: 0, borderRadius: 12, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '12px 14px', fontWeight: 700, cursor: 'pointer' }}
-            disabled={busy}
-            onClick={async () => {
-              setError(null);
-              if (!session) {
-                setError('No session selected');
-                return;
-              }
-              if (scoreA === scoreB) {
-                setError('Draw is not allowed. Scores must differ.');
-                return;
-              }
-              const ids = [a1, a2, b1, b2];
-              if (ids.some((id) => !id)) {
-                setError('Please select all 4 players.');
-                return;
-              }
-              if (new Set(ids).size !== ids.length) {
-                setError('Players must be unique across both sides.');
-                return;
-              }
-              if (!courtId) {
-                setError('Please select a court.');
-                return;
-              }
-
-              try {
-                setBusy(true);
-                await onSubmit({ courtId, startTimeIso: new Date(startTime).toISOString(), scoreA, scoreB, sideAPlayerIds: [a1, a2], sideBPlayerIds: [b1, b2] });
-              } catch (e) {
-                if (e instanceof ApiError && e.code === 'GAME_CONFLICT') {
-                  const current = new Date(startTime);
-                  if (!Number.isNaN(current.getTime())) {
-                    current.setMinutes(current.getMinutes() + 5);
-                    const nextLocal = new Date(current.getTime() - current.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                    setStartTime(nextLocal);
-                  }
-                  setError('A game already exists for this court and start time. I moved time to the next 5-minute slot; review and save again.');
-                } else if (e instanceof ApiError && e.code === 'INVALID_GAME_TIME') {
-                  setError('Start time must be on a 5-minute boundary. Try a time like 7:00, 7:05, 7:10.');
-                } else if (e instanceof ApiError && e.code === 'SESSION_IMMUTABLE') {
-                  setError('This session is finalized and can no longer be changed. Choose an open/closed session.');
-                } else {
-                  setError(e instanceof Error ? e.message : 'Failed to record game');
-                }
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? 'Saving...' : 'Save Game'}
-          </button>
         </div>
+
+        {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
+
+        <button
+          style={{ border: 0, borderRadius: 12, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '12px 14px', fontWeight: 700, cursor: 'pointer' }}
+          disabled={busy}
+          onClick={async () => {
+            setError(null);
+            const validationError = validateAddGameInput({
+              courtId,
+              scoreA,
+              scoreB,
+              sideAPlayerIds: [a1, a2],
+              sideBPlayerIds: [b1, b2],
+              sessionId: session?.id ?? null,
+              startTime,
+            });
+            if (validationError) {
+              setError(validationError);
+              return;
+            }
+
+            try {
+              setBusy(true);
+              await onSubmit({ courtId, startTimeLocal: floorToFiveMinuteIncrement(startTime), scoreA, scoreB, sideAPlayerIds: [a1, a2], sideBPlayerIds: [b1, b2] });
+            } catch (e) {
+              if (e instanceof ApiError && e.code === 'GAME_CONFLICT') {
+                const [hoursRaw, minutesRaw] = floorToFiveMinuteIncrement(startTime).split(':');
+                const hours = Number(hoursRaw);
+                const minutes = Number(minutesRaw);
+                if (Number.isInteger(hours) && Number.isInteger(minutes)) {
+                  const next = new Date(0, 0, 1, hours, minutes + 5, 0, 0);
+                  setStartTime(`${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`);
+                }
+                setError('A game already exists for this court and start time. Time moved to the next 5-minute slot.');
+              } else if (e instanceof ApiError && e.code === 'INVALID_GAME_TIME') {
+                setError('Start time must be on a 5-minute boundary. Try 7:00, 7:05, 7:10.');
+              } else if (e instanceof ApiError && e.code === 'SESSION_IMMUTABLE') {
+                setError('Selected session is not writable anymore. Select a season with one OPEN session.');
+              } else {
+                setError(e instanceof Error ? e.message : 'Failed to add game');
+              }
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? 'Saving...' : 'Save Game'}
+        </button>
       </div>
     </div>
   );
@@ -847,27 +892,6 @@ const outlineBtn: React.CSSProperties = {
   background: '#fff',
   padding: '8px 10px',
   cursor: 'pointer',
-};
-
-const modalBackdrop: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,.35)',
-  display: 'grid',
-  placeItems: 'center',
-  padding: 16,
-  zIndex: 1000,
-};
-
-const modalCard: React.CSSProperties = {
-  width: 'min(760px,100%)',
-  background: '#fff',
-  borderRadius: 16,
-  border: '1px solid var(--border)',
-  padding: 16,
-  boxShadow: '0 20px 40px rgba(0,0,0,.2)',
-  maxHeight: '88vh',
-  overflow: 'auto',
 };
 
 const modalInput: React.CSSProperties = {
