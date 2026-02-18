@@ -67,6 +67,7 @@ type Props = {
   courts: Court[];
   loading: boolean;
   error: string | null;
+  successMessage: string | null;
   recordContextError: string | null;
   profileStats: ProfileStatSummary;
   eloHistory: EloHistoryRow[];
@@ -78,6 +79,17 @@ type Props = {
   onClubChange: (clubId: number) => Promise<void>;
   onSeasonChange: (seasonId: number) => Promise<void>;
   onRefresh: () => Promise<void>;
+  canCreateSeason: boolean;
+  allowProfilePlayerPick: boolean;
+  profilePlayers: Player[];
+  selectedProfilePlayerId: number | null;
+  showFinalizeAction: boolean;
+  canFinalizeSession: boolean;
+  canRevertSessionFinalize: boolean;
+  canManageRecords: boolean;
+  canOpenSession: boolean;
+  onFinalizeSession: () => Promise<void>;
+  onRevertSessionFinalize: () => Promise<void>;
   onRecordGame: (payload: {
     courtId: number | null;
     startTimeLocal: string;
@@ -87,6 +99,15 @@ type Props = {
     sideBPlayerIds: [number, number];
   }) => Promise<void>;
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
+  onCreateSeason: (payload: {
+    name: string;
+    format: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+    weekday: number;
+    start_time_local: string;
+    is_active: boolean;
+  }) => Promise<void>;
+  onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
+  onProfilePlayerChange: (playerId: number) => Promise<void>;
   onLogout: () => void;
 };
 
@@ -107,6 +128,7 @@ export function LeaderboardView(props: Props) {
     courts,
     loading,
     error,
+    successMessage,
     recordContextError,
     profileStats,
     eloHistory,
@@ -118,8 +140,22 @@ export function LeaderboardView(props: Props) {
     onClubChange,
     onSeasonChange,
     onRefresh,
+    canCreateSeason,
+    allowProfilePlayerPick,
+    profilePlayers,
+    selectedProfilePlayerId,
+    showFinalizeAction,
+    canFinalizeSession,
+    canRevertSessionFinalize,
+    canManageRecords,
+    canOpenSession,
+    onFinalizeSession,
+    onRevertSessionFinalize,
     onRecordGame,
     onRecordSeasonChange,
+    onCreateSeason,
+    onOpenSession,
+    onProfilePlayerChange,
     onLogout,
   } = props;
 
@@ -127,6 +163,13 @@ export function LeaderboardView(props: Props) {
   const [profileTitle, setProfileTitle] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const [createSeasonOpen, setCreateSeasonOpen] = useState(false);
+  const [createSeasonName, setCreateSeasonName] = useState('');
+  const [createSeasonFormat, setCreateSeasonFormat] = useState<'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES'>('DOUBLES');
+  const [createSeasonWeekday, setCreateSeasonWeekday] = useState(2);
+  const [createSeasonStartTime, setCreateSeasonStartTime] = useState('19:00');
+  const [createSeasonBusy, setCreateSeasonBusy] = useState(false);
+  const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>
@@ -148,6 +191,9 @@ export function LeaderboardView(props: Props) {
           onRecordClubChange={onRecordClubChange}
           onRecordGame={onRecordGame}
           onRecordSeasonChange={onRecordSeasonChange}
+          canOpenSession={canOpenSession}
+          onOpenSession={onOpenSession}
+          canManageRecords={canManageRecords}
           onGoHome={() => setTab('home')}
           onGoLeaderboard={() => setTab('leaderboard')}
           onGoProfile={() => {
@@ -191,8 +237,72 @@ export function LeaderboardView(props: Props) {
               <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                 Session: {selectedSession ? `${selectedSession.session_date} (${selectedSession.status})` : 'No session found'}
               </div>
-              <button onClick={() => void onRefresh()} style={outlineBtn} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {canCreateSeason ? (
+                  <button
+                    onClick={() => {
+                      setCreateSeasonError(null);
+                      setCreateSeasonOpen(true);
+                    }}
+                    style={outlineBtn}
+                    disabled={loading}
+                    title="Create a new season for this club."
+                  >
+                    {loading ? 'Processing...' : 'Create Season'}
+                  </button>
+                ) : null}
+                {!canCreateSeason ? (
+                  <span style={{ fontSize: 12, color: '#9f1239', background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 10, padding: '6px 8px' }}>
+                    Contact club admin to start a new season/session.
+                  </span>
+                ) : null}
+                {showFinalizeAction ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        const shouldFinalize = window.confirm(
+                          'Finalize this session now? This will apply Elo updates and lock the session from further changes.',
+                        );
+                        if (!shouldFinalize) return;
+                        void onFinalizeSession();
+                      }}
+                      style={primaryBtn}
+                      disabled={loading || !canFinalizeSession}
+                      title={canFinalizeSession ? 'Finalize this closed session and apply Elo updates.' : 'Session must be CLOSED before finalizing.'}
+                    >
+                      {loading ? 'Processing...' : 'Finalize Session'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const shouldRevert = window.confirm(
+                          'Revert this finalized session to CLOSED? This will remove applied Elo ledger rows so scores can be corrected.',
+                        );
+                        if (!shouldRevert) return;
+                        void onRevertSessionFinalize();
+                      }}
+                      style={outlineBtn}
+                      disabled={loading || !canRevertSessionFinalize}
+                      title={canRevertSessionFinalize ? 'Revert finalized ratings so corrections can be made.' : 'Only FINALIZED sessions can be reverted.'}
+                    >
+                      {loading ? 'Processing...' : 'Revert Finalize'}
+                    </button>
+                  </>
+                ) : null}
+                <button onClick={() => void onRefresh()} style={outlineBtn} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
+              </div>
             </div>
+
+            {showFinalizeAction && selectedSession && !canFinalizeSession && !canRevertSessionFinalize ? (
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
+                {selectedSession.status === 'FINALIZED' ? 'Session already finalized.' : 'Session must be CLOSED before finalization.'}
+              </div>
+            ) : null}
+
+            {successMessage ? (
+              <div style={{ marginBottom: 10, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '8px 10px', fontSize: 13 }}>
+                {successMessage}
+              </div>
+            ) : null}
 
             {error ? <div style={{ color: 'var(--bad)', marginBottom: 8 }}>{error}</div> : null}
 
@@ -280,6 +390,25 @@ export function LeaderboardView(props: Props) {
               <div style={{ marginTop: 10, fontSize: 28, fontWeight: 700 }}>
                 {profileTitle || profile?.display_name || profile?.full_name || 'LeagueOS User'}
               </div>
+              {allowProfilePlayerPick ? (
+                <div style={{ marginTop: 10, width: 'min(420px, 100%)' }}>
+                  <select
+                    value={selectedProfilePlayerId ?? ''}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      if (!Number.isNaN(next)) {
+                        void onProfilePlayerChange(next);
+                      }
+                    }}
+                    style={{ ...modalInput, background: 'rgba(255,255,255,0.96)' }}
+                  >
+                    <option value="">Select player</option>
+                    {profilePlayers.map((p) => (
+                      <option key={p.id} value={p.id}>{p.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </div>
           </header>
 
@@ -332,6 +461,106 @@ export function LeaderboardView(props: Props) {
         <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon="🏆" label="Leaderboard" />
         <TabButton active={tab === 'profile'} onClick={() => setTab('profile')} icon="◉" label="Profile" />
       </nav>
+
+      {createSeasonOpen ? (
+        <div style={seasonModalBackdrop}>
+          <div style={seasonModalCard}>
+            <h3 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Create Season</h3>
+            <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ color: '#0f766e', fontWeight: 600 }}>Season Name</span>
+                <input
+                  value={createSeasonName}
+                  onChange={(e) => setCreateSeasonName(e.target.value)}
+                  style={modalInput}
+                  placeholder="e.g. Summer League 2026"
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ color: '#0f766e', fontWeight: 600 }}>Format</span>
+                <select value={createSeasonFormat} onChange={(e) => setCreateSeasonFormat(e.target.value as 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES')} style={modalInput}>
+                  <option value="DOUBLES">DOUBLES</option>
+                  <option value="SINGLES">SINGLES</option>
+                  <option value="MIXED_DOUBLES">MIXED_DOUBLES</option>
+                </select>
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#0f766e', fontWeight: 600 }}>Weekday (0-6)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={6}
+                    value={createSeasonWeekday}
+                    onChange={(e) => setCreateSeasonWeekday(Number(e.target.value))}
+                    style={modalInput}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#0f766e', fontWeight: 600 }}>Start Time</span>
+                  <input
+                    type="time"
+                    value={createSeasonStartTime}
+                    onChange={(e) => setCreateSeasonStartTime(e.target.value)}
+                    style={modalInput}
+                  />
+                </label>
+              </div>
+              {createSeasonError ? <div style={{ color: 'var(--bad)', fontSize: 13 }}>{createSeasonError}</div> : null}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              <button
+                style={outlineBtn}
+                onClick={() => {
+                  if (createSeasonBusy) return;
+                  setCreateSeasonOpen(false);
+                }}
+                disabled={createSeasonBusy}
+              >
+                Cancel
+              </button>
+              <button
+                style={primaryBtn}
+                disabled={createSeasonBusy}
+                onClick={async () => {
+                  setCreateSeasonError(null);
+                  const name = createSeasonName.trim();
+                  if (!name) {
+                    setCreateSeasonError('Season name is required.');
+                    return;
+                  }
+                  if (!Number.isInteger(createSeasonWeekday) || createSeasonWeekday < 0 || createSeasonWeekday > 6) {
+                    setCreateSeasonError('Weekday must be an integer between 0 and 6.');
+                    return;
+                  }
+                  if (!/^\d{2}:\d{2}$/.test(createSeasonStartTime)) {
+                    setCreateSeasonError('Start time must be in HH:MM format.');
+                    return;
+                  }
+                  try {
+                    setCreateSeasonBusy(true);
+                    await onCreateSeason({
+                      name,
+                      format: createSeasonFormat,
+                      weekday: createSeasonWeekday,
+                      start_time_local: `${createSeasonStartTime}:00`,
+                      is_active: true,
+                    });
+                    setCreateSeasonOpen(false);
+                    setCreateSeasonName('');
+                  } catch (e) {
+                    setCreateSeasonError(e instanceof Error ? e.message : 'Failed to create season.');
+                  } finally {
+                    setCreateSeasonBusy(false);
+                  }
+                }}
+              >
+                {createSeasonBusy ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -353,6 +582,9 @@ function HomeScreen({
   onRecordClubChange,
   onRecordGame,
   onRecordSeasonChange,
+  canOpenSession,
+  onOpenSession,
+  canManageRecords,
   onGoHome,
   onGoLeaderboard,
   onGoProfile,
@@ -381,6 +613,9 @@ function HomeScreen({
     sideBPlayerIds: [number, number];
   }) => Promise<void>;
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
+  canOpenSession: boolean;
+  onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
+  canManageRecords: boolean;
   onGoHome: () => void;
   onGoLeaderboard: () => void;
   onGoProfile: () => void;
@@ -412,12 +647,14 @@ function HomeScreen({
       </header>
 
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
-        <button
-          onClick={() => setHomeMode('addGame')}
-          style={{ width: '100%', border: 0, borderRadius: 18, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '18px 14px', fontSize: 18, fontWeight: 700, boxShadow: '0 12px 28px rgba(20,184,166,.35)', cursor: 'pointer' }}
-        >
-          + Add Game
-        </button>
+        {canManageRecords ? (
+          <button
+            onClick={() => setHomeMode('addGame')}
+            style={{ width: '100%', border: 0, borderRadius: 18, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '18px 14px', fontSize: 18, fontWeight: 700, boxShadow: '0 12px 28px rgba(20,184,166,.35)', cursor: 'pointer' }}
+          >
+            + Add Game
+          </button>
+        ) : null}
 
         {homeMode === 'main' ? (
           <>
@@ -453,7 +690,7 @@ function HomeScreen({
           </>
         ) : null}
 
-        {homeMode === 'addGame' ? (
+        {homeMode === 'addGame' && canManageRecords ? (
           <AddGameScreen
             clubs={clubs}
             recordClubId={recordClubId}
@@ -465,6 +702,8 @@ function HomeScreen({
             courts={courts}
             onRecordClubChange={onRecordClubChange}
             onRecordSeasonChange={onRecordSeasonChange}
+            canOpenSession={canOpenSession}
+            onOpenSession={onOpenSession}
             onBack={() => setHomeMode('main')}
             onSubmit={async (payload) => {
               await onRecordGame(payload);
@@ -614,6 +853,8 @@ function AddGameScreen({
   courts,
   onRecordClubChange,
   onRecordSeasonChange,
+  canOpenSession,
+  onOpenSession,
   onBack,
   onSubmit,
 }: {
@@ -627,6 +868,8 @@ function AddGameScreen({
   courts: Court[];
   onRecordClubChange: (clubId: number) => Promise<void>;
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
+  canOpenSession: boolean;
+  onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
   onBack: () => void;
   onSubmit: (payload: {
     courtId: number | null;
@@ -650,6 +893,13 @@ function AddGameScreen({
   const [b2, setB2] = useState<number>(players[3]?.id ?? 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const [openSessionFromDate, setOpenSessionFromDate] = useState(today);
+  const [openSessionToDate, setOpenSessionToDate] = useState(today);
+  const [openSessionStartTime, setOpenSessionStartTime] = useState('19:00');
+  const [openingSession, setOpeningSession] = useState(false);
+  const saveDisabled = busy || !session || Boolean(recordContextError);
+
 
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
 
@@ -675,6 +925,50 @@ function AddGameScreen({
         Session Date: {session ? session.session_date : 'No open session selected'}
       </p>
       {recordContextError ? <p style={{ marginTop: 6, color: 'var(--bad)', fontSize: 14 }}>{recordContextError}</p> : null}
+      {canOpenSession && recordSeasonId && !session ? (
+        <div style={{ marginTop: 8, border: '1px solid #99f6e4', background: '#f0fdfa', borderRadius: 12, padding: 10 }}>
+          <div style={{ fontSize: 13, color: '#0f766e', marginBottom: 8, fontWeight: 600 }}>No OPEN session for this season</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+            <input type="date" value={openSessionFromDate} onChange={(e) => setOpenSessionFromDate(e.target.value)} style={modalInput} />
+            <input type="date" value={openSessionToDate} onChange={(e) => setOpenSessionToDate(e.target.value)} style={modalInput} />
+            <input type="time" value={openSessionStartTime} onChange={(e) => setOpenSessionStartTime(e.target.value)} style={modalInput} />
+            <button
+              style={primaryBtn}
+              disabled={openingSession}
+              onClick={async () => {
+                setError(null);
+                if (!openSessionFromDate || !openSessionToDate) {
+                  setError('Select from/to dates.');
+                  return;
+                }
+                if (!openSessionStartTime) {
+                  setError('Select a start time.');
+                  return;
+                }
+                try {
+                  setOpeningSession(true);
+                  await onOpenSession({
+                    fromDate: openSessionFromDate,
+                    toDate: openSessionToDate,
+                    startTime: openSessionStartTime,
+                  });
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Failed to open session.');
+                } finally {
+                  setOpeningSession(false);
+                }
+              }}
+            >
+              {openingSession ? 'Opening...' : 'Open Session'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {!canOpenSession && !session ? (
+        <div style={{ marginTop: 8, border: '1px solid #fecaca', background: '#fff1f2', borderRadius: 12, padding: 10, color: '#9f1239', fontSize: 13 }}>
+          No open session is available. Please contact your club admin to start a new season/session.
+        </div>
+      ) : null}
 
       <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
         <label style={{ display: 'grid', gap: 6 }}>
@@ -746,8 +1040,17 @@ function AddGameScreen({
         {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 
         <button
-          style={{ border: 0, borderRadius: 12, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '12px 14px', fontWeight: 700, cursor: 'pointer' }}
-          disabled={busy}
+          style={{
+            border: 0,
+            borderRadius: 12,
+            background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+            color: '#fff',
+            padding: '12px 14px',
+            fontWeight: 700,
+            cursor: saveDisabled ? 'not-allowed' : 'pointer',
+            opacity: saveDisabled ? 0.65 : 1,
+          }}
+          disabled={saveDisabled}
           onClick={async () => {
             setError(null);
             const validationError = validateAddGameInput({
@@ -894,9 +1197,39 @@ const outlineBtn: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+const primaryBtn: React.CSSProperties = {
+  border: 0,
+  borderRadius: 10,
+  background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+  color: '#fff',
+  padding: '8px 12px',
+  cursor: 'pointer',
+  fontWeight: 700,
+};
+
 const modalInput: React.CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 12,
   padding: '10px 12px',
   width: '100%',
+};
+
+const seasonModalBackdrop: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(2, 6, 23, 0.45)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 16,
+  zIndex: 1000,
+};
+
+const seasonModalCard: React.CSSProperties = {
+  width: 'min(520px, 100%)',
+  borderRadius: 16,
+  border: '1px solid #99f6e4',
+  background: 'linear-gradient(180deg, #f0fdfa 0%, #ffffff 100%)',
+  boxShadow: '0 20px 50px rgba(15, 118, 110, 0.28)',
+  padding: 16,
 };

@@ -34,8 +34,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [email, setEmail] = useState(SEEDED_USERS.admin.email);
-  const [password, setPassword] = useState(SEEDED_USERS.admin.password);
+  const [email, setEmail] = useState(SEEDED_USERS.clubAdmin.email);
+  const [password, setPassword] = useState(SEEDED_USERS.clubAdmin.password);
   const [clubIdInput, setClubIdInput] = useState(String(DEFAULT_CLUB_ID));
 
   const [seasonModal, setSeasonModal] = useState(false);
@@ -45,7 +45,7 @@ export default function App() {
     setError(null);
     try {
       const [meRes, seasonsRes] = await Promise.allSettled([
-        client.profile(token, clubId),
+        client.profile(token),
         client.seasons(token, clubId),
       ]);
 
@@ -89,12 +89,14 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const clubId = Number(clubIdInput);
-      const res = await client.login({ email, password }, clubId);
-      const nextAuth = { token: res.token, clubId };
+      const requestedClubId = Number(clubIdInput);
+      const res = await client.login({ email, password });
+      const clubId = res.club_id ?? requestedClubId;
+      const scoped = res.club_id === clubId ? res : await client.switchClub(res.token, clubId);
+      const nextAuth = { token: scoped.token, clubId };
       setAuth(nextAuth);
       setSelectedClubId(clubId);
-      await SecureStore.setItemAsync('leagueos_token', res.token);
+      await SecureStore.setItemAsync('leagueos_token', scoped.token);
       await SecureStore.setItemAsync('leagueos_club', String(clubId));
       await loadDashboard(nextAuth.token, nextAuth.clubId);
     } catch (e) {
@@ -181,9 +183,13 @@ export default function App() {
               key={club.id}
               onPress={async () => {
                 if (!auth) return;
+                const scoped = await client.switchClub(auth.token, club.id);
                 setSelectedClubId(club.id);
-                setAuth({ ...auth, clubId: club.id });
-                await loadDashboard(auth.token, club.id);
+                const nextAuth = { token: scoped.token, clubId: club.id };
+                setAuth(nextAuth);
+                await SecureStore.setItemAsync('leagueos_token', scoped.token);
+                await SecureStore.setItemAsync('leagueos_club', String(club.id));
+                await loadDashboard(nextAuth.token, club.id);
               }}
               style={[styles.pill, selectedClubId === club.id && styles.pillActive]}
             >
