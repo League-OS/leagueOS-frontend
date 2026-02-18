@@ -650,6 +650,7 @@ function AddGameScreen({
   const [b2, setB2] = useState<number>(players[3]?.id ?? 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const saveDisabled = busy || !session || Boolean(recordContextError);
 
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
 
@@ -746,8 +747,17 @@ function AddGameScreen({
         {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 
         <button
-          style={{ border: 0, borderRadius: 12, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '12px 14px', fontWeight: 700, cursor: 'pointer' }}
-          disabled={busy}
+          style={{
+            border: 0,
+            borderRadius: 12,
+            background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+            color: '#fff',
+            padding: '12px 14px',
+            fontWeight: 700,
+            cursor: saveDisabled ? 'not-allowed' : 'pointer',
+            opacity: saveDisabled ? 0.65 : 1,
+          }}
+          disabled={saveDisabled}
           onClick={async () => {
             setError(null);
             const validationError = validateAddGameInput({
