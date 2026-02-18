@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { DEFAULT_CLUB_ID, SEEDED_USERS } from '@leagueos/config';
+import { SEEDED_USERS } from '@leagueos/config';
 
 type Props = {
-  onLogin: (args: { email: string; password: string; clubId: number }) => Promise<void>;
+  onLogin: (args: { email: string; password: string }) => Promise<void>;
   error: string | null;
   loading: boolean;
 };
 
 export function LoginView({ onLogin, error, loading }: Props) {
-  const [email, setEmail] = useState(SEEDED_USERS.admin.email);
-  const [password, setPassword] = useState(SEEDED_USERS.admin.password);
-  const [clubId, setClubId] = useState(DEFAULT_CLUB_ID);
+  const [email, setEmail] = useState(SEEDED_USERS.clubAdmin.email);
+  const [password, setPassword] = useState(SEEDED_USERS.clubAdmin.password);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -57,7 +56,7 @@ export function LoginView({ onLogin, error, loading }: Props) {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
-            await onLogin({ email, password, clubId });
+            await onLogin({ email, password });
           }}
           style={{ display: 'grid', gap: 12 }}
         >
@@ -110,19 +109,6 @@ export function LoginView({ onLogin, error, loading }: Props) {
               Forgot Password?
             </button>
           </div>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={labelStyle}>Club ID</span>
-            <input
-              type="number"
-              value={clubId}
-              onChange={(e) => setClubId(Number(e.target.value))}
-              min={1}
-              required
-              placeholder="1"
-              style={inputStyle}
-            />
-          </label>
 
           {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 

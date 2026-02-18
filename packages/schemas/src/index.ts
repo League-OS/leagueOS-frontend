@@ -4,6 +4,7 @@ export const authResponseSchema = z.object({
   token: z.string(),
   expires_at: z.string(),
   role: z.string(),
+  club_id: z.number().nullable().optional(),
 });
 
 export const seasonSchema = z.object({

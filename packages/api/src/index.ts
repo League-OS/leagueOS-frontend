@@ -69,7 +69,6 @@ export class LeagueOsApiClient {
     };
 
     if (options.token) headers.Authorization = `Bearer ${options.token}`;
-    if (options.clubId !== undefined) headers['X-Club-Id'] = String(options.clubId);
 
     const res = await fetch(url.toString(), {
       method: options.method ?? 'GET',
@@ -107,48 +106,48 @@ export class LeagueOsApiClient {
     return (await res.json()) as T;
   }
 
-  async login(input: LoginRequest, clubId: number): Promise<AuthResponse> {
+  async login(input: LoginRequest): Promise<AuthResponse> {
     loginRequestSchema.parse(input);
     const data = await this.request<unknown>('/auth/login', {
       method: 'POST',
-      query: { club_id: clubId },
       body: input,
     });
     return authResponseSchema.parse(data);
   }
 
-  async me(token: string, clubId: number): Promise<Profile> {
+  async switchClub(token: string, clubId: number): Promise<AuthResponse> {
+    const data = await this.request<unknown>('/auth/switch-club', {
+      method: 'POST',
+      token,
+      query: { club_id: clubId },
+    });
+    return authResponseSchema.parse(data);
+  }
+
+  async me(token: string): Promise<Profile> {
     const data = await this.request<unknown>('/auth/me', {
       token,
-      clubId,
-      query: { club_id: clubId },
     });
     return profileSchema.parse(data);
   }
 
-  async profile(token: string, clubId: number): Promise<Profile> {
+  async profile(token: string): Promise<Profile> {
     const data = await this.request<unknown>('/profile', {
       token,
-      clubId,
-      query: { club_id: clubId },
     });
     return profileSchema.parse(data);
   }
 
-  async profileClubs(token: string, clubId: number): Promise<Club[]> {
+  async profileClubs(token: string): Promise<Club[]> {
     const data = await this.request<unknown[]>('/profile/clubs', {
       token,
-      clubId,
-      query: { club_id: clubId },
     });
     return data.map((d) => clubSchema.parse(d));
   }
 
-  async clubs(token: string, clubId: number): Promise<Club[]> {
+  async clubs(token: string): Promise<Club[]> {
     const data = await this.request<unknown[]>('/clubs', {
       token,
-      clubId,
-      query: { club_id: clubId },
     });
     return data.map((d) => clubSchema.parse(d));
   }
@@ -180,6 +179,50 @@ export class LeagueOsApiClient {
     return data.map((d) => seasonSchema.parse(d));
   }
 
+  async createSeason(
+    token: string,
+    clubId: number,
+    payload: {
+      name: string;
+      format: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+      weekday: number;
+      start_time_local: string;
+      timezone: string;
+      is_active: boolean;
+    },
+  ): Promise<Season> {
+    const data = await this.request<unknown>('/seasons', {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: { ...payload, club_id: clubId },
+    });
+    return seasonSchema.parse(data);
+  }
+
+  async updateSeason(
+    token: string,
+    clubId: number,
+    seasonId: number,
+    payload: Partial<{
+      name: string;
+      weekday: number;
+      start_time_local: string;
+      timezone: string;
+      is_active: boolean;
+    }>,
+  ): Promise<Season> {
+    const data = await this.request<unknown>(`/seasons/${seasonId}`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return seasonSchema.parse(data);
+  }
+
   async sessions(token: string, clubId: number, seasonId?: number): Promise<Session[]> {
     const data = await this.request<unknown[]>('/sessions', {
       token,
@@ -189,6 +232,27 @@ export class LeagueOsApiClient {
     return data.map((d) => sessionSchema.parse(d));
   }
 
+  async createSession(
+    token: string,
+    clubId: number,
+    payload: {
+      season_id: number;
+      session_date: string;
+      status: 'UPCOMING' | 'OPEN' | 'CANCELLED';
+      location?: string;
+      address?: string;
+    },
+  ): Promise<Session> {
+    const data = await this.request<unknown>('/sessions', {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return sessionSchema.parse(data);
+  }
+
   async sessionLeaderboard(token: string, clubId: number, sessionId: number): Promise<LeaderboardEntry[]> {
     const data = await this.request<unknown[]>(`/sessions/${sessionId}/leaderboard`, {
       token,
@@ -196,6 +260,38 @@ export class LeagueOsApiClient {
       query: { club_id: clubId },
     });
     return data.map((d) => leaderboardEntrySchema.parse(d));
+  }
+
+  async finalizeSession(
+    token: string,
+    clubId: number,
+    sessionId: number,
+  ): Promise<{ session_id: number; games_finalized: number; ledger_rows_written: number }> {
+    return this.request<{ session_id: number; games_finalized: number; ledger_rows_written: number }>(
+      `/sessions/${sessionId}/finalize`,
+      {
+        method: 'POST',
+        token,
+        clubId,
+        query: { club_id: clubId },
+      },
+    );
+  }
+
+  async revertSessionFinalize(
+    token: string,
+    clubId: number,
+    sessionId: number,
+  ): Promise<{ session_id: number; ledger_rows_reverted: number; status: string }> {
+    return this.request<{ session_id: number; ledger_rows_reverted: number; status: string }>(
+      `/sessions/${sessionId}/revert-finalize`,
+      {
+        method: 'POST',
+        token,
+        clubId,
+        query: { club_id: clubId },
+      },
+    );
   }
 
   async createGame(

@@ -112,15 +112,17 @@ export default function Page() {
   const [allGames, setAllGames] = useState<HomeGameRow[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [allUpcomingSessions, setAllUpcomingSessions] = useState<UpcomingRow[]>([]);
+  const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  async function loadDashboard(token: string, clubId: number, seasonId?: number) {
+  async function loadDashboard(token: string, clubId: number, seasonId?: number, profilePlayerId?: number | null) {
     setLoading(true);
     setError(null);
     try {
       const [meRes, seasonsRes, playersRes, courtsRes] = await Promise.allSettled([
-        client.profile(token, clubId),
+        client.profile(token),
         client.seasons(token, clubId),
         client.players(token, clubId),
         client.courts(token, clubId),
@@ -132,7 +134,11 @@ export default function Page() {
         throw meRes.reason;
       }
 
-      const clubsRes = await Promise.allSettled([client.profileClubs(token, clubId), client.clubs(token, clubId)]);
+      const isGlobalAdmin = meRes.value.role === 'GLOBAL_ADMIN';
+      const clubsRes = await Promise.allSettled([
+        client.profileClubs(token),
+        isGlobalAdmin ? client.clubs(token) : Promise.resolve([] as Club[]),
+      ]);
       const profileClubSet = clubsRes[0].status === 'fulfilled' ? clubsRes[0].value : [];
       const adminClubSet = clubsRes[1].status === 'fulfilled' ? clubsRes[1].value : [];
       const mergedClubs = [...profileClubSet, ...adminClubSet].filter(
@@ -254,8 +260,9 @@ export default function Page() {
       }
 
       const currentUserPlayerId = findUserPlayerId(meRes.value, playersRes.status === 'fulfilled' ? playersRes.value : []);
-      const sourceGames = currentUserPlayerId
-        ? games.filter((game) => (participantsByGame.get(game.id) ?? []).some((p) => p.player_id === currentUserPlayerId))
+      const effectivePlayerId = profilePlayerId ?? selectedProfilePlayerId ?? currentUserPlayerId;
+      const sourceGames = effectivePlayerId
+        ? games.filter((game) => (participantsByGame.get(game.id) ?? []).some((p) => p.player_id === effectivePlayerId))
         : games;
       const courtNameById = new Map<number, string>((courtsRes.status === 'fulfilled' ? courtsRes.value : []).map((court) => [court.id, court.name]));
 
@@ -267,11 +274,11 @@ export default function Page() {
           const sideB = participants.filter((p) => p.side === 'B').map((p) => p.display_name);
           const session = sessionById.get(game.session_id);
           const season = session ? seasonById.get(session.season_id) : undefined;
-          const computed = outcomeForGame(game, participants, currentUserPlayerId);
+          const computed = outcomeForGame(game, participants, effectivePlayerId);
           const partner = partnerNameForGame({
             participants,
             mySide: computed.mySide,
-            userPlayerId: currentUserPlayerId,
+            userPlayerId: effectivePlayerId,
           });
           return {
             id: game.id,
@@ -338,7 +345,7 @@ export default function Page() {
         if (season?.format === 'MIXED_DOUBLES') mixed += 1;
 
         const participants = participantsByGame.get(game.id) ?? [];
-        const computed = outcomeForGame(game, participants, currentUserPlayerId);
+        const computed = outcomeForGame(game, participants, effectivePlayerId);
         if (computed.mySide === 'B') {
           pointsFor += game.score_b;
           pointsAgainst += game.score_a;
@@ -358,7 +365,7 @@ export default function Page() {
         if (entry.status !== 'fulfilled') continue;
         const season = entry.value.season;
         const candidates = entry.value.leaderboard;
-        const currentById = currentUserPlayerId ? candidates.find((row) => row.player_id === currentUserPlayerId) : null;
+        const currentById = effectivePlayerId ? candidates.find((row) => row.player_id === effectivePlayerId) : null;
         const currentByName = !currentById
           ? candidates.find((row) =>
               [meRes.value.display_name, meRes.value.full_name]
@@ -386,13 +393,20 @@ export default function Page() {
     }
   }
 
-  async function handleLogin(args: { email: string; password: string; clubId: number }) {
+  async function handleLogin(args: { email: string; password: string }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await client.login({ email: args.email, password: args.password }, args.clubId);
-      const nextAuth = { token: res.token, clubId: args.clubId };
-      setSelectedClubId(args.clubId);
+      const res = await client.login({ email: args.email, password: args.password });
+      const clubsForUser =
+        res.role === 'GLOBAL_ADMIN' ? await client.clubs(res.token) : await client.profileClubs(res.token);
+      if (!clubsForUser.length) {
+        throw new Error('No clubs available for this account.');
+      }
+      const initialClubId = res.club_id ?? clubsForUser[0].id;
+      const scoped = res.club_id === initialClubId ? res : await client.switchClub(res.token, initialClubId);
+      const nextAuth = { token: scoped.token, clubId: initialClubId };
+      setSelectedClubId(initialClubId);
       setAuth(nextAuth);
       await loadDashboard(nextAuth.token, nextAuth.clubId);
     } catch (e) {
@@ -404,9 +418,12 @@ export default function Page() {
 
   async function handleClubChange(clubId: number) {
     if (!auth) return;
+    const scoped = await client.switchClub(auth.token, clubId);
+    setSelectedProfilePlayerId(null);
     setSelectedClubId(clubId);
-    setAuth({ ...auth, clubId });
-    await loadDashboard(auth.token, clubId);
+    const nextAuth = { token: scoped.token, clubId };
+    setAuth(nextAuth);
+    await loadDashboard(nextAuth.token, clubId, undefined, null);
   }
 
   async function handleSeasonChange(seasonId: number) {
@@ -417,7 +434,43 @@ export default function Page() {
 
   async function refresh() {
     if (!auth) return;
-    await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined);
+    await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, selectedProfilePlayerId);
+  }
+
+  async function handleFinalizeSession() {
+    try {
+      if (!auth) return;
+      if (!selectedSession) {
+        throw new Error('No session selected.');
+      }
+      if (selectedSession.status !== 'CLOSED') {
+        throw new Error(`Only CLOSED sessions can be finalized. Current status: ${selectedSession.status}.`);
+      }
+      const result = await client.finalizeSession(auth.token, auth.clubId, selectedSession.id);
+      await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined);
+      setSuccessMessage(
+        `Session finalized. Games finalized: ${result.games_finalized}, Elo ledger rows: ${result.ledger_rows_written}.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to finalize session.');
+    }
+  }
+
+  async function handleRevertSessionFinalize() {
+    try {
+      if (!auth) return;
+      if (!selectedSession) {
+        throw new Error('No session selected.');
+      }
+      if (selectedSession.status !== 'FINALIZED') {
+        throw new Error(`Only FINALIZED sessions can be reverted. Current status: ${selectedSession.status}.`);
+      }
+      const result = await client.revertSessionFinalize(auth.token, auth.clubId, selectedSession.id);
+      await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined);
+      setSuccessMessage(`Session reverted to CLOSED. Elo ledger rows reverted: ${result.ledger_rows_reverted}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to revert finalized session.');
+    }
   }
 
   async function handleRecordGame(payload: {
@@ -429,6 +482,14 @@ export default function Page() {
     sideBPlayerIds: [number, number];
   }) {
     if (!auth) return;
+    const canRecord =
+      profile?.role === 'CLUB_ADMIN' ||
+      profile?.role === 'RECORDER' ||
+      profile?.club_role === 'CLUB_ADMIN' ||
+      profile?.club_role === 'RECORDER';
+    if (!canRecord) {
+      throw new Error('Only club admins or recorders can record games.');
+    }
     const sessionToUse = recordSession;
     if (!sessionToUse) {
       throw new Error('No open session available. Open one session before recording games.');
@@ -485,7 +546,14 @@ export default function Page() {
 
   async function handleRecordClubChange(clubId: number) {
     if (!auth) return;
+    const canRecord =
+      profile?.role === 'CLUB_ADMIN' ||
+      profile?.role === 'RECORDER' ||
+      profile?.club_role === 'CLUB_ADMIN' ||
+      profile?.club_role === 'RECORDER';
+    if (!canRecord) return;
     try {
+      setSelectedProfilePlayerId(null);
       setRecordClubId(clubId);
       setRecordContextError(null);
 
@@ -540,9 +608,92 @@ export default function Page() {
     }
   }
 
+  async function handleCreateSeason(payload: {
+    name: string;
+    format: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+    weekday: number;
+    start_time_local: string;
+    is_active: boolean;
+  }) {
+    if (!auth) return;
+    const isClubAdmin = profile?.club_role === 'CLUB_ADMIN' || profile?.role === 'CLUB_ADMIN';
+    if (!isClubAdmin) {
+      throw new Error('Only club admins can create seasons.');
+    }
+    const season = await client.createSeason(auth.token, auth.clubId, {
+      ...payload,
+      timezone: 'America/Vancouver',
+    });
+    await loadDashboard(auth.token, auth.clubId, season.id);
+    setSuccessMessage(`Season "${season.name}" created.`);
+  }
+
+  async function handleOpenRecordSession(args: { fromDate: string; toDate: string; startTime: string }) {
+    try {
+      if (!auth) return;
+      const isClubAdmin = profile?.club_role === 'CLUB_ADMIN' || profile?.role === 'CLUB_ADMIN';
+      if (!isClubAdmin) {
+        throw new Error('Please contact your club admin to start a new season/session.');
+      }
+      if (!recordSeasonId) {
+        throw new Error('Select a season first.');
+      }
+
+      const from = new Date(`${args.fromDate}T00:00:00`);
+      const to = new Date(`${args.toDate}T00:00:00`);
+      if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        throw new Error('Please provide valid from/to dates.');
+      }
+      if (to.getTime() < from.getTime()) {
+        throw new Error('To date must be on or after from date.');
+      }
+
+      const time = /^\d{2}:\d{2}$/.test(args.startTime) ? `${args.startTime}:00` : args.startTime;
+      await client.updateSeason(auth.token, recordClubId, recordSeasonId, {
+        weekday: from.getDay(),
+        start_time_local: time,
+        timezone: 'America/Vancouver',
+      });
+
+      let created = 0;
+      let cursor = new Date(from);
+      let status: 'OPEN' | 'UPCOMING' = 'OPEN';
+      while (cursor.getTime() <= to.getTime()) {
+        const dateStr = cursor.toISOString().slice(0, 10);
+        await client.createSession(auth.token, recordClubId, {
+          season_id: recordSeasonId,
+          session_date: dateStr,
+          status,
+          location: 'Club Session',
+          address: 'TBD',
+        });
+        created += 1;
+        status = 'UPCOMING';
+        cursor.setDate(cursor.getDate() + 7);
+      }
+
+      await handleRecordSeasonChange(recordSeasonId);
+      await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined);
+      setSuccessMessage(`Opened session plan: ${created} session(s) created from ${args.fromDate} to ${args.toDate}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to open session.');
+    }
+  }
+
+  async function handleProfilePlayerChange(playerId: number) {
+    if (!auth) return;
+    setSelectedProfilePlayerId(playerId);
+    await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, playerId);
+  }
+
   if (!auth) {
     return <LoginView onLogin={handleLogin} error={error} loading={loading} />;
   }
+
+  const isClubAdmin = profile?.club_role === 'CLUB_ADMIN' || profile?.role === 'CLUB_ADMIN';
+  const isRecorder = profile?.club_role === 'RECORDER' || profile?.role === 'RECORDER';
+  const canFinalizeSession = Boolean(isClubAdmin && selectedSession?.status === 'CLOSED');
+  const canRevertSessionFinalize = Boolean(isClubAdmin && selectedSession?.status === 'FINALIZED');
 
   return (
     <LeaderboardView
@@ -558,6 +709,7 @@ export default function Page() {
       leaderboard={leaderboard}
       loading={loading}
       error={error}
+      successMessage={successMessage}
       recordSeasons={recordSeasons}
       players={recordPlayers}
       courts={recordCourts}
@@ -572,8 +724,22 @@ export default function Page() {
       onClubChange={handleClubChange}
       onSeasonChange={handleSeasonChange}
       onRefresh={refresh}
+      canCreateSeason={Boolean(isClubAdmin)}
+      allowProfilePlayerPick={Boolean(profile?.role === 'GLOBAL_ADMIN' || isClubAdmin)}
+      profilePlayers={players}
+      selectedProfilePlayerId={selectedProfilePlayerId}
+      canFinalizeSession={canFinalizeSession}
+      canRevertSessionFinalize={canRevertSessionFinalize}
+      showFinalizeAction={Boolean(isClubAdmin)}
+      canManageRecords={Boolean(isClubAdmin || isRecorder)}
+      onFinalizeSession={handleFinalizeSession}
+      onRevertSessionFinalize={handleRevertSessionFinalize}
       onRecordGame={handleRecordGame}
       onRecordSeasonChange={handleRecordSeasonChange}
+      onCreateSeason={handleCreateSeason}
+      canOpenSession={Boolean(isClubAdmin)}
+      onOpenSession={handleOpenRecordSession}
+      onProfilePlayerChange={handleProfilePlayerChange}
       onLogout={() => {
         setAuth(null);
         setProfile(null);
@@ -594,6 +760,7 @@ export default function Page() {
         setAllGames([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
+        setSelectedProfilePlayerId(null);
         setSelectedSeasonId(null);
         setSelectedSession(null);
         setRecordClubId(DEFAULT_CLUB_ID);
@@ -606,6 +773,7 @@ export default function Page() {
         setSessionsBySeason({});
         setLeaderboard([]);
         setError(null);
+        setSuccessMessage(null);
       }}
     />
   );
