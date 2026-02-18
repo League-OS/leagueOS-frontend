@@ -652,6 +652,7 @@ function AddGameScreen({
   const [error, setError] = useState<string | null>(null);
   const saveDisabled = busy || !session || Boolean(recordContextError);
 
+
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
 
   useEffect(() => {
