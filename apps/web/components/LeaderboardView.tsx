@@ -78,7 +78,6 @@ type Props = {
   onRecordClubChange: (clubId: number) => Promise<void>;
   onClubChange: (clubId: number) => Promise<void>;
   onSeasonChange: (seasonId: number) => Promise<void>;
-  onRefresh: () => Promise<void>;
   canCreateSeason: boolean;
   allowProfilePlayerPick: boolean;
   profilePlayers: Player[];
@@ -139,7 +138,6 @@ export function LeaderboardView(props: Props) {
     onRecordClubChange,
     onClubChange,
     onSeasonChange,
-    onRefresh,
     canCreateSeason,
     allowProfilePlayerPick,
     profilePlayers,
@@ -234,9 +232,6 @@ export function LeaderboardView(props: Props) {
 
           <section style={{ maxWidth: 1100, margin: '16px auto 0', padding: '0 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                Session: {selectedSession ? `${selectedSession.session_date} (${selectedSession.status})` : 'No session found'}
-              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {canCreateSeason ? (
                   <button
@@ -250,11 +245,6 @@ export function LeaderboardView(props: Props) {
                   >
                     {loading ? 'Processing...' : 'Create Season'}
                   </button>
-                ) : null}
-                {!canCreateSeason ? (
-                  <span style={{ fontSize: 12, color: '#9f1239', background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 10, padding: '6px 8px' }}>
-                    Contact club admin to start a new season/session.
-                  </span>
                 ) : null}
                 {showFinalizeAction ? (
                   <>
@@ -288,7 +278,6 @@ export function LeaderboardView(props: Props) {
                     </button>
                   </>
                 ) : null}
-                <button onClick={() => void onRefresh()} style={outlineBtn} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
               </div>
             </div>
 
