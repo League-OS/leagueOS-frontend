@@ -17,9 +17,12 @@ export type HomeGameRow = {
   score: string;
   outcome: 'W' | 'L';
   startTime: string;
+  courtId: number;
   courtName: string;
   teamA: string[];
   teamB: string[];
+  teamAIds: number[];
+  teamBIds: number[];
   scoreA: number;
   scoreB: number;
 };
@@ -73,6 +76,7 @@ type Props = {
   eloHistory: EloHistoryRow[];
   recentGames: HomeGameRow[];
   allGames: HomeGameRow[];
+  recordExistingGames: HomeGameRow[];
   upcomingSessions: UpcomingRow[];
   allUpcomingSessions: UpcomingRow[];
   onRecordClubChange: (clubId: number) => Promise<void>;
@@ -133,6 +137,7 @@ export function LeaderboardView(props: Props) {
     eloHistory,
     recentGames,
     allGames,
+    recordExistingGames,
     upcomingSessions,
     allUpcomingSessions,
     onRecordClubChange,
@@ -184,6 +189,7 @@ export function LeaderboardView(props: Props) {
           courts={courts}
           recentGames={recentGames}
           allGames={allGames}
+          recordExistingGames={recordExistingGames}
           upcomingSessions={upcomingSessions}
           allUpcomingSessions={allUpcomingSessions}
           onRecordClubChange={onRecordClubChange}
@@ -566,6 +572,7 @@ function HomeScreen({
   courts,
   recentGames,
   allGames,
+  recordExistingGames,
   upcomingSessions,
   allUpcomingSessions,
   onRecordClubChange,
@@ -590,6 +597,7 @@ function HomeScreen({
   courts: Court[];
   recentGames: HomeGameRow[];
   allGames: HomeGameRow[];
+  recordExistingGames: HomeGameRow[];
   upcomingSessions: UpcomingRow[];
   allUpcomingSessions: UpcomingRow[];
   onRecordClubChange: (clubId: number) => Promise<void>;
@@ -651,10 +659,15 @@ function HomeScreen({
               title="Recent Games"
               action="View All →"
               onActionClick={() => setHomeMode('allGames')}
-              columns={['Date', 'Season', 'Partner', 'Score']}
+              columns={['Date', 'Partner', 'Result', 'Game Score']}
               rows={recentGames.map((g) => ({
                 id: g.id,
-                cells: [g.date, g.season, g.partner, <span key={g.id} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>],
+                cells: [
+                  g.date,
+                  g.partner,
+                  <span key={`${g.id}-result`} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>,
+                  `${g.scoreA}-${g.scoreB}`,
+                ],
                 onClick: () => {
                   setActiveGame(g);
                   setHomeMode('gameDetail');
@@ -689,6 +702,7 @@ function HomeScreen({
             seasons={seasons}
             players={players}
             courts={courts}
+            existingGames={recordExistingGames}
             onRecordClubChange={onRecordClubChange}
             onRecordSeasonChange={onRecordSeasonChange}
             canOpenSession={canOpenSession}
@@ -706,10 +720,15 @@ function HomeScreen({
             title="All Games"
             action="← Back"
             onActionClick={() => setHomeMode('main')}
-            columns={['Date', 'Season', 'Partner', 'Score']}
+            columns={['Date', 'Partner', 'Result', 'Game Score']}
             rows={allGames.map((g) => ({
               id: g.id,
-              cells: [g.date, g.season, g.partner, <span key={g.id} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>],
+              cells: [
+                g.date,
+                g.partner,
+                <span key={`${g.id}-result`} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>,
+                `${g.scoreA}-${g.scoreB}`,
+              ],
               onClick: () => {
                 setActiveGame(g);
                 setHomeMode('gameDetail');
@@ -840,6 +859,7 @@ function AddGameScreen({
   seasons,
   players,
   courts,
+  existingGames,
   onRecordClubChange,
   onRecordSeasonChange,
   canOpenSession,
@@ -855,6 +875,7 @@ function AddGameScreen({
   seasons: Season[];
   players: Player[];
   courts: Court[];
+  existingGames: HomeGameRow[];
   onRecordClubChange: (clubId: number) => Promise<void>;
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
   canOpenSession: boolean;
@@ -887,10 +908,98 @@ function AddGameScreen({
   const [openSessionToDate, setOpenSessionToDate] = useState(today);
   const [openSessionStartTime, setOpenSessionStartTime] = useState('19:00');
   const [openingSession, setOpeningSession] = useState(false);
+  const [confirmSoftDuplicate, setConfirmSoftDuplicate] = useState<null | {
+    message: string;
+    payload: {
+      courtId: number | null;
+      startTimeLocal: string;
+      scoreA: number;
+      scoreB: number;
+      sideAPlayerIds: [number, number];
+      sideBPlayerIds: [number, number];
+    };
+  }>(null);
   const saveDisabled = busy || !session || Boolean(recordContextError);
+  const timeOptions = Array.from({ length: 24 * 12 }, (_, i) => {
+    const hours = Math.floor(i / 12);
+    const minutes = (i % 12) * 5;
+    const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return value;
+  });
 
+  const getHHmm = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const isSoftDuplicate = (payload: {
+    courtId: number | null;
+    startTimeLocal: string;
+    scoreA: number;
+    scoreB: number;
+    sideAPlayerIds: [number, number];
+    sideBPlayerIds: [number, number];
+  }) => {
+    if (!session) return false;
+    const incomingPlayers = [...payload.sideAPlayerIds, ...payload.sideBPlayerIds].sort((a, b) => a - b).join(',');
+    return existingGames.some((game) => {
+      if (game.sessionId !== session.id) return false;
+      const gamePlayers = [...game.teamAIds, ...game.teamBIds].sort((a, b) => a - b).join(',');
+      const samePlayers = gamePlayers === incomingPlayers;
+      const sameScore =
+        (game.scoreA === payload.scoreA && game.scoreB === payload.scoreB) ||
+        (game.scoreA === payload.scoreB && game.scoreB === payload.scoreA);
+      return samePlayers && sameScore;
+    });
+  };
+
+  async function submitPayload(payload: {
+    courtId: number | null;
+    startTimeLocal: string;
+    scoreA: number;
+    scoreB: number;
+    sideAPlayerIds: [number, number];
+    sideBPlayerIds: [number, number];
+  }) {
+    try {
+      setBusy(true);
+      await onSubmit(payload);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'GAME_CONFLICT') {
+        const [hoursRaw, minutesRaw] = floorToFiveMinuteIncrement(startTime).split(':');
+        const hours = Number(hoursRaw);
+        const minutes = Number(minutesRaw);
+        if (Number.isInteger(hours) && Number.isInteger(minutes)) {
+          const next = new Date(0, 0, 1, hours, minutes + 5, 0, 0);
+          setStartTime(`${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`);
+        }
+        setError('A game already exists for this court and start time. Time moved to the next 5-minute slot.');
+      } else if (e instanceof ApiError && e.code === 'INVALID_GAME_TIME') {
+        setError('Start time must be on a 5-minute boundary. Try 7:00, 7:05, 7:10.');
+      } else if (e instanceof ApiError && e.code === 'SESSION_IMMUTABLE') {
+        setError('Selected session is not writable anymore. Select a season with one OPEN session.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to add game');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
+  const formatTimeLabel = (value: string) => {
+    const [hh, mm] = value.split(':').map(Number);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
+    const suffix = hh >= 12 ? 'PM' : 'AM';
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+    return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
+  };
+  const formatDateLabel = (dateStr: string) => {
+    if (!dateStr) return 'Select date';
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   useEffect(() => {
     setA1(players[0]?.id ?? 0);
@@ -910,17 +1019,20 @@ function AddGameScreen({
         <button onClick={onBack} style={outlineBtn}>← Back</button>
       </div>
 
-      <p style={{ marginTop: 8, color: '#4b5563' }}>
-        Session Date: {session ? session.session_date : 'No open session selected'}
-      </p>
       {recordContextError ? <p style={{ marginTop: 6, color: 'var(--bad)', fontSize: 14 }}>{recordContextError}</p> : null}
       {canOpenSession && recordSeasonId && !session ? (
         <div style={{ marginTop: 8, border: '1px solid #99f6e4', background: '#f0fdfa', borderRadius: 12, padding: 10 }}>
           <div style={{ fontSize: 13, color: '#0f766e', marginBottom: 8, fontWeight: 600 }}>No OPEN session for this season</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <input type="date" value={openSessionFromDate} onChange={(e) => setOpenSessionFromDate(e.target.value)} style={modalInput} />
-            <input type="date" value={openSessionToDate} onChange={(e) => setOpenSessionToDate(e.target.value)} style={modalInput} />
-            <input type="time" value={openSessionStartTime} onChange={(e) => setOpenSessionStartTime(e.target.value)} style={modalInput} />
+            <ModernDateInput label="From Date" value={openSessionFromDate} onChange={setOpenSessionFromDate} displayValue={formatDateLabel(openSessionFromDate)} />
+            <ModernDateInput label="To Date" value={openSessionToDate} onChange={setOpenSessionToDate} displayValue={formatDateLabel(openSessionToDate)} />
+            <ModernTimeSelect
+              label="Start Time"
+              value={openSessionStartTime}
+              onChange={setOpenSessionStartTime}
+              options={timeOptions}
+              formatLabel={formatTimeLabel}
+            />
             <button
               style={primaryBtn}
               disabled={openingSession}
@@ -959,7 +1071,8 @@ function AddGameScreen({
         </div>
       ) : null}
 
-      <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+      <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Club</span>
           <select value={recordClubId} onChange={(e) => void onRecordClubChange(Number(e.target.value))} style={modalInput}>
@@ -979,7 +1092,33 @@ function AddGameScreen({
             ))}
           </select>
         </label>
+        </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Session Name</span>
+            <input
+              type="text"
+              value={session ? (session.location?.trim() || `Session ${session.id}`) : ''}
+              readOnly
+              style={{ ...modalInput, background: '#f8fafc', color: '#475569' }}
+              placeholder="Session Name"
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Session Date</span>
+            <input
+              type="text"
+              value={session?.session_date ?? ''}
+              readOnly
+              style={{ ...modalInput, background: '#f8fafc', color: '#475569' }}
+              placeholder="YYYY-MM-DD"
+            />
+          </label>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Court</span>
           <select value={courtId ?? ''} onChange={(e) => setCourtId(e.target.value ? Number(e.target.value) : null)} style={modalInput}>
@@ -992,56 +1131,81 @@ function AddGameScreen({
 
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Start Time</span>
-          <input type="time" step={300} value={startTime} onChange={(e) => setStartTime(floorToFiveMinuteIncrement(e.target.value))} style={modalInput} />
+          <ModernTimeSelect value={startTime} onChange={setStartTime} options={timeOptions} formatLabel={formatTimeLabel} />
         </label>
+        </div>
 
-        <div style={{ border: '1px solid var(--border)', borderRadius: 14, background: '#f8fafc', padding: 12, display: 'grid', gap: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 16 }}>Teams and Score</h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ borderRadius: 14, background: '#818cf8', border: '1px solid #6366f1', padding: 12, display: 'grid', gap: 8 }}>
+            <div style={{ fontWeight: 700, color: '#eef2ff' }}>Team A</div>
+            <select value={a1} onChange={(e) => setA1(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
+            <select value={a2} onChange={(e) => setA2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span>Score A</span>
+              <span style={{ color: '#eef2ff', fontWeight: 700 }}>Score A</span>
               <input type="number" min={0} value={scoreA} onChange={(e) => setScoreA(Number(e.target.value))} style={modalInput} />
             </label>
+          </div>
+          <div style={{ borderRadius: 14, background: '#fda4af', border: '1px solid #fb7185', padding: 12, display: 'grid', gap: 8 }}>
+            <div style={{ fontWeight: 700, color: '#881337' }}>Team B</div>
+            <select value={b1} onChange={(e) => setB1(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
+            <select value={b2} onChange={(e) => setB2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span>Score B</span>
+              <span style={{ color: '#881337', fontWeight: 700 }}>Score B</span>
               <input type="number" min={0} value={scoreB} onChange={(e) => setScoreB(Number(e.target.value))} style={modalInput} />
             </label>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6 }}>
-            <span>Team A</span>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <select value={a1} onChange={(e) => setA1(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-              <select value={a2} onChange={(e) => setA2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 6 }}>
-            <span>Team B</span>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <select value={b1} onChange={(e) => setB1(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-              <select value={b2} onChange={(e) => setB2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-            </div>
           </div>
         </div>
 
         {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 
-        <button
-          style={{
-            border: 0,
-            borderRadius: 12,
-            background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
-            color: '#fff',
-            padding: '12px 14px',
-            fontWeight: 700,
-            cursor: saveDisabled ? 'not-allowed' : 'pointer',
-            opacity: saveDisabled ? 0.65 : 1,
-          }}
-          disabled={saveDisabled}
-          onClick={async () => {
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button
+            style={{
+              border: 0,
+              borderRadius: 12,
+              background: 'linear-gradient(90deg, #94a3b8, #64748b)',
+              color: '#fff',
+              padding: '12px 14px',
+              fontWeight: 700,
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.65 : 1,
+            }}
+            disabled={busy}
+            onClick={onBack}
+          >
+            Cancel
+          </button>
+          <button
+            style={{
+              border: 0,
+              borderRadius: 12,
+              background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+              color: '#fff',
+              padding: '12px 14px',
+              fontWeight: 700,
+              cursor: saveDisabled ? 'not-allowed' : 'pointer',
+              opacity: saveDisabled ? 0.65 : 1,
+            }}
+            disabled={saveDisabled}
+            onClick={async () => {
             setError(null);
+            const normalizedTime = floorToFiveMinuteIncrement(startTime);
+            const [hRaw, mRaw] = normalizedTime.split(':');
+            const h = Number(hRaw);
+            const m = Number(mRaw);
+            if (!Number.isInteger(h) || !Number.isInteger(m) || m % 5 !== 0) {
+              setError('Start time must be aligned to 5-minute increments.');
+              return;
+            }
+            const duplicateBySlot = existingGames.some((game) => {
+              if (!session || game.sessionId !== session.id || !courtId) return false;
+              const gameHhmm = getHHmm(game.startTime);
+              return gameHhmm === normalizedTime && game.courtId === courtId;
+            });
+            if (duplicateBySlot) {
+              setError('A game already exists for this session, court, and start time.');
+              return;
+            }
             const validationError = validateAddGameInput({
               courtId,
               scoreA,
@@ -1049,42 +1213,138 @@ function AddGameScreen({
               sideAPlayerIds: [a1, a2],
               sideBPlayerIds: [b1, b2],
               sessionId: session?.id ?? null,
-              startTime,
+              startTime: normalizedTime,
             });
             if (validationError) {
               setError(validationError);
               return;
             }
 
-            try {
-              setBusy(true);
-              await onSubmit({ courtId, startTimeLocal: floorToFiveMinuteIncrement(startTime), scoreA, scoreB, sideAPlayerIds: [a1, a2], sideBPlayerIds: [b1, b2] });
-            } catch (e) {
-              if (e instanceof ApiError && e.code === 'GAME_CONFLICT') {
-                const [hoursRaw, minutesRaw] = floorToFiveMinuteIncrement(startTime).split(':');
-                const hours = Number(hoursRaw);
-                const minutes = Number(minutesRaw);
-                if (Number.isInteger(hours) && Number.isInteger(minutes)) {
-                  const next = new Date(0, 0, 1, hours, minutes + 5, 0, 0);
-                  setStartTime(`${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`);
-                }
-                setError('A game already exists for this court and start time. Time moved to the next 5-minute slot.');
-              } else if (e instanceof ApiError && e.code === 'INVALID_GAME_TIME') {
-                setError('Start time must be on a 5-minute boundary. Try 7:00, 7:05, 7:10.');
-              } else if (e instanceof ApiError && e.code === 'SESSION_IMMUTABLE') {
-                setError('Selected session is not writable anymore. Select a season with one OPEN session.');
-              } else {
-                setError(e instanceof Error ? e.message : 'Failed to add game');
-              }
-            } finally {
-              setBusy(false);
+            const payload = {
+              courtId,
+              startTimeLocal: normalizedTime,
+              scoreA,
+              scoreB,
+              sideAPlayerIds: [a1, a2] as [number, number],
+              sideBPlayerIds: [b1, b2] as [number, number],
+            };
+            if (isSoftDuplicate(payload)) {
+              setConfirmSoftDuplicate({
+                message: 'Potential duplicate: same session, same 4 players, and same score. Save anyway?',
+                payload,
+              });
+              return;
             }
+            await submitPayload(payload);
           }}
-        >
-          {busy ? 'Saving...' : 'Save Game'}
-        </button>
+          >
+            {busy ? 'Saving...' : 'Save Game'}
+          </button>
+        </div>
+        {confirmSoftDuplicate ? (
+          <div style={seasonModalBackdrop}>
+            <div style={{ ...seasonModalCard, maxWidth: 520 }}>
+              <h3 style={{ margin: 0, fontSize: 20, color: '#0f766e' }}>Confirm Duplicate</h3>
+              <p style={{ margin: '10px 0 0', color: '#334155' }}>{confirmSoftDuplicate.message}</p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+                <button style={outlineBtn} onClick={() => setConfirmSoftDuplicate(null)}>Cancel</button>
+                <button
+                  style={primaryBtn}
+                  onClick={async () => {
+                    const payload = confirmSoftDuplicate.payload;
+                    setConfirmSoftDuplicate(null);
+                    await submitPayload(payload);
+                  }}
+                >
+                  Continue Save
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function ModernDateInput({
+  label,
+  value,
+  onChange,
+  displayValue,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  displayValue: string;
+}) {
+  const inputId = `date-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  return (
+    <label htmlFor={inputId} style={{ display: 'grid', gap: 4 }}>
+      <span style={{ fontSize: 12, color: '#0f766e', fontWeight: 600 }}>{label}</span>
+      <div style={{ position: 'relative' }}>
+        <input
+          id={inputId}
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{
+            ...modalInput,
+            color: 'transparent',
+            textShadow: '0 0 0 transparent',
+            position: 'relative',
+            zIndex: 2,
+            background: 'transparent',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            border: '1px solid #cbd5e1',
+            borderRadius: 12,
+            background: 'linear-gradient(180deg, #ffffff, #f8fafc)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 12px',
+            color: '#0f172a',
+            fontWeight: 600,
+            pointerEvents: 'none',
+          }}
+        >
+          <span>{displayValue}</span>
+          <span style={{ fontSize: 16 }}>📅</span>
+        </div>
+      </div>
+    </label>
+  );
+}
+
+function ModernTimeSelect({
+  value,
+  onChange,
+  options,
+  formatLabel,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  formatLabel: (v: string) => string;
+  label?: string;
+}) {
+  return (
+    <label style={{ display: 'grid', gap: 4 }}>
+      {label ? <span style={{ fontSize: 12, color: '#0f766e', fontWeight: 600 }}>{label}</span> : null}
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...modalInput, background: 'linear-gradient(180deg, #ffffff, #f8fafc)', fontWeight: 600 }}>
+        {options.map((time) => (
+          <option key={time} value={time}>
+            {formatLabel(time)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

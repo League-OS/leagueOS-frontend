@@ -110,6 +110,7 @@ export default function Page() {
   const [eloHistory, setEloHistory] = useState<EloHistoryRow[]>([]);
   const [recentGames, setRecentGames] = useState<HomeGameRow[]>([]);
   const [allGames, setAllGames] = useState<HomeGameRow[]>([]);
+  const [recordExistingGames, setRecordExistingGames] = useState<HomeGameRow[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [allUpcomingSessions, setAllUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<number | null>(null);
@@ -195,6 +196,7 @@ export default function Page() {
         setLeaderboard([]);
         setRecentGames([]);
         setAllGames([]);
+        setRecordExistingGames([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setProfileStats({
@@ -266,39 +268,51 @@ export default function Page() {
         : games;
       const courtNameById = new Map<number, string>((courtsRes.status === 'fulfilled' ? courtsRes.value : []).map((court) => [court.id, court.name]));
 
+      const mapGameRow = (game: (typeof games)[number], playerIdForView: number | null): HomeGameRow => {
+        const participants = participantsByGame.get(game.id) ?? [];
+        const sideA = participants.filter((p) => p.side === 'A').map((p) => p.display_name);
+        const sideB = participants.filter((p) => p.side === 'B').map((p) => p.display_name);
+        const sideAIds = participants.filter((p) => p.side === 'A').map((p) => p.player_id);
+        const sideBIds = participants.filter((p) => p.side === 'B').map((p) => p.player_id);
+        const session = sessionById.get(game.session_id);
+        const season = session ? seasonById.get(session.season_id) : undefined;
+        const computed = outcomeForGame(game, participants, playerIdForView);
+        const partner = partnerNameForGame({
+          participants,
+          mySide: computed.mySide,
+          userPlayerId: playerIdForView,
+        });
+        return {
+          id: game.id,
+          sessionId: game.session_id,
+          date: formatMonthDay(session?.session_date ?? game.start_time),
+          season: season?.name ?? `Season ${session?.season_id ?? '-'}`,
+          partner,
+          score: computed.outcome,
+          outcome: computed.outcome,
+          startTime: game.start_time,
+          courtId: game.court_id,
+          courtName: courtNameById.get(game.court_id) ?? `Court ${game.court_id}`,
+          teamA: sideA,
+          teamB: sideB,
+          teamAIds: sideAIds,
+          teamBIds: sideBIds,
+          scoreA: game.score_a,
+          scoreB: game.score_b,
+        };
+      };
+
       const mappedGames = [...sourceGames]
         .sort((a, b) => b.start_time.localeCompare(a.start_time))
-        .map((game): HomeGameRow => {
-          const participants = participantsByGame.get(game.id) ?? [];
-          const sideA = participants.filter((p) => p.side === 'A').map((p) => p.display_name);
-          const sideB = participants.filter((p) => p.side === 'B').map((p) => p.display_name);
-          const session = sessionById.get(game.session_id);
-          const season = session ? seasonById.get(session.season_id) : undefined;
-          const computed = outcomeForGame(game, participants, effectivePlayerId);
-          const partner = partnerNameForGame({
-            participants,
-            mySide: computed.mySide,
-            userPlayerId: effectivePlayerId,
-          });
-          return {
-            id: game.id,
-            sessionId: game.session_id,
-            date: formatMonthDay(session?.session_date ?? game.start_time),
-            season: season?.name ?? `Season ${session?.season_id ?? '-'}`,
-            partner,
-            score: computed.outcome,
-            outcome: computed.outcome,
-            startTime: game.start_time,
-            courtName: courtNameById.get(game.court_id) ?? `Court ${game.court_id}`,
-            teamA: sideA,
-            teamB: sideB,
-            scoreA: game.score_a,
-            scoreB: game.score_b,
-          };
-        });
+        .map((game) => mapGameRow(game, effectivePlayerId));
+
+      const mappedRecordGames = [...games]
+        .sort((a, b) => b.start_time.localeCompare(a.start_time))
+        .map((game) => mapGameRow(game, null));
 
       setAllGames(mappedGames);
       setRecentGames(mappedGames.slice(0, 5));
+      setRecordExistingGames(mappedRecordGames);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -482,11 +496,9 @@ export default function Page() {
     sideBPlayerIds: [number, number];
   }) {
     if (!auth) return;
+    const effectiveRole = String(profile?.club_role ?? profile?.role ?? '').toUpperCase();
     const canRecord =
-      profile?.role === 'CLUB_ADMIN' ||
-      profile?.role === 'RECORDER' ||
-      profile?.club_role === 'CLUB_ADMIN' ||
-      profile?.club_role === 'RECORDER';
+      effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'RECORDER';
     if (!canRecord) {
       throw new Error('Only club admins or recorders can record games.');
     }
@@ -504,6 +516,31 @@ export default function Page() {
     }
     if (!payload.courtId) {
       throw new Error('Please select a court.');
+    }
+    if (payload.scoreA === payload.scoreB) {
+      throw new Error('No tied scores allowed.');
+    }
+
+    const allPlayerIds = [...payload.sideAPlayerIds, ...payload.sideBPlayerIds];
+    if (new Set(allPlayerIds).size !== allPlayerIds.length) {
+      throw new Error('Player appears more than once in this game. Choose 4 unique players.');
+    }
+
+    const [h, m] = payload.startTimeLocal.split(':').map(Number);
+    if (!Number.isInteger(h) || !Number.isInteger(m) || m % 5 !== 0) {
+      throw new Error('Start time must be aligned to 5-minute increments.');
+    }
+
+    // Client-side precheck for UNIQUE(session, court, start time) before API create.
+    const existingGames = await client.games(auth.token, recordClubId);
+    const hasConflict = existingGames.some((game) => {
+      if (game.session_id !== sessionToUse.id || game.court_id !== payload.courtId) return false;
+      const start = new Date(game.start_time);
+      if (Number.isNaN(start.getTime())) return false;
+      return start.getHours() === h && start.getMinutes() === m;
+    });
+    if (hasConflict) {
+      throw new Error('A game already exists for this session, court, and start time.');
     }
 
     const game = await client.createGame(auth.token, recordClubId, {
@@ -719,6 +756,7 @@ export default function Page() {
       eloHistory={eloHistory}
       recentGames={recentGames}
       allGames={allGames}
+      recordExistingGames={recordExistingGames}
       upcomingSessions={upcomingSessions}
       allUpcomingSessions={allUpcomingSessions}
       onRecordClubChange={handleRecordClubChange}
@@ -758,6 +796,7 @@ export default function Page() {
         setEloHistory([]);
         setRecentGames([]);
         setAllGames([]);
+        setRecordExistingGames([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setSelectedProfilePlayerId(null);
