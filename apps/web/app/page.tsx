@@ -690,8 +690,9 @@ export default function Page() {
     return <LoginView onLogin={handleLogin} error={error} loading={loading} />;
   }
 
-  const isClubAdmin = profile?.club_role === 'CLUB_ADMIN' || profile?.role === 'CLUB_ADMIN';
-  const isRecorder = profile?.club_role === 'RECORDER' || profile?.role === 'RECORDER';
+  const effectiveRole = String(profile?.club_role ?? profile?.role ?? '').toUpperCase();
+  const isClubAdmin = effectiveRole === 'CLUB_ADMIN';
+  const isRecorder = effectiveRole === 'RECORDER';
   const canFinalizeSession = Boolean(isClubAdmin && selectedSession?.status === 'CLOSED');
   const canRevertSessionFinalize = Boolean(isClubAdmin && selectedSession?.status === 'FINALIZED');
 
@@ -723,7 +724,6 @@ export default function Page() {
       onRecordClubChange={handleRecordClubChange}
       onClubChange={handleClubChange}
       onSeasonChange={handleSeasonChange}
-      onRefresh={refresh}
       canCreateSeason={Boolean(isClubAdmin)}
       allowProfilePlayerPick={Boolean(profile?.role === 'GLOBAL_ADMIN' || isClubAdmin)}
       profilePlayers={players}
