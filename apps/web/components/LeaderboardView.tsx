@@ -659,10 +659,15 @@ function HomeScreen({
               title="Recent Games"
               action="View All →"
               onActionClick={() => setHomeMode('allGames')}
-              columns={['Date', 'Season', 'Partner', 'Score']}
+              columns={['Date', 'Partner', 'Result', 'Game Score']}
               rows={recentGames.map((g) => ({
                 id: g.id,
-                cells: [g.date, g.season, g.partner, <span key={g.id} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>],
+                cells: [
+                  g.date,
+                  g.partner,
+                  <span key={`${g.id}-result`} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>,
+                  `${g.scoreA}-${g.scoreB}`,
+                ],
                 onClick: () => {
                   setActiveGame(g);
                   setHomeMode('gameDetail');
@@ -715,10 +720,15 @@ function HomeScreen({
             title="All Games"
             action="← Back"
             onActionClick={() => setHomeMode('main')}
-            columns={['Date', 'Season', 'Partner', 'Score']}
+            columns={['Date', 'Partner', 'Result', 'Game Score']}
             rows={allGames.map((g) => ({
               id: g.id,
-              cells: [g.date, g.season, g.partner, <span key={g.id} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>],
+              cells: [
+                g.date,
+                g.partner,
+                <span key={`${g.id}-result`} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>,
+                `${g.scoreA}-${g.scoreB}`,
+              ],
               onClick: () => {
                 setActiveGame(g);
                 setHomeMode('gameDetail');
