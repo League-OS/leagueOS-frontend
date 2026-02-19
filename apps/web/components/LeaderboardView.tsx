@@ -910,6 +910,12 @@ function AddGameScreen({
     };
   }>(null);
   const saveDisabled = busy || !session || Boolean(recordContextError);
+  const timeOptions = Array.from({ length: 24 * 12 }, (_, i) => {
+    const hours = Math.floor(i / 12);
+    const minutes = (i % 12) * 5;
+    const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return value;
+  });
 
   const getHHmm = (iso: string) => {
     const d = new Date(iso);
@@ -971,6 +977,19 @@ function AddGameScreen({
   }
 
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
+  const formatTimeLabel = (value: string) => {
+    const [hh, mm] = value.split(':').map(Number);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
+    const suffix = hh >= 12 ? 'PM' : 'AM';
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+    return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
+  };
+  const formatDateLabel = (dateStr: string) => {
+    if (!dateStr) return 'Select date';
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   useEffect(() => {
     setA1(players[0]?.id ?? 0);
@@ -995,9 +1014,15 @@ function AddGameScreen({
         <div style={{ marginTop: 8, border: '1px solid #99f6e4', background: '#f0fdfa', borderRadius: 12, padding: 10 }}>
           <div style={{ fontSize: 13, color: '#0f766e', marginBottom: 8, fontWeight: 600 }}>No OPEN session for this season</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <input type="date" value={openSessionFromDate} onChange={(e) => setOpenSessionFromDate(e.target.value)} style={modalInput} />
-            <input type="date" value={openSessionToDate} onChange={(e) => setOpenSessionToDate(e.target.value)} style={modalInput} />
-            <input type="time" value={openSessionStartTime} onChange={(e) => setOpenSessionStartTime(e.target.value)} style={modalInput} />
+            <ModernDateInput label="From Date" value={openSessionFromDate} onChange={setOpenSessionFromDate} displayValue={formatDateLabel(openSessionFromDate)} />
+            <ModernDateInput label="To Date" value={openSessionToDate} onChange={setOpenSessionToDate} displayValue={formatDateLabel(openSessionToDate)} />
+            <ModernTimeSelect
+              label="Start Time"
+              value={openSessionStartTime}
+              onChange={setOpenSessionStartTime}
+              options={timeOptions}
+              formatLabel={formatTimeLabel}
+            />
             <button
               style={primaryBtn}
               disabled={openingSession}
@@ -1096,7 +1121,7 @@ function AddGameScreen({
 
         <label style={{ display: 'grid', gap: 6 }}>
           <span>Start Time</span>
-          <input type="time" step={300} value={startTime} onChange={(e) => setStartTime(floorToFiveMinuteIncrement(e.target.value))} style={modalInput} />
+          <ModernTimeSelect value={startTime} onChange={setStartTime} options={timeOptions} formatLabel={formatTimeLabel} />
         </label>
         </div>
 
@@ -1123,19 +1148,36 @@ function AddGameScreen({
 
         {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 
-        <button
-          style={{
-            border: 0,
-            borderRadius: 12,
-            background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
-            color: '#fff',
-            padding: '12px 14px',
-            fontWeight: 700,
-            cursor: saveDisabled ? 'not-allowed' : 'pointer',
-            opacity: saveDisabled ? 0.65 : 1,
-          }}
-          disabled={saveDisabled}
-          onClick={async () => {
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button
+            style={{
+              border: 0,
+              borderRadius: 12,
+              background: 'linear-gradient(90deg, #94a3b8, #64748b)',
+              color: '#fff',
+              padding: '12px 14px',
+              fontWeight: 700,
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.65 : 1,
+            }}
+            disabled={busy}
+            onClick={onBack}
+          >
+            Cancel
+          </button>
+          <button
+            style={{
+              border: 0,
+              borderRadius: 12,
+              background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+              color: '#fff',
+              padding: '12px 14px',
+              fontWeight: 700,
+              cursor: saveDisabled ? 'not-allowed' : 'pointer',
+              opacity: saveDisabled ? 0.65 : 1,
+            }}
+            disabled={saveDisabled}
+            onClick={async () => {
             setError(null);
             const normalizedTime = floorToFiveMinuteIncrement(startTime);
             const [hRaw, mRaw] = normalizedTime.split(':');
@@ -1185,9 +1227,10 @@ function AddGameScreen({
             }
             await submitPayload(payload);
           }}
-        >
-          {busy ? 'Saving...' : 'Save Game'}
-        </button>
+          >
+            {busy ? 'Saving...' : 'Save Game'}
+          </button>
+        </div>
         {confirmSoftDuplicate ? (
           <div style={seasonModalBackdrop}>
             <div style={{ ...seasonModalCard, maxWidth: 520 }}>
@@ -1211,6 +1254,87 @@ function AddGameScreen({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ModernDateInput({
+  label,
+  value,
+  onChange,
+  displayValue,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  displayValue: string;
+}) {
+  const inputId = `date-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  return (
+    <label htmlFor={inputId} style={{ display: 'grid', gap: 4 }}>
+      <span style={{ fontSize: 12, color: '#0f766e', fontWeight: 600 }}>{label}</span>
+      <div style={{ position: 'relative' }}>
+        <input
+          id={inputId}
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{
+            ...modalInput,
+            color: 'transparent',
+            textShadow: '0 0 0 transparent',
+            position: 'relative',
+            zIndex: 2,
+            background: 'transparent',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            border: '1px solid #cbd5e1',
+            borderRadius: 12,
+            background: 'linear-gradient(180deg, #ffffff, #f8fafc)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 12px',
+            color: '#0f172a',
+            fontWeight: 600,
+            pointerEvents: 'none',
+          }}
+        >
+          <span>{displayValue}</span>
+          <span style={{ fontSize: 16 }}>📅</span>
+        </div>
+      </div>
+    </label>
+  );
+}
+
+function ModernTimeSelect({
+  value,
+  onChange,
+  options,
+  formatLabel,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  formatLabel: (v: string) => string;
+  label?: string;
+}) {
+  return (
+    <label style={{ display: 'grid', gap: 4 }}>
+      {label ? <span style={{ fontSize: 12, color: '#0f766e', fontWeight: 600 }}>{label}</span> : null}
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...modalInput, background: 'linear-gradient(180deg, #ffffff, #f8fafc)', fontWeight: 600 }}>
+        {options.map((time) => (
+          <option key={time} value={time}>
+            {formatLabel(time)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
