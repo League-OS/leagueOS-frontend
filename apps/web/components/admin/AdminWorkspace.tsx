@@ -23,20 +23,11 @@ import {
   primaryBtn,
 } from './AdminShellParts';
 import type { AdminNavKey } from './AdminShellParts';
+import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const STORAGE_AUTH = 'leagueos.admin.auth';
 const STORAGE_CTX = 'leagueos.admin.ctx';
-
-type AdminPage =
-  | 'dashboard'
-  | 'clubs'
-  | 'players'
-  | 'courts'
-  | 'seasons'
-  | 'sessions'
-  | 'seasonDetail'
-  | 'sessionDetail';
 
 type Props = {
   page: AdminPage;
@@ -156,13 +147,15 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       const activeClubId = availableClubs.find((c) => c.id === clubId)?.id ?? availableClubs[0]?.id ?? clubId;
       setSelectedClubId(activeClubId);
 
-      const [clubPlayers, clubCourts, clubSeasons, clubSessions, clubGames] = await Promise.all([
-        client.players(token, activeClubId, false),
+      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames] = await Promise.all([
+        client.players(token, activeClubId, true),
+        client.players(token, activeClubId, false).catch(() => [] as Player[]),
         client.courts(token, activeClubId),
         client.seasons(token, activeClubId),
         client.sessions(token, activeClubId),
         client.games(token, activeClubId).catch(() => [] as Game[]),
       ]);
+      const clubPlayers = mergeAdminPlayers(activePlayers, inactivePlayers);
 
       setPlayers(clubPlayers);
       setCourts(clubCourts);
@@ -295,7 +288,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     page === 'sessionDetail' ? 'sessions' :
     (page as AdminNavKey);
 
-  const breadcrumbs = buildBreadcrumbs({ page, seasonId, sessionId, seasons, sessions });
+  const breadcrumbs = buildAdminBreadcrumbs({ page, seasonId, sessionId, seasons, sessions });
 
   const sessionMatches = selectedSession
     ? games.filter((g) => g.session_id === selectedSession.id)
@@ -306,7 +299,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       <AdminSidebar active={activeNav} />
       <section style={adminMainPanel}>
         <AdminTopbar
-          title={pageTitle(page)}
+          title={adminPageTitle(page)}
           subtitle={profile.display_name || profile.email || undefined}
           roleLabel={role}
           clubOptions={clubs}
@@ -529,46 +522,6 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       </section>
     </main>
   );
-}
-
-function pageTitle(page: AdminPage): string {
-  switch (page) {
-    case 'dashboard': return 'Admin Dashboard';
-    case 'clubs': return 'Clubs';
-    case 'players': return 'Club Players';
-    case 'courts': return 'Courts';
-    case 'seasons': return 'Seasons';
-    case 'sessions': return 'Sessions';
-    case 'seasonDetail': return 'Season Detail';
-    case 'sessionDetail': return 'Session Detail';
-  }
-}
-
-function buildBreadcrumbs(args: {
-  page: AdminPage;
-  seasonId?: number;
-  sessionId?: number;
-  seasons: Season[];
-  sessions: Session[];
-}) {
-  const { page, seasonId, sessionId, seasons, sessions } = args;
-  if (page === 'seasonDetail') {
-    const season = seasons.find((s) => s.id === seasonId);
-    return [{ label: 'Admin', href: '/admin' }, { label: 'Seasons', href: '/admin/seasons' }, { label: season?.name ?? `Season ${seasonId}` }];
-  }
-  if (page === 'sessionDetail') {
-    const session = sessions.find((s) => s.id === sessionId);
-    return [{ label: 'Admin', href: '/admin' }, { label: 'Sessions', href: '/admin/sessions' }, { label: session?.location || `Session ${sessionId}` }];
-  }
-  const map: Record<Exclude<AdminPage, 'seasonDetail' | 'sessionDetail'>, string> = {
-    dashboard: 'Dashboard',
-    clubs: 'Clubs',
-    players: 'Club Players',
-    courts: 'Courts',
-    seasons: 'Seasons',
-    sessions: 'Sessions',
-  };
-  return [{ label: 'Admin', href: '/admin' }, { label: map[page as keyof typeof map] }];
 }
 
 function DashboardPanel({ clubs, players, courts, seasons, sessions }: { clubs: Club[]; players: Player[]; courts: Court[]; seasons: Season[]; sessions: Session[] }) {
@@ -905,7 +858,7 @@ function SessionsPanel(props: {
             .map((s) => {
               const season = seasonById.get(s.season_id);
               const sessionGames = games.filter((g) => g.session_id === s.id);
-              const playerCount = new Set(sessionGames.flatMap((g) => (participantsByGame[g.id] ?? []).map((p) => p.player_id))).size;
+              const playerCount = countUniquePlayersInSessionGames(sessionGames, participantsByGame);
               return [
                 <Link key={`sd-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
                 fmtDate(s.session_date),
@@ -953,7 +906,11 @@ function SessionDetailPanel(props: {
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>
       </AdminCard>
-      <AdminCard title="Matches in Session" action={<button style={outlineBtn}>Add Match (use current user Add Game flow for now)</button>}>
+      <AdminCard title="Matches in Session" action={
+        <Link href="/" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+          Add Match (open User Add Game)
+        </Link>
+      }>
         <AdminTable
           columns={['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Court', 'Start Time', 'Score A', 'Score B', 'Status']}
           rows={sessionMatches.map((g) => {

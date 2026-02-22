@@ -28,6 +28,7 @@ Trust this file first. Only search the repo if this document is incomplete or yo
 - There is **no `.github/workflows/` CI config** in this repo. Do not assume GitHub Actions checks exist.
 - Root `pnpm lint` currently fails because `apps/web` runs `next lint` without an ESLint config; Next prompts interactively for setup.
 - `apps/web` test script currently fails because it runs `node --test` directly on a TypeScript ESM test file with no loader/transpilation.
+- Admin unit tests may be added under `apps/web/components/admin/*.test.ts` and `apps/web/lib/*.test.ts`, but they share the same TS runner limitation until a TS-aware test runner (e.g. `tsx`/Vitest) is introduced.
 - `pnpm build` succeeds from repo root.
 - `pnpm typecheck` succeeds from repo root.
 - `pnpm dev:web` could not be fully smoke-tested here due sandbox port bind restrictions (`EPERM 0.0.0.0:3000`), but command wiring is correct.
@@ -135,8 +136,18 @@ Even if defaults point to localhost, copying the env files is useful because app
 - `apps/web/app/page.tsx`
 - Main web screen logic: auth state, dashboard loading, season/session selection, leaderboard and record-game flows.
 
+- `apps/web/app/admin/**`
+- Desktop-first admin sub-app route tree under `/admin` (separate experience from the user-facing `/` route).
+- Keep admin changes isolated from `apps/web/app/page.tsx` and `LeaderboardView.tsx` unless a shared behavior is intentionally changed.
+
 - `apps/web/components/LeaderboardView.tsx`
 - Main web UI rendering and action callbacks (home/leaderboard/profile tabs, session/game interactions).
+
+- `apps/web/components/admin/AdminWorkspace.tsx`
+- Main admin workspace controller (auth guard, club/season context, page panels, lifecycle actions).
+
+- `apps/web/components/admin/adminWorkspaceLogic.ts`
+- Pure admin helper logic extracted for easier test coverage (breadcrumbs, titles, player merges, session player counts).
 
 - `apps/web/components/addGameLogic.ts`
 - Pure logic helpers used by UI and by the only current test.
