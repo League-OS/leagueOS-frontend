@@ -155,6 +155,17 @@ Even if defaults point to localhost, copying the env files is useful because app
 - `apps/mobile/App.tsx`
 - Single-file mobile UI flow (login + leaderboard + season selection + secure storage).
 
+
+### Admin Route Session Hydration (Important)
+
+- `apps/web/components/admin/AdminWorkspace.tsx` remounts on each `/admin/*` route navigation because each route page renders a new `AdminWorkspace` instance.
+- To avoid a login-page flash/flicker during navigation, admin auth state must be hydrated synchronously from `localStorage` in `useState` initializers (not only in `useEffect`).
+- Persist both admin `auth` and admin `profile` in local storage:
+- `leagueos.admin.auth`
+- `leagueos.admin.profile`
+- Render rules should prefer a neutral loading/restore state instead of the login screen while session restore is in progress.
+- If this pattern is removed, `/admin` nav clicks (Clubs/Courts/Sessions/etc.) can briefly reroute to the login UI and then snap back after async profile load.
+
 ### Web Build Notes
 
 - `apps/web/next.config.mjs` uses `transpilePackages` for all shared workspace packages.

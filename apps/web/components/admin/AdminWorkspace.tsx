@@ -28,6 +28,7 @@ import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const STORAGE_AUTH = 'leagueos.admin.auth';
 const STORAGE_CTX = 'leagueos.admin.ctx';
+const STORAGE_PROFILE = 'leagueos.admin.profile';
 
 type Props = {
   page: AdminPage;
@@ -59,8 +60,27 @@ function fmtDateTime(value?: string | null) {
 
 export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const client = useMemo(() => new LeagueOsApiClient({ apiBaseUrl: API_BASE }), []);
-  const [auth, setAuth] = useState<AuthState | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [auth, setAuth] = useState<AuthState | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_AUTH);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as AuthState;
+      return parsed?.token && parsed?.clubId ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_PROFILE);
+      if (!raw) return null;
+      return JSON.parse(raw) as Profile;
+    } catch {
+      return null;
+    }
+  });
   const [clubs, setClubs] = useState<Club[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
@@ -68,9 +88,30 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [participantsByGame, setParticipantsByGame] = useState<Record<number, GameParticipant[]>>({});
-  const [selectedClubId, setSelectedClubId] = useState<number>(DEFAULT_CLUB_ID);
-  const [ctx, setCtx] = useState<AdminCtx>({ selectedSeasonId: null });
+  const [selectedClubId, setSelectedClubId] = useState<number>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CLUB_ID;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_AUTH);
+      if (!raw) return DEFAULT_CLUB_ID;
+      const parsed = JSON.parse(raw) as AuthState;
+      return parsed?.clubId ?? DEFAULT_CLUB_ID;
+    } catch {
+      return DEFAULT_CLUB_ID;
+    }
+  });
+  const [ctx, setCtx] = useState<AdminCtx>(() => {
+    if (typeof window === 'undefined') return { selectedSeasonId: null };
+    try {
+      const raw = window.localStorage.getItem(STORAGE_CTX);
+      if (!raw) return { selectedSeasonId: null };
+      const parsed = JSON.parse(raw) as AdminCtx;
+      return { selectedSeasonId: parsed?.selectedSeasonId ?? null };
+    } catch {
+      return { selectedSeasonId: null };
+    }
+  });
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(typeof window !== 'undefined');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -102,29 +143,41 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   }, [sessions, seasonId, ctx.selectedSeasonId]);
 
   useEffect(() => {
+    setHydrated(true);
     try {
-      const rawAuth = localStorage.getItem(STORAGE_AUTH);
-      if (rawAuth) {
-        const parsed = JSON.parse(rawAuth) as AuthState;
-        if (parsed?.token && parsed?.clubId) {
-          setAuth(parsed);
-          setSelectedClubId(parsed.clubId);
+      if (!auth) {
+        const rawAuth = localStorage.getItem(STORAGE_AUTH);
+        if (rawAuth) {
+          const parsed = JSON.parse(rawAuth) as AuthState;
+          if (parsed?.token && parsed?.clubId) {
+            setAuth(parsed);
+            setSelectedClubId(parsed.clubId);
+          }
         }
       }
-      const rawCtx = localStorage.getItem(STORAGE_CTX);
-      if (rawCtx) {
-        const parsed = JSON.parse(rawCtx) as AdminCtx;
-        setCtx({ selectedSeasonId: parsed?.selectedSeasonId ?? null });
+      if (!profile) {
+        const rawProfile = localStorage.getItem(STORAGE_PROFILE);
+        if (rawProfile) setProfile(JSON.parse(rawProfile) as Profile);
       }
     } catch {
       // ignore bad local storage
     }
+    // auth/profile are intentionally not dependencies; this is initial restore only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!auth) return;
     localStorage.setItem(STORAGE_AUTH, JSON.stringify(auth));
   }, [auth]);
+
+  useEffect(() => {
+    if (!profile) {
+      localStorage.removeItem(STORAGE_PROFILE);
+      return;
+    }
+    localStorage.setItem(STORAGE_PROFILE, JSON.stringify(profile));
+  }, [profile]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_CTX, JSON.stringify(ctx));
@@ -178,6 +231,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         setParticipantsByGame({});
       }
     } catch (e) {
+      setProfile(null);
       setError(getMessage(e, 'Failed to load admin data.'));
     } finally {
       setLoading(false);
@@ -244,6 +298,29 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setError(null);
     setSuccess(null);
     localStorage.removeItem(STORAGE_AUTH);
+    localStorage.removeItem(STORAGE_PROFILE);
+  }
+
+  if (!hydrated) {
+    return (
+      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#eef2f7', padding: 24 }}>
+        <section style={{ width: '100%', maxWidth: 520, background: '#fff', border: '1px solid #dbe3ef', borderRadius: 18, padding: 20, boxShadow: '0 16px 30px rgba(15,23,42,.08)' }}>
+          <h1 style={{ margin: 0, fontSize: 28, color: '#0f172a' }}>LeagueOS Admin</h1>
+          <p style={{ margin: '8px 0 0', color: '#64748b' }}>Loading admin workspace...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (auth && !profile) {
+    return (
+      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#eef2f7', padding: 24 }}>
+        <section style={{ width: '100%', maxWidth: 520, background: '#fff', border: '1px solid #dbe3ef', borderRadius: 18, padding: 20, boxShadow: '0 16px 30px rgba(15,23,42,.08)' }}>
+          <h1 style={{ margin: 0, fontSize: 28, color: '#0f172a' }}>LeagueOS Admin</h1>
+          <p style={{ margin: '8px 0 0', color: '#64748b' }}>Restoring your admin session...</p>
+        </section>
+      </main>
+    );
   }
 
   if (!auth || !profile) {
