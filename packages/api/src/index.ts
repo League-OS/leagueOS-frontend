@@ -152,6 +152,31 @@ export class LeagueOsApiClient {
     return data.map((d) => clubSchema.parse(d));
   }
 
+  async createClub(token: string, payload: { name: string }): Promise<Club> {
+    const data = await this.request<unknown>('/clubs', {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+    return clubSchema.parse(data);
+  }
+
+  async updateClub(token: string, clubId: number, payload: { name?: string }): Promise<Club> {
+    const data = await this.request<unknown>(`/clubs/${clubId}`, {
+      method: 'PUT',
+      token,
+      body: payload,
+    });
+    return clubSchema.parse(data);
+  }
+
+  async deleteClub(token: string, clubId: number): Promise<{ ok: boolean; club_id: number }> {
+    return this.request<{ ok: boolean; club_id: number }>(`/clubs/${clubId}`, {
+      method: 'DELETE',
+      token,
+    });
+  }
+
   async players(token: string, clubId: number, isActive = true): Promise<Player[]> {
     const data = await this.request<unknown[]>('/players', {
       token,
@@ -161,6 +186,66 @@ export class LeagueOsApiClient {
     return data.map((d) => playerSchema.parse(d));
   }
 
+  async createPlayer(
+    token: string,
+    clubId: number,
+    payload: {
+      display_name: string;
+      email?: string | null;
+      phone?: string | null;
+      elo_initial_doubles?: number;
+      elo_initial_singles?: number;
+      elo_initial_mixed?: number;
+      player_type?: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
+      sex?: 'M' | 'F' | 'X' | 'U';
+      is_active?: boolean;
+    },
+  ): Promise<Player> {
+    const data = await this.request<unknown>('/players', {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: { ...payload, club_id: clubId },
+    });
+    return playerSchema.parse(data);
+  }
+
+  async updatePlayer(
+    token: string,
+    clubId: number,
+    playerId: number,
+    payload: Partial<{
+      display_name: string;
+      email: string | null;
+      phone: string | null;
+      elo_initial_doubles: number;
+      elo_initial_singles: number;
+      elo_initial_mixed: number;
+      player_type: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
+      sex: 'M' | 'F' | 'X' | 'U';
+      is_active: boolean;
+    }>,
+  ): Promise<Player> {
+    const data = await this.request<unknown>(`/players/${playerId}`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return playerSchema.parse(data);
+  }
+
+  async deletePlayer(token: string, clubId: number, playerId: number): Promise<{ ok: boolean; player_id: number }> {
+    return this.request<{ ok: boolean; player_id: number }>(`/players/${playerId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
   async courts(token: string, clubId: number): Promise<Court[]> {
     const data = await this.request<unknown[]>('/courts', {
       token,
@@ -168,6 +253,37 @@ export class LeagueOsApiClient {
       query: { club_id: clubId },
     });
     return data.map((d) => courtSchema.parse(d));
+  }
+
+  async createCourt(token: string, clubId: number, payload: { name: string; is_active?: boolean }): Promise<Court> {
+    const data = await this.request<unknown>('/courts', {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: { ...payload, club_id: clubId },
+    });
+    return courtSchema.parse(data);
+  }
+
+  async updateCourt(token: string, clubId: number, courtId: number, payload: { name?: string; is_active?: boolean }): Promise<Court> {
+    const data = await this.request<unknown>(`/courts/${courtId}`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return courtSchema.parse(data);
+  }
+
+  async deleteCourt(token: string, clubId: number, courtId: number): Promise<{ ok: boolean; court_id: number }> {
+    return this.request<{ ok: boolean; court_id: number }>(`/courts/${courtId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
   }
 
   async seasons(token: string, clubId: number, isActive?: boolean): Promise<Season[]> {
@@ -223,6 +339,15 @@ export class LeagueOsApiClient {
     return seasonSchema.parse(data);
   }
 
+  async deleteSeason(token: string, clubId: number, seasonId: number): Promise<{ ok: boolean; season_id: number }> {
+    return this.request<{ ok: boolean; season_id: number }>(`/seasons/${seasonId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
   async sessions(token: string, clubId: number, seasonId?: number): Promise<Session[]> {
     const data = await this.request<unknown[]>('/sessions', {
       token,
@@ -251,6 +376,45 @@ export class LeagueOsApiClient {
       body: payload,
     });
     return sessionSchema.parse(data);
+  }
+
+  async updateSession(
+    token: string,
+    clubId: number,
+    sessionId: number,
+    payload: Partial<{
+      session_date: string;
+      status: 'UPCOMING' | 'OPEN' | 'CANCELLED';
+      location: string;
+      address: string;
+    }>,
+  ): Promise<Session> {
+    const data = await this.request<unknown>(`/sessions/${sessionId}`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return sessionSchema.parse(data);
+  }
+
+  async closeSession(token: string, clubId: number, sessionId: number): Promise<{ session_id: number; status: string }> {
+    return this.request<{ session_id: number; status: string }>(`/sessions/${sessionId}/close`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async deleteSession(token: string, clubId: number, sessionId: number): Promise<{ ok: boolean; session_id: number }> {
+    return this.request<{ ok: boolean; session_id: number }>(`/sessions/${sessionId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
   }
 
   async sessionLeaderboard(token: string, clubId: number, sessionId: number): Promise<LeaderboardEntry[]> {
