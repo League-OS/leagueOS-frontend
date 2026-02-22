@@ -515,7 +515,7 @@ export class LeagueOsApiClient {
   async seasonLeaderboard(token: string, clubId: number, seasonId: number): Promise<{ session: Session | null; leaderboard: LeaderboardEntry[] }> {
     const sessions = await this.sessions(token, clubId, seasonId);
     const finalized = sessions
-      .filter((s) => s.status === 'FINALIZED' || s.status === 'CLOSED' || s.status === 'OPEN')
+      .filter((s) => s.status === 'FINALIZED')
       .sort((a, b) => b.session_date.localeCompare(a.session_date));
 
     if (!finalized.length) {
