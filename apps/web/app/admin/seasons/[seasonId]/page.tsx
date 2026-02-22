@@ -1,4 +1,4 @@
-import { AdminWorkspace } from '../../../../components/admin/AdminWorkspace';
+import { AdminWorkspace } from '../../../../components/admin/AdminWorkspaceClient';
 
 export default async function AdminSeasonDetailPage({ params }: { params: Promise<{ seasonId: string }> }) {
   const resolved = await params;

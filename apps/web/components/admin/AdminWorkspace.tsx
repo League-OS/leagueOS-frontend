@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { Club, Court, Game, GameParticipant, Player, Profile, Season, Session } from '@leagueos/schemas';
+import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
 import {
@@ -88,6 +88,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [participantsByGame, setParticipantsByGame] = useState<Record<number, GameParticipant[]>>({});
+  const [seasonLeaderboardRows, setSeasonLeaderboardRows] = useState<LeaderboardEntry[]>([]);
+  const [seasonLeaderboardSession, setSeasonLeaderboardSession] = useState<Session | null>(null);
   const [selectedClubId, setSelectedClubId] = useState<number>(() => {
     if (typeof window === 'undefined') return DEFAULT_CLUB_ID;
     try {
@@ -229,6 +231,22 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         setParticipantsByGame(next);
       } else {
         setParticipantsByGame({});
+    setSeasonLeaderboardRows([]);
+    setSeasonLeaderboardSession(null);
+      }
+
+      if (page === 'seasonDetail' && seasonId) {
+        try {
+          const seasonBoard = await client.seasonLeaderboard(token, activeClubId, seasonId);
+          setSeasonLeaderboardRows(seasonBoard.leaderboard);
+          setSeasonLeaderboardSession(seasonBoard.session);
+        } catch {
+          setSeasonLeaderboardRows([]);
+          setSeasonLeaderboardSession(null);
+        }
+      } else {
+        setSeasonLeaderboardRows([]);
+        setSeasonLeaderboardSession(null);
       }
     } catch (e) {
       setProfile(null);
@@ -521,6 +539,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             season={selectedSeason}
             sessions={sessions.filter((s) => s.season_id === selectedSeason?.id)}
             players={players}
+            leaderboardRows={seasonLeaderboardRows}
+            leaderboardSession={seasonLeaderboardSession}
             onSessionCreate={async () => {
               if (!auth || !selectedSeason || !newSessionDate) return;
               await client.createSession(auth.token, selectedClubId, {
@@ -837,8 +857,10 @@ function SeasonDetailPanel(props: {
   newSessionName: string;
   setNewSessionName: (v: string) => void;
   loading: boolean;
+  leaderboardRows: LeaderboardEntry[];
+  leaderboardSession: Session | null;
 }) {
-  const { season, sessions, players, onSessionCreate, newSessionDate, setNewSessionDate, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, loading } = props;
+  const { season, sessions, players, onSessionCreate, newSessionDate, setNewSessionDate, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, loading, leaderboardRows, leaderboardSession } = props;
   if (!season) return <AdminEmptyState title="Season not found" description="Select a valid season from the Seasons page." />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -877,7 +899,7 @@ function SeasonDetailPanel(props: {
         />
       </AdminCard>
 
-      <AdminCard title="Players in Season" action={<button style={outlineBtn}>Add Existing/New Player (Planned)</button>}>
+      <AdminCard title="Players in Season" action={<Link href="/admin/players" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Manage Club Players</Link>}>
         <AdminTable
           columns={['Player Name', 'ID', 'Matches Played', 'Player Status', 'ELO Score']}
           rows={players.map((p) => [p.display_name, p.id, '-', p.player_type || '-', '-'])}
@@ -885,7 +907,27 @@ function SeasonDetailPanel(props: {
       </AdminCard>
 
       <AdminCard title="Season Leaderboard">
-        <AdminEmptyState title="Leaderboard integration (next step)" description="Render season leaderboard rows here using existing `seasonLeaderboard` API for the selected season." />
+        {leaderboardSession ? (
+          <div style={{ marginBottom: 10, color: '#475569', fontSize: 13 }}>
+            Source session: <strong>{leaderboardSession.location || `Session ${leaderboardSession.id}`}</strong> ({fmtDate(leaderboardSession.session_date)} · {leaderboardSession.status})
+          </div>
+        ) : null}
+        {leaderboardRows.length ? (
+          <AdminTable
+            columns={['#', 'Player', 'Delta', 'Played', 'Won', 'Points', 'Global ELO']}
+            rows={leaderboardRows.map((row, i) => [
+              i + 1,
+              row.display_name,
+              row.season_elo_delta > 0 ? `+${row.season_elo_delta}` : String(row.season_elo_delta),
+              row.matches_played ?? 0,
+              row.matches_won,
+              row.total_points,
+              row.global_elo_score ?? 1000,
+            ])}
+          />
+        ) : (
+          <AdminEmptyState title="No leaderboard data yet" description="Finalize at least one session in this season to populate leaderboard rankings." />
+        )}
       </AdminCard>
     </div>
   );

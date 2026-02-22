@@ -1,4 +1,4 @@
-import { AdminWorkspace } from '../../../../components/admin/AdminWorkspace';
+import { AdminWorkspace } from '../../../../components/admin/AdminWorkspaceClient';
 
 export default async function AdminSessionDetailPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const resolved = await params;
