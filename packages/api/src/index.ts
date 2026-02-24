@@ -408,6 +408,15 @@ export class LeagueOsApiClient {
     });
   }
 
+  async openSession(token: string, clubId: number, sessionId: number): Promise<{ session_id: number; status: string }> {
+    return this.request<{ session_id: number; status: string }>(`/sessions/${sessionId}/open`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
   async deleteSession(token: string, clubId: number, sessionId: number): Promise<{ ok: boolean; session_id: number }> {
     return this.request<{ ok: boolean; session_id: number }>(`/sessions/${sessionId}`, {
       method: 'DELETE',

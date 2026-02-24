@@ -602,6 +602,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setSuccess('Session closed.');
               await refresh();
             }}
+            onOpen={async () => {
+              if (!auth || !selectedSession) return;
+              await client.openSession(auth.token, selectedClubId, selectedSession.id);
+              setSuccess('Session opened.');
+              await refresh();
+            }}
             onFinalize={async () => {
               if (!auth || !selectedSession) return;
               await client.finalizeSession(auth.token, selectedClubId, selectedSession.id);
@@ -1001,10 +1007,11 @@ function SessionDetailPanel(props: {
   players: Player[];
   courts: Court[];
   onClose: () => Promise<void>;
+  onOpen: () => Promise<void>;
   onFinalize: () => Promise<void>;
   onRevert: () => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, courts, onClose, onFinalize, onRevert } = props;
+  const { session, season, sessionMatches, participantsByGame, courts, onClose, onOpen, onFinalize, onRevert } = props;
   if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   return (
@@ -1012,6 +1019,7 @@ function SessionDetailPanel(props: {
       <AdminCard title={`Session Info: ${session.location || `Session ${session.id}`}`} action={
         <div style={{ display: 'flex', gap: 8 }}>
           {session.status === 'OPEN' ? <button style={outlineBtn} onClick={() => void onClose()}>Close Session</button> : null}
+          {session.status === 'CLOSED' ? <button style={outlineBtn} onClick={() => void onOpen()}>Open Session</button> : null}
           {session.status === 'CLOSED' ? <button style={primaryBtn} onClick={() => void onFinalize()}>Finalize Session</button> : null}
           {session.status === 'FINALIZED' ? <button style={outlineBtn} onClick={() => void onRevert()}>Revert Finalize</button> : null}
         </div>
