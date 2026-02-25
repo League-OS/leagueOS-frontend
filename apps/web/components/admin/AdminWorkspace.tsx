@@ -1043,18 +1043,32 @@ function SessionDetailPanel(props: {
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
             <div style={{ color: '#64748b', fontSize: 12 }}>Status</div>
             {session.status === 'FINALIZED' ? (
-              <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>{session.status}</div>
+              <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>FINALIZED</div>
             ) : (
-              <select
-                value={session.status}
-                onChange={(e) => void onStatusChange(e.target.value as 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED')}
-                style={{ marginTop: 4, height: 36, borderRadius: 10, border: '1px solid #cbd5e1', padding: '0 10px', fontWeight: 700, color: '#0f172a', background: '#fff' }}
-              >
-                <option value="UPCOMING">UPCOMING</option>
-                <option value="OPEN">OPEN</option>
-                <option value="CLOSED">CLOSED</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </select>
+              <div style={{ marginTop: 4 }}>
+                <select
+                  aria-label="Session Status"
+                  value={session.status}
+                  onChange={(e) => void onStatusChange(e.target.value as 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED')}
+                  style={{
+                    height: 38,
+                    minWidth: 150,
+                    borderRadius: 10,
+                    border: '1px solid #14b8a6',
+                    padding: '0 12px',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    background: '#fff',
+                    appearance: 'auto',
+                    WebkitAppearance: 'menulist',
+                  }}
+                >
+                  <option value="UPCOMING">UPCOMING</option>
+                  <option value="OPEN">OPEN</option>
+                  <option value="CLOSED">CLOSED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </div>
             )}
           </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
