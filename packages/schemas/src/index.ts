@@ -56,6 +56,7 @@ export const profileSchema = z.object({
 export const clubSchema = z.object({
   id: z.number(),
   name: z.string(),
+  description: z.string().nullable().optional(),
   created_at: z.string(),
 });
 

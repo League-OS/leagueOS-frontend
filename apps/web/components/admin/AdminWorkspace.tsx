@@ -120,7 +120,13 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [loginEmail, setLoginEmail] = useState('fvma-clubAdmin@leagueos.local');
   const [loginPassword, setLoginPassword] = useState('Admin@123');
 
+  const [showAddClubModal, setShowAddClubModal] = useState(false);
   const [newClubName, setNewClubName] = useState('');
+  const [newClubDescription, setNewClubDescription] = useState('');
+  const [clubAdminSearch, setClubAdminSearch] = useState('');
+  const [clubAdminCandidates, setClubAdminCandidates] = useState<Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>>([]);
+  const [selectedClubAdminId, setSelectedClubAdminId] = useState<number | null>(null);
+  const [clubAdminSearching, setClubAdminSearching] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerEmail, setNewPlayerEmail] = useState('');
   const [newPlayerType, setNewPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
@@ -419,13 +425,47 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
           <ClubsPanel
             canManage={canManageClubs(role)}
             clubs={clubs}
+            showAddClubModal={showAddClubModal}
+            setShowAddClubModal={setShowAddClubModal}
             newClubName={newClubName}
             setNewClubName={setNewClubName}
+            newClubDescription={newClubDescription}
+            setNewClubDescription={setNewClubDescription}
+            clubAdminSearch={clubAdminSearch}
+            setClubAdminSearch={setClubAdminSearch}
+            clubAdminCandidates={clubAdminCandidates}
+            selectedClubAdminId={selectedClubAdminId}
+            setSelectedClubAdminId={setSelectedClubAdminId}
+            clubAdminSearching={clubAdminSearching}
+            onSearchAdmins={async (q) => {
+              if (!auth) return;
+              if (q.trim().length < 3) {
+                setClubAdminCandidates([]);
+                setSelectedClubAdminId(null);
+                return;
+              }
+              setClubAdminSearching(true);
+              try {
+                const results = await client.clubAdminCandidates(auth.token, q.trim());
+                setClubAdminCandidates(results);
+              } finally {
+                setClubAdminSearching(false);
+              }
+            }}
             onCreate={async () => {
-              if (!auth || !newClubName.trim()) return;
-              await client.createClub(auth.token, { name: newClubName.trim() });
+              if (!auth || !newClubName.trim() || !selectedClubAdminId) return;
+              await client.createClub(auth.token, {
+                name: newClubName.trim(),
+                description: newClubDescription.trim() || undefined,
+                club_admin_user_id: selectedClubAdminId,
+              });
               setNewClubName('');
-              setSuccess('Club created.');
+              setNewClubDescription('');
+              setClubAdminSearch('');
+              setClubAdminCandidates([]);
+              setSelectedClubAdminId(null);
+              setShowAddClubModal(false);
+              setSuccess('Club created and admin assigned.');
               await refresh();
             }}
             onDelete={async (clubId) => {
@@ -602,6 +642,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setSuccess('Session closed.');
               await refresh();
             }}
+            onOpen={async () => {
+              if (!auth || !selectedSession) return;
+              await client.openSession(auth.token, selectedClubId, selectedSession.id);
+              setSuccess('Session opened.');
+              await refresh();
+            }}
             onFinalize={async () => {
               if (!auth || !selectedSession) return;
               await client.finalizeSession(auth.token, selectedClubId, selectedSession.id);
@@ -613,6 +659,33 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               await client.revertSessionFinalize(auth.token, selectedClubId, selectedSession.id);
               setSuccess('Session reverted.');
               await refresh();
+            }}
+            onStatusChange={async (nextStatus) => {
+              if (!auth || !selectedSession) return;
+              if (nextStatus === selectedSession.status) return;
+              setError(null);
+              setSuccess(null);
+              try {
+                if (nextStatus === 'OPEN') {
+                  if (selectedSession.status === 'CLOSED') {
+                    await client.openSession(auth.token, selectedClubId, selectedSession.id);
+                  } else {
+                    await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: 'OPEN' });
+                  }
+                } else if (nextStatus === 'CLOSED') {
+                  if (selectedSession.status === 'OPEN') {
+                    await client.closeSession(auth.token, selectedClubId, selectedSession.id);
+                  } else {
+                    await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: 'CLOSED' });
+                  }
+                } else {
+                  await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: nextStatus });
+                }
+                setSuccess(`Session status updated to ${nextStatus}.`);
+                await refresh();
+              } catch (e) {
+                setError(getMessage(e, `Failed to update status to ${nextStatus}.`));
+              }
             }}
           />
         ) : null}
@@ -660,34 +733,56 @@ function DashboardPanel({ clubs, players, courts, seasons, sessions }: { clubs: 
 function ClubsPanel({
   canManage,
   clubs,
+  showAddClubModal,
+  setShowAddClubModal,
   newClubName,
   setNewClubName,
+  newClubDescription,
+  setNewClubDescription,
+  clubAdminSearch,
+  setClubAdminSearch,
+  clubAdminCandidates,
+  selectedClubAdminId,
+  setSelectedClubAdminId,
+  clubAdminSearching,
+  onSearchAdmins,
   onCreate,
   onDelete,
 }: {
   canManage: boolean;
   clubs: Club[];
+  showAddClubModal: boolean;
+  setShowAddClubModal: (v: boolean) => void;
   newClubName: string;
   setNewClubName: (v: string) => void;
+  newClubDescription: string;
+  setNewClubDescription: (v: string) => void;
+  clubAdminSearch: string;
+  setClubAdminSearch: (v: string) => void;
+  clubAdminCandidates: Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>;
+  selectedClubAdminId: number | null;
+  setSelectedClubAdminId: (id: number | null) => void;
+  clubAdminSearching: boolean;
+  onSearchAdmins: (q: string) => Promise<void>;
   onCreate: () => Promise<void>;
   onDelete: (clubId: number) => Promise<void>;
 }) {
+  const selectedAdmin = clubAdminCandidates.find((u) => u.id === selectedClubAdminId) ?? null;
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title="Club Directory" action={canManage ? (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input value={newClubName} onChange={(e) => setNewClubName(e.target.value)} placeholder="New club name" style={field} />
-          <button style={primaryBtn} onClick={() => void onCreate()} disabled={!newClubName.trim()}>Create Club</button>
-        </div>
+        <button style={primaryBtn} onClick={() => setShowAddClubModal(true)}>Add Club</button>
       ) : null}>
         {!canManage ? (
           <AdminEmptyState title="Global Admin action required" description="Club creation and deletion is available only to Global Admin. Club Admin can view club information here." />
         ) : null}
         <AdminTable
-          columns={['ID', 'Club Name', 'Created', 'Actions']}
+          columns={['ID', 'Club Name', 'Description', 'Created', 'Actions']}
           rows={clubs.map((club) => [
             club.id,
             <Link key={`club-${club.id}`} href={`/admin/clubs`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{club.name}</Link>,
+            club.description || '-',
             fmtDateTime(club.created_at),
             canManage ? (
               <button key="delete" style={outlineBtn} onClick={() => { if (window.confirm(`Delete ${club.name}?`)) void onDelete(club.id); }}>Delete</button>
@@ -695,12 +790,71 @@ function ClubsPanel({
           ])}
         />
       </AdminCard>
-      <AdminCard title="Club Admin Assignment (Planned)">
-        <AdminEmptyState
-          title="API gap tracked"
-          description="When a club is created, Global Admin also needs a way to create/assign the first CLUB_ADMIN user. This will require an admin user-creation API or an approved temporary flow."
-        />
-      </AdminCard>
+
+      {showAddClubModal ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ width: '100%', maxWidth: 640, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add Club</div>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Club Name</span>
+              <input value={newClubName} onChange={(e) => setNewClubName(e.target.value)} style={field} placeholder="Enter club name" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Club Description</span>
+              <textarea value={newClubDescription} onChange={(e) => setNewClubDescription(e.target.value)} style={{ ...field, minHeight: 90, resize: 'vertical' }} placeholder="Enter club description" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Club Admin</span>
+              <input
+                value={clubAdminSearch}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setClubAdminSearch(q);
+                  setSelectedClubAdminId(null);
+                  void onSearchAdmins(q);
+                }}
+                style={field}
+                placeholder="Search by full name or email (min 3 chars)"
+              />
+            </label>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 8, minHeight: 74, maxHeight: 180, overflowY: 'auto', background: '#f8fafc' }}>
+              {clubAdminSearch.trim().length < 3 ? <div style={{ color: '#64748b', fontSize: 12 }}>Type at least 3 characters to search users.</div> : null}
+              {clubAdminSearch.trim().length >= 3 && clubAdminSearching ? <div style={{ color: '#64748b', fontSize: 12 }}>Searching…</div> : null}
+              {clubAdminSearch.trim().length >= 3 && !clubAdminSearching && !clubAdminCandidates.length ? <div style={{ color: '#64748b', fontSize: 12 }}>No matching users found.</div> : null}
+              {clubAdminCandidates.map((u) => (
+                <label key={u.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 4px', cursor: 'pointer' }}>
+                  <input type="radio" checked={selectedClubAdminId === u.id} onChange={() => setSelectedClubAdminId(u.id)} />
+                  <span style={{ fontSize: 13 }}>
+                    {(u.full_name || u.display_name || '(No name)')} — {u.email}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {selectedAdmin ? <div style={{ color: '#0f766e', fontSize: 12 }}>Selected admin: {selectedAdmin.full_name || selectedAdmin.display_name || selectedAdmin.email}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                style={outlineBtn}
+                onClick={() => {
+                  setShowAddClubModal(false);
+                  setNewClubName('');
+                  setNewClubDescription('');
+                  setClubAdminSearch('');
+                  setSelectedClubAdminId(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                style={primaryBtn}
+                onClick={() => void onCreate()}
+                disabled={!newClubName.trim() || !selectedClubAdminId}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1001,24 +1155,73 @@ function SessionDetailPanel(props: {
   players: Player[];
   courts: Court[];
   onClose: () => Promise<void>;
+  onOpen: () => Promise<void>;
   onFinalize: () => Promise<void>;
   onRevert: () => Promise<void>;
+  onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, courts, onClose, onFinalize, onRevert } = props;
+  const { session, season, sessionMatches, participantsByGame, courts, onClose, onOpen, onFinalize, onRevert, onStatusChange } = props;
+  const [statusSaving, setStatusSaving] = useState(false);
   if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title={`Session Info: ${session.location || `Session ${session.id}`}`} action={
         <div style={{ display: 'flex', gap: 8 }}>
+          {session.status === 'UPCOMING' ? <button style={outlineBtn} onClick={() => void onStatusChange('OPEN')}>Open Session</button> : null}
           {session.status === 'OPEN' ? <button style={outlineBtn} onClick={() => void onClose()}>Close Session</button> : null}
+          {session.status === 'CLOSED' ? <button style={outlineBtn} onClick={() => void onOpen()}>Open Session</button> : null}
           {session.status === 'CLOSED' ? <button style={primaryBtn} onClick={() => void onFinalize()}>Finalize Session</button> : null}
           {session.status === 'FINALIZED' ? <button style={outlineBtn} onClick={() => void onRevert()}>Revert Finalize</button> : null}
         </div>
       }>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gap: 10 }}>
           <Info label="Session Date" value={fmtDate(session.session_date)} />
-          <Info label="Status" value={session.status} />
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
+            <div style={{ color: '#64748b', fontSize: 12 }}>Status</div>
+            {session.status === 'FINALIZED' ? (
+              <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>FINALIZED</div>
+            ) : (
+              <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
+                <select
+                  aria-label="Session Status"
+                  value={session.status}
+                  disabled={statusSaving}
+                  onChange={async (e) => {
+                    const nextStatus = e.target.value as 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED';
+                    setStatusSaving(true);
+                    try {
+                      await onStatusChange(nextStatus);
+                    } finally {
+                      setStatusSaving(false);
+                    }
+                  }}
+                  style={{
+                    height: 40,
+                    width: '100%',
+                    minWidth: 0,
+                    borderRadius: 10,
+                    border: '1px solid #0ea5e9',
+                    padding: '0 12px',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    background: statusSaving ? '#f1f5f9' : '#fff',
+                    opacity: statusSaving ? 0.8 : 1,
+                    cursor: statusSaving ? 'wait' : 'pointer',
+                    appearance: 'auto',
+                    WebkitAppearance: 'menulist',
+                  }}
+                >
+                  <option value="UPCOMING">UPCOMING</option>
+                  <option value="OPEN">OPEN</option>
+                  <option value="CLOSED">CLOSED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{statusSaving ? 'Updating status…' : 'Choose a new status to update this session.'}</div>
+              </div>
+            )}
+          </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
           <Info label="Start Time" value={season?.start_time_local || '-'} />
           <Info label="Opened" value={fmtDateTime(session.opened_at)} />

@@ -152,7 +152,7 @@ export class LeagueOsApiClient {
     return data.map((d) => clubSchema.parse(d));
   }
 
-  async createClub(token: string, payload: { name: string }): Promise<Club> {
+  async createClub(token: string, payload: { name: string; description?: string; club_admin_user_id: number }): Promise<Club> {
     const data = await this.request<unknown>('/clubs', {
       method: 'POST',
       token,
@@ -161,7 +161,15 @@ export class LeagueOsApiClient {
     return clubSchema.parse(data);
   }
 
-  async updateClub(token: string, clubId: number, payload: { name?: string }): Promise<Club> {
+  async clubAdminCandidates(token: string, query: string): Promise<Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>> {
+    const data = await this.request<Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>>('/clubs/admin-candidates', {
+      token,
+      query: { q: query },
+    });
+    return data;
+  }
+
+  async updateClub(token: string, clubId: number, payload: { name?: string; description?: string }): Promise<Club> {
     const data = await this.request<unknown>(`/clubs/${clubId}`, {
       method: 'PUT',
       token,
@@ -384,7 +392,7 @@ export class LeagueOsApiClient {
     sessionId: number,
     payload: Partial<{
       session_date: string;
-      status: 'UPCOMING' | 'OPEN' | 'CANCELLED';
+      status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED';
       location: string;
       address: string;
     }>,
@@ -401,6 +409,15 @@ export class LeagueOsApiClient {
 
   async closeSession(token: string, clubId: number, sessionId: number): Promise<{ session_id: number; status: string }> {
     return this.request<{ session_id: number; status: string }>(`/sessions/${sessionId}/close`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async openSession(token: string, clubId: number, sessionId: number): Promise<{ session_id: number; status: string }> {
+    return this.request<{ session_id: number; status: string }>(`/sessions/${sessionId}/open`, {
       method: 'POST',
       token,
       clubId,
