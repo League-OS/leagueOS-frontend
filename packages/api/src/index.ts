@@ -152,7 +152,7 @@ export class LeagueOsApiClient {
     return data.map((d) => clubSchema.parse(d));
   }
 
-  async createClub(token: string, payload: { name: string }): Promise<Club> {
+  async createClub(token: string, payload: { name: string; description?: string; club_admin_user_id: number }): Promise<Club> {
     const data = await this.request<unknown>('/clubs', {
       method: 'POST',
       token,
@@ -161,7 +161,15 @@ export class LeagueOsApiClient {
     return clubSchema.parse(data);
   }
 
-  async updateClub(token: string, clubId: number, payload: { name?: string }): Promise<Club> {
+  async clubAdminCandidates(token: string, query: string): Promise<Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>> {
+    const data = await this.request<Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>>('/clubs/admin-candidates', {
+      token,
+      query: { q: query },
+    });
+    return data;
+  }
+
+  async updateClub(token: string, clubId: number, payload: { name?: string; description?: string }): Promise<Club> {
     const data = await this.request<unknown>(`/clubs/${clubId}`, {
       method: 'PUT',
       token,
