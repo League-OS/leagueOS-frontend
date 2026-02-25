@@ -623,15 +623,24 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             onStatusChange={async (nextStatus) => {
               if (!auth || !selectedSession) return;
               if (nextStatus === selectedSession.status) return;
-              if (nextStatus === 'OPEN' && selectedSession.status === 'CLOSED') {
-                await client.openSession(auth.token, selectedClubId, selectedSession.id);
-              } else if (nextStatus === 'CLOSED' && selectedSession.status === 'OPEN') {
-                await client.closeSession(auth.token, selectedClubId, selectedSession.id);
-              } else {
-                await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: nextStatus });
+              setError(null);
+              try {
+                if (nextStatus === 'OPEN') {
+                  await client.openSession(auth.token, selectedClubId, selectedSession.id);
+                } else if (nextStatus === 'CLOSED') {
+                  if (selectedSession.status === 'OPEN') {
+                    await client.closeSession(auth.token, selectedClubId, selectedSession.id);
+                  } else {
+                    await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: 'CLOSED' });
+                  }
+                } else {
+                  await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: nextStatus });
+                }
+                setSuccess(`Session status updated to ${nextStatus}.`);
+                await refresh();
+              } catch (e) {
+                setError(getMessage(e, `Failed to update status to ${nextStatus}.`));
               }
-              setSuccess(`Session status updated to ${nextStatus}.`);
-              await refresh();
             }}
           />
         ) : null}
