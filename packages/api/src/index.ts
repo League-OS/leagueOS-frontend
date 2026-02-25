@@ -384,7 +384,7 @@ export class LeagueOsApiClient {
     sessionId: number,
     payload: Partial<{
       session_date: string;
-      status: 'UPCOMING' | 'OPEN' | 'CANCELLED';
+      status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED';
       location: string;
       address: string;
     }>,

@@ -620,6 +620,19 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setSuccess('Session reverted.');
               await refresh();
             }}
+            onStatusChange={async (nextStatus) => {
+              if (!auth || !selectedSession) return;
+              if (nextStatus === selectedSession.status) return;
+              if (nextStatus === 'OPEN' && selectedSession.status === 'CLOSED') {
+                await client.openSession(auth.token, selectedClubId, selectedSession.id);
+              } else if (nextStatus === 'CLOSED' && selectedSession.status === 'OPEN') {
+                await client.closeSession(auth.token, selectedClubId, selectedSession.id);
+              } else {
+                await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: nextStatus });
+              }
+              setSuccess(`Session status updated to ${nextStatus}.`);
+              await refresh();
+            }}
           />
         ) : null}
       </section>
@@ -1010,8 +1023,9 @@ function SessionDetailPanel(props: {
   onOpen: () => Promise<void>;
   onFinalize: () => Promise<void>;
   onRevert: () => Promise<void>;
+  onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, courts, onClose, onOpen, onFinalize, onRevert } = props;
+  const { session, season, sessionMatches, participantsByGame, courts, onClose, onOpen, onFinalize, onRevert, onStatusChange } = props;
   if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   return (
@@ -1026,7 +1040,23 @@ function SessionDetailPanel(props: {
       }>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gap: 10 }}>
           <Info label="Session Date" value={fmtDate(session.session_date)} />
-          <Info label="Status" value={session.status} />
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
+            <div style={{ color: '#64748b', fontSize: 12 }}>Status</div>
+            {session.status === 'FINALIZED' ? (
+              <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>{session.status}</div>
+            ) : (
+              <select
+                value={session.status}
+                onChange={(e) => void onStatusChange(e.target.value as 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED')}
+                style={{ marginTop: 4, height: 36, borderRadius: 10, border: '1px solid #cbd5e1', padding: '0 10px', fontWeight: 700, color: '#0f172a', background: '#fff' }}
+              >
+                <option value="UPCOMING">UPCOMING</option>
+                <option value="OPEN">OPEN</option>
+                <option value="CLOSED">CLOSED</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+            )}
+          </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
           <Info label="Start Time" value={season?.start_time_local || '-'} />
           <Info label="Opened" value={fmtDateTime(session.opened_at)} />
