@@ -7,8 +7,10 @@ export type AdminNavKey = 'dashboard' | 'clubs' | 'seasons' | 'sessions' | 'cour
 
 export function AdminSidebar({
   active,
+  visibleItems,
 }: {
   active: AdminNavKey;
+  visibleItems?: AdminNavKey[];
 }) {
   const items: Array<{ key: AdminNavKey; label: string; href: string }> = [
     { key: 'dashboard', label: 'Dashboard', href: '/admin' },
@@ -18,13 +20,15 @@ export function AdminSidebar({
     { key: 'courts', label: 'Courts', href: '/admin/courts' },
     { key: 'players', label: 'Club Players', href: '/admin/players' },
   ];
+  const allowed = new Set(visibleItems ?? items.map((item) => item.key));
+  const renderedItems = items.filter((item) => allowed.has(item.key));
 
   return (
     <aside style={sidebar}>
       <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>LeagueOS</div>
       <div style={{ marginTop: 4, color: '#64748b', fontSize: 13 }}>Admin Console</div>
       <nav style={{ marginTop: 16, display: 'grid', gap: 8 }}>
-        {items.map((item) => (
+        {renderedItems.map((item) => (
           <Link
             key={item.key}
             href={item.href}
@@ -52,6 +56,7 @@ export function AdminTopbar({
   selectedSeasonId,
   onSeasonChange,
   canSelectClub,
+  showSeasonFilter = true,
   onRefresh,
   onLogout,
   loading,
@@ -66,6 +71,7 @@ export function AdminTopbar({
   selectedSeasonId: number | null;
   onSeasonChange: (seasonId: number | null) => void;
   canSelectClub: boolean;
+  showSeasonFilter?: boolean;
   onRefresh: () => void;
   onLogout: () => void;
   loading: boolean;
@@ -89,17 +95,19 @@ export function AdminTopbar({
             ))}
           </select>
         ) : null}
-        <select
-          value={selectedSeasonId ?? ''}
-          onChange={(e) => onSeasonChange(e.target.value ? Number(e.target.value) : null)}
-          style={field}
-          disabled={loading}
-        >
-          <option value="">All Seasons</option>
-          {seasonOptions.map((season) => (
-            <option key={season.id} value={season.id}>{season.name}</option>
-          ))}
-        </select>
+        {showSeasonFilter ? (
+          <select
+            value={selectedSeasonId ?? ''}
+            onChange={(e) => onSeasonChange(e.target.value ? Number(e.target.value) : null)}
+            style={field}
+            disabled={loading}
+          >
+            <option value="">All Seasons</option>
+            {seasonOptions.map((season) => (
+              <option key={season.id} value={season.id}>{season.name}</option>
+            ))}
+          </select>
+        ) : null}
         <span style={roleBadge}>{roleLabel}</span>
         <button style={outlineBtn} onClick={onRefresh} disabled={loading}>Refresh</button>
         <button style={outlineBtn} onClick={onLogout}>Logout</button>

@@ -66,7 +66,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       const raw = window.localStorage.getItem(STORAGE_AUTH);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as AuthState;
-      return parsed?.token && parsed?.clubId ? parsed : null;
+      return parsed?.token && Number.isInteger(parsed?.clubId) ? parsed : null;
     } catch {
       return null;
     }
@@ -124,9 +124,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newClubName, setNewClubName] = useState('');
   const [newClubDescription, setNewClubDescription] = useState('');
   const [clubAdminSearch, setClubAdminSearch] = useState('');
+  const [clubAdminInviteEmail, setClubAdminInviteEmail] = useState('');
   const [clubAdminCandidates, setClubAdminCandidates] = useState<Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>>([]);
   const [selectedClubAdminId, setSelectedClubAdminId] = useState<number | null>(null);
   const [clubAdminSearching, setClubAdminSearching] = useState(false);
+  const [lastClubInvite, setLastClubInvite] = useState<null | { email: string; temporary_password: string; invite_link: string }>(null);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerEmail, setNewPlayerEmail] = useState('');
   const [newPlayerType, setNewPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
@@ -142,6 +144,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
 
   const role = toAdminEffectiveRole(profile?.role, profile?.club_role);
   const allowed = canAccessAdmin(role);
+  const isGlobalAdmin = role === 'GLOBAL_ADMIN';
+  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs']);
+  const pageAllowedForRole = !isGlobalAdmin || globalAdminAllowedPages.has(page);
+  const visibleNavItems: AdminNavKey[] = isGlobalAdmin
+    ? ['dashboard', 'clubs']
+    : ['dashboard', 'clubs', 'seasons', 'sessions', 'courts', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
 
@@ -153,11 +161,14 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   useEffect(() => {
     setHydrated(true);
     try {
+      const params = new URLSearchParams(window.location.search);
+      const inviteEmail = (params.get('email') || '').trim();
+      if (inviteEmail) setLoginEmail(inviteEmail);
       if (!auth) {
         const rawAuth = localStorage.getItem(STORAGE_AUTH);
         if (rawAuth) {
           const parsed = JSON.parse(rawAuth) as AuthState;
-          if (parsed?.token && parsed?.clubId) {
+          if (parsed?.token && Number.isInteger(parsed?.clubId)) {
             setAuth(parsed);
             setSelectedClubId(parsed.clubId);
           }
@@ -202,11 +213,27 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     try {
       const me = await client.profile(token);
       setProfile(me);
-      const availableClubs = me.role === 'GLOBAL_ADMIN' ? await client.clubs(token) : await client.profileClubs(token);
+      const availableClubs =
+        me.role === 'GLOBAL_ADMIN'
+          ? await client.clubs(token).catch(() => [] as Club[])
+          : await client.profileClubs(token);
       setClubs(availableClubs);
 
       const activeClubId = availableClubs.find((c) => c.id === clubId)?.id ?? availableClubs[0]?.id ?? clubId;
       setSelectedClubId(activeClubId);
+
+      if (me.role === 'GLOBAL_ADMIN') {
+        setPlayers([]);
+        setCourts([]);
+        setSeasons([]);
+        setSessions([]);
+        setGames([]);
+        setParticipantsByGame({});
+        setSeasonLeaderboardRows([]);
+        setSeasonLeaderboardSession(null);
+        setNewSessionSeasonId(null);
+        return;
+      }
 
       const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames] = await Promise.all([
         client.players(token, activeClubId, true),
@@ -274,9 +301,13 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         throw new Error('This account does not have admin access.');
       }
 
-      const pool = me.role === 'GLOBAL_ADMIN' ? await client.clubs(res.token) : await client.profileClubs(res.token);
-      const firstClubId = pool[0]?.id ?? res.club_id ?? DEFAULT_CLUB_ID;
-      const scoped = res.club_id === firstClubId ? res : await client.switchClub(res.token, firstClubId);
+      const isGlobal = me.role === 'GLOBAL_ADMIN';
+      const pool = isGlobal
+        ? await client.clubs(res.token).catch(() => [] as Club[])
+        : await client.profileClubs(res.token);
+      const firstClubId = isGlobal ? (res.club_id ?? 0) : (pool[0]?.id ?? res.club_id ?? DEFAULT_CLUB_ID);
+      const scoped =
+        isGlobal || res.club_id === firstClubId ? res : await client.switchClub(res.token, firstClubId);
       setProfile(me);
       setClubs(pool);
       setSelectedClubId(firstClubId);
@@ -384,6 +415,43 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     );
   }
 
+  if (!pageAllowedForRole) {
+    return (
+      <main style={adminPageShell}>
+        <AdminSidebar active="clubs" visibleItems={visibleNavItems} />
+        <section style={adminMainPanel}>
+          <AdminTopbar
+            title="Clubs"
+            subtitle={profile.display_name || profile.email || undefined}
+            roleLabel={role}
+            clubOptions={clubs}
+            selectedClubId={selectedClubId}
+            onClubChange={(clubId) => void switchClub(clubId)}
+            seasonOptions={[]}
+            selectedSeasonId={null}
+            onSeasonChange={() => {}}
+            canSelectClub={false}
+            showSeasonFilter={false}
+            onRefresh={() => void refresh()}
+            onLogout={logout}
+            loading={loading}
+          />
+          <div style={adminAlertError}>
+            Global Admin can manage clubs only. Season, session, court, and player pages are hidden for this role.
+          </div>
+          <AdminCard title="Go to Clubs">
+            <p style={{ margin: 0, color: '#475569' }}>
+              Use the Clubs page to create and manage clubs.
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <Link href="/admin/clubs" style={primaryBtn}>Open Clubs</Link>
+            </div>
+          </AdminCard>
+        </section>
+      </main>
+    );
+  }
+
   const activeNav: AdminNavKey =
     page === 'seasonDetail' ? 'seasons' :
     page === 'sessionDetail' ? 'sessions' :
@@ -397,7 +465,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
 
   return (
     <main style={adminPageShell}>
-      <AdminSidebar active={activeNav} />
+      <AdminSidebar active={activeNav} visibleItems={visibleNavItems} />
       <section style={adminMainPanel}>
         <AdminTopbar
           title={adminPageTitle(page)}
@@ -410,6 +478,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
           selectedSeasonId={ctx.selectedSeasonId}
           onSeasonChange={(id) => setCtx((prev) => ({ ...prev, selectedSeasonId: id }))}
           canSelectClub={role === 'GLOBAL_ADMIN'}
+          showSeasonFilter={!isGlobalAdmin}
           onRefresh={() => void refresh()}
           onLogout={logout}
           loading={loading}
@@ -433,10 +502,14 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewClubDescription={setNewClubDescription}
             clubAdminSearch={clubAdminSearch}
             setClubAdminSearch={setClubAdminSearch}
+            clubAdminInviteEmail={clubAdminInviteEmail}
+            setClubAdminInviteEmail={setClubAdminInviteEmail}
             clubAdminCandidates={clubAdminCandidates}
             selectedClubAdminId={selectedClubAdminId}
             setSelectedClubAdminId={setSelectedClubAdminId}
             clubAdminSearching={clubAdminSearching}
+            lastClubInvite={lastClubInvite}
+            setLastClubInvite={setLastClubInvite}
             onSearchAdmins={async (q) => {
               if (!auth) return;
               if (q.trim().length < 3) {
@@ -453,19 +526,26 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               }
             }}
             onCreate={async () => {
-              if (!auth || !newClubName.trim() || !selectedClubAdminId) return;
-              await client.createClub(auth.token, {
+              if (!auth || !newClubName.trim() || (!selectedClubAdminId && !clubAdminInviteEmail.trim())) return;
+              const created = await client.createClub(auth.token, {
                 name: newClubName.trim(),
                 description: newClubDescription.trim() || undefined,
-                club_admin_user_id: selectedClubAdminId,
+                club_admin_user_id: selectedClubAdminId ?? undefined,
+                club_admin_email: !selectedClubAdminId ? clubAdminInviteEmail.trim() : undefined,
               });
+              setLastClubInvite(created.invite ? {
+                email: created.invite.email,
+                temporary_password: created.invite.temporary_password,
+                invite_link: created.invite.invite_link,
+              } : null);
               setNewClubName('');
               setNewClubDescription('');
               setClubAdminSearch('');
+              setClubAdminInviteEmail('');
               setClubAdminCandidates([]);
               setSelectedClubAdminId(null);
               setShowAddClubModal(false);
-              setSuccess('Club created and admin assigned.');
+              setSuccess(created.invite ? 'Club created. Invite generated for club admin.' : 'Club created and admin assigned.');
               await refresh();
             }}
             onDelete={async (clubId) => {
@@ -741,10 +821,14 @@ function ClubsPanel({
   setNewClubDescription,
   clubAdminSearch,
   setClubAdminSearch,
+  clubAdminInviteEmail,
+  setClubAdminInviteEmail,
   clubAdminCandidates,
   selectedClubAdminId,
   setSelectedClubAdminId,
   clubAdminSearching,
+  lastClubInvite,
+  setLastClubInvite,
   onSearchAdmins,
   onCreate,
   onDelete,
@@ -759,10 +843,14 @@ function ClubsPanel({
   setNewClubDescription: (v: string) => void;
   clubAdminSearch: string;
   setClubAdminSearch: (v: string) => void;
+  clubAdminInviteEmail: string;
+  setClubAdminInviteEmail: (v: string) => void;
   clubAdminCandidates: Array<{ id: number; email: string; full_name?: string | null; display_name?: string | null }>;
   selectedClubAdminId: number | null;
   setSelectedClubAdminId: (id: number | null) => void;
   clubAdminSearching: boolean;
+  lastClubInvite: null | { email: string; temporary_password: string; invite_link: string };
+  setLastClubInvite: (v: null | { email: string; temporary_password: string; invite_link: string }) => void;
   onSearchAdmins: (q: string) => Promise<void>;
   onCreate: () => Promise<void>;
   onDelete: (clubId: number) => Promise<void>;
@@ -774,6 +862,23 @@ function ClubsPanel({
       <AdminCard title="Club Directory" action={canManage ? (
         <button style={primaryBtn} onClick={() => setShowAddClubModal(true)}>Add Club</button>
       ) : null}>
+        {lastClubInvite ? (
+          <div style={{ ...adminAlertSuccess, marginBottom: 10 }}>
+            Invite ready for <strong>{lastClubInvite.email}</strong>. Temporary password: <code>{lastClubInvite.temporary_password}</code>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <a href={lastClubInvite.invite_link} target="_blank" rel="noreferrer" style={{ color: '#0d9488', fontWeight: 700 }}>
+                Open invite link
+              </a>
+              <button
+                style={outlineBtn}
+                onClick={() => void navigator.clipboard?.writeText(lastClubInvite.invite_link)}
+              >
+                Copy Invite Link
+              </button>
+              <button style={outlineBtn} onClick={() => setLastClubInvite(null)}>Dismiss</button>
+            </div>
+          </div>
+        ) : null}
         {!canManage ? (
           <AdminEmptyState title="Global Admin action required" description="Club creation and deletion is available only to Global Admin. Club Admin can view club information here." />
         ) : null}
@@ -817,6 +922,19 @@ function ClubsPanel({
                 placeholder="Search by full name or email (min 3 chars)"
               />
             </label>
+            <div style={{ color: '#64748b', fontSize: 12 }}>Select an existing user above, or invite a new club admin by email below.</div>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Invite Club Admin by Email (optional)</span>
+              <input
+                value={clubAdminInviteEmail}
+                onChange={(e) => {
+                  setClubAdminInviteEmail(e.target.value);
+                  if (e.target.value.trim()) setSelectedClubAdminId(null);
+                }}
+                style={field}
+                placeholder="new-admin@example.com"
+              />
+            </label>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 8, minHeight: 74, maxHeight: 180, overflowY: 'auto', background: '#f8fafc' }}>
               {clubAdminSearch.trim().length < 3 ? <div style={{ color: '#64748b', fontSize: 12 }}>Type at least 3 characters to search users.</div> : null}
               {clubAdminSearch.trim().length >= 3 && clubAdminSearching ? <div style={{ color: '#64748b', fontSize: 12 }}>Searching…</div> : null}
@@ -839,6 +957,7 @@ function ClubsPanel({
                   setNewClubName('');
                   setNewClubDescription('');
                   setClubAdminSearch('');
+                  setClubAdminInviteEmail('');
                   setSelectedClubAdminId(null);
                 }}
               >
@@ -847,7 +966,7 @@ function ClubsPanel({
               <button
                 style={primaryBtn}
                 onClick={() => void onCreate()}
-                disabled={!newClubName.trim() || !selectedClubAdminId}
+                disabled={!newClubName.trim() || (!selectedClubAdminId && !clubAdminInviteEmail.trim())}
               >
                 Save
               </button>
