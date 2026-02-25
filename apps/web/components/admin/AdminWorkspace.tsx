@@ -626,7 +626,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setError(null);
               try {
                 if (nextStatus === 'OPEN') {
-                  await client.openSession(auth.token, selectedClubId, selectedSession.id);
+                  if (selectedSession.status === 'CLOSED') {
+                    await client.openSession(auth.token, selectedClubId, selectedSession.id);
+                  } else {
+                    await client.updateSession(auth.token, selectedClubId, selectedSession.id, { status: 'OPEN' });
+                  }
                 } else if (nextStatus === 'CLOSED') {
                   if (selectedSession.status === 'OPEN') {
                     await client.closeSession(auth.token, selectedClubId, selectedSession.id);
@@ -1035,6 +1039,7 @@ function SessionDetailPanel(props: {
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
   const { session, season, sessionMatches, participantsByGame, courts, onClose, onOpen, onFinalize, onRevert, onStatusChange } = props;
+  const [statusSaving, setStatusSaving] = useState(false);
   if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   return (
@@ -1054,20 +1059,33 @@ function SessionDetailPanel(props: {
             {session.status === 'FINALIZED' ? (
               <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>FINALIZED</div>
             ) : (
-              <div style={{ marginTop: 4 }}>
+              <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
                 <select
                   aria-label="Session Status"
                   value={session.status}
-                  onChange={(e) => void onStatusChange(e.target.value as 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED')}
+                  disabled={statusSaving}
+                  onChange={async (e) => {
+                    const nextStatus = e.target.value as 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED';
+                    setStatusSaving(true);
+                    try {
+                      await onStatusChange(nextStatus);
+                    } finally {
+                      setStatusSaving(false);
+                    }
+                  }}
                   style={{
-                    height: 38,
-                    minWidth: 150,
+                    height: 40,
+                    width: '100%',
+                    minWidth: 0,
                     borderRadius: 10,
-                    border: '1px solid #14b8a6',
+                    border: '1px solid #0ea5e9',
                     padding: '0 12px',
+                    fontSize: 13,
                     fontWeight: 700,
                     color: '#0f172a',
-                    background: '#fff',
+                    background: statusSaving ? '#f1f5f9' : '#fff',
+                    opacity: statusSaving ? 0.8 : 1,
+                    cursor: statusSaving ? 'wait' : 'pointer',
                     appearance: 'auto',
                     WebkitAppearance: 'menulist',
                   }}
@@ -1077,6 +1095,7 @@ function SessionDetailPanel(props: {
                   <option value="CLOSED">CLOSED</option>
                   <option value="CANCELLED">CANCELLED</option>
                 </select>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{statusSaving ? 'Updating status…' : 'Choose a new status to update this session.'}</div>
               </div>
             )}
           </div>
