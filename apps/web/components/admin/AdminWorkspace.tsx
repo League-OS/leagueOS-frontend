@@ -570,6 +570,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             canManage={role === 'GLOBAL_ADMIN'}
             users={adminUsers}
             clubs={clubs}
+            selectedClubId={selectedClubId}
             showAddUserModal={showAddUserModal}
             setShowAddUserModal={setShowAddUserModal}
             newUserEmail={newUserEmail}
@@ -1031,6 +1032,7 @@ function UsersPanel(props: {
   canManage: boolean;
   users: AdminUser[];
   clubs: Club[];
+  selectedClubId: number;
   showAddUserModal: boolean;
   setShowAddUserModal: (v: boolean) => void;
   newUserEmail: string;
@@ -1048,6 +1050,7 @@ function UsersPanel(props: {
     canManage,
     users,
     clubs,
+    selectedClubId,
     showAddUserModal,
     setShowAddUserModal,
     newUserEmail,
@@ -1062,20 +1065,24 @@ function UsersPanel(props: {
     onToggleStatus,
   } = props;
 
+  const selectedClub = clubs.find((c) => c.id === selectedClubId);
+  const clubScopedUsers = users.filter((u) => (u.memberships ?? []).some((m) => m.club_id === selectedClubId));
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <AdminCard title="Users" action={canManage ? <button style={primaryBtn} onClick={() => setShowAddUserModal(true)}>Add User</button> : null}>
+      <AdminCard
+        title={`Users in ${selectedClub?.name ?? `Club ${selectedClubId}`}`}
+        action={canManage ? <button style={primaryBtn} onClick={() => { setNewUserPrimaryClubId(selectedClubId); setShowAddUserModal(true); }}>Add User</button> : null}
+      >
         <AdminTable
-          columns={['User Email', 'Full Name', 'Clubs', 'Roles', 'Status', 'Action']}
-          rows={users.map((u) => {
+          columns={['User Email', 'Full Name', 'Role in Club', 'Status', 'Action']}
+          rows={clubScopedUsers.map((u) => {
             const memberships = u.memberships ?? [];
-            const clubsText = memberships.map((m) => m.club_name).join(', ') || '-';
-            const rolesText = memberships.map((m) => m.role).join(', ') || '-';
+            const clubMembership = memberships.find((m) => m.club_id === selectedClubId);
             return [
               <a key={`email-${u.id}`} href="#" style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{u.email}</a>,
               u.full_name || u.display_name || '-',
-              clubsText,
-              rolesText,
+              clubMembership?.role || '-',
               u.is_active ? 'Enabled' : 'Disabled',
               canManage ? (
                 <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
@@ -1085,6 +1092,9 @@ function UsersPanel(props: {
             ];
           })}
         />
+        {!clubScopedUsers.length ? (
+          <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>No users assigned to this club yet.</div>
+        ) : null}
       </AdminCard>
 
       {showAddUserModal ? (
