@@ -624,6 +624,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth || !selectedSession) return;
               if (nextStatus === selectedSession.status) return;
               setError(null);
+              setSuccess(null);
               try {
                 if (nextStatus === 'OPEN') {
                   if (selectedSession.status === 'CLOSED') {
