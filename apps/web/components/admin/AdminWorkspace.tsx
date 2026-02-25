@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import type { AdminUser, Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
 import {
@@ -129,6 +129,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [selectedClubAdminId, setSelectedClubAdminId] = useState<number | null>(null);
   const [clubAdminSearching, setClubAdminSearching] = useState(false);
   const [lastClubInvite, setLastClubInvite] = useState<null | { email: string; temporary_password: string; invite_link: string }>(null);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserPrimaryClubId, setNewUserPrimaryClubId] = useState<number | null>(null);
+  const [newUserRole, setNewUserRole] = useState<'CLUB_ADMIN' | 'RECORDER' | 'USER'>('USER');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerEmail, setNewPlayerEmail] = useState('');
   const [newPlayerType, setNewPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
@@ -145,10 +151,10 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const role = toAdminEffectiveRole(profile?.role, profile?.club_role);
   const allowed = canAccessAdmin(role);
   const isGlobalAdmin = role === 'GLOBAL_ADMIN';
-  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs']);
+  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs', 'users']);
   const pageAllowedForRole = !isGlobalAdmin || globalAdminAllowedPages.has(page);
   const visibleNavItems: AdminNavKey[] = isGlobalAdmin
-    ? ['dashboard', 'clubs']
+    ? ['dashboard', 'clubs', 'users']
     : ['dashboard', 'clubs', 'seasons', 'sessions', 'courts', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
@@ -235,13 +241,14 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         return;
       }
 
-      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames] = await Promise.all([
+      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames, usersList] = await Promise.all([
         client.players(token, activeClubId, true),
         client.players(token, activeClubId, false).catch(() => [] as Player[]),
         client.courts(token, activeClubId),
         client.seasons(token, activeClubId),
         client.sessions(token, activeClubId),
         client.games(token, activeClubId).catch(() => [] as Game[]),
+        me.role === 'GLOBAL_ADMIN' ? client.adminUsers(token).catch(() => [] as AdminUser[]) : Promise.resolve([] as AdminUser[]),
       ]);
       const clubPlayers = mergeAdminPlayers(activePlayers, inactivePlayers);
 
@@ -250,6 +257,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setSeasons(clubSeasons);
       setSessions(clubSessions);
       setGames(clubGames);
+      setAdminUsers(usersList);
       setNewSessionSeasonId((prev) => prev ?? clubSeasons[0]?.id ?? null);
 
       const needParticipants = page === 'sessions' || page === 'sessionDetail' || page === 'seasonDetail';
@@ -349,6 +357,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setSeasons([]);
     setSessions([]);
     setGames([]);
+    setAdminUsers([]);
     setParticipantsByGame({});
     setError(null);
     setSuccess(null);
@@ -437,7 +446,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             loading={loading}
           />
           <div style={adminAlertError}>
-            Global Admin can manage clubs only. Season, session, court, and player pages are hidden for this role.
+            Global Admin can manage clubs and users. Season, session, court, and player pages are hidden for this role.
           </div>
           <AdminCard title="Go to Clubs">
             <p style={{ margin: 0, color: '#475569' }}>
@@ -552,6 +561,45 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth) return;
               await client.deleteClub(auth.token, clubId);
               setSuccess('Club deleted.');
+              await refresh();
+            }}
+          />
+        ) : null}
+        {page === 'users' ? (
+          <UsersPanel
+            canManage={role === 'GLOBAL_ADMIN'}
+            users={adminUsers}
+            clubs={clubs}
+            showAddUserModal={showAddUserModal}
+            setShowAddUserModal={setShowAddUserModal}
+            newUserEmail={newUserEmail}
+            setNewUserEmail={setNewUserEmail}
+            newUserFullName={newUserFullName}
+            setNewUserFullName={setNewUserFullName}
+            newUserPrimaryClubId={newUserPrimaryClubId}
+            setNewUserPrimaryClubId={setNewUserPrimaryClubId}
+            newUserRole={newUserRole}
+            setNewUserRole={setNewUserRole}
+            onCreate={async () => {
+              if (!auth || !newUserEmail.trim() || !newUserFullName.trim() || !newUserPrimaryClubId) return;
+              await client.createAdminUser(auth.token, {
+                email: newUserEmail.trim(),
+                full_name: newUserFullName.trim(),
+                primary_club_id: newUserPrimaryClubId,
+                role: newUserRole,
+              });
+              setNewUserEmail('');
+              setNewUserFullName('');
+              setNewUserPrimaryClubId(null);
+              setNewUserRole('USER');
+              setShowAddUserModal(false);
+              setSuccess('User created.');
+              await refresh();
+            }}
+            onToggleStatus={async (u) => {
+              if (!auth) return;
+              await client.setAdminUserStatus(auth.token, u.id, !u.is_active);
+              setSuccess(`User ${u.is_active ? 'disabled' : 'enabled'}.`);
               await refresh();
             }}
           />
@@ -970,6 +1018,105 @@ function ClubsPanel({
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+
+function UsersPanel(props: {
+  canManage: boolean;
+  users: AdminUser[];
+  clubs: Club[];
+  showAddUserModal: boolean;
+  setShowAddUserModal: (v: boolean) => void;
+  newUserEmail: string;
+  setNewUserEmail: (v: string) => void;
+  newUserFullName: string;
+  setNewUserFullName: (v: string) => void;
+  newUserPrimaryClubId: number | null;
+  setNewUserPrimaryClubId: (v: number | null) => void;
+  newUserRole: 'CLUB_ADMIN' | 'RECORDER' | 'USER';
+  setNewUserRole: (v: 'CLUB_ADMIN' | 'RECORDER' | 'USER') => void;
+  onCreate: () => Promise<void>;
+  onToggleStatus: (u: AdminUser) => Promise<void>;
+}) {
+  const {
+    canManage,
+    users,
+    clubs,
+    showAddUserModal,
+    setShowAddUserModal,
+    newUserEmail,
+    setNewUserEmail,
+    newUserFullName,
+    setNewUserFullName,
+    newUserPrimaryClubId,
+    setNewUserPrimaryClubId,
+    newUserRole,
+    setNewUserRole,
+    onCreate,
+    onToggleStatus,
+  } = props;
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <AdminCard title="Users" action={canManage ? <button style={primaryBtn} onClick={() => setShowAddUserModal(true)}>Add User</button> : null}>
+        <AdminTable
+          columns={['User Email', 'Full Name', 'Clubs', 'Roles', 'Status', 'Action']}
+          rows={users.map((u) => {
+            const memberships = u.memberships ?? [];
+            const clubsText = memberships.map((m) => m.club_name).join(', ') || '-';
+            const rolesText = memberships.map((m) => m.role).join(', ') || '-';
+            return [
+              <a key={`email-${u.id}`} href="#" style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{u.email}</a>,
+              u.full_name || u.display_name || '-',
+              clubsText,
+              rolesText,
+              u.is_active ? 'Enabled' : 'Disabled',
+              canManage ? (
+                <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
+                  {u.is_active ? 'Disable' : 'Enable'}
+                </button>
+              ) : '-',
+            ];
+          })}
+        />
+      </AdminCard>
+
+      {showAddUserModal ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add User</div>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>User Email</span>
+              <input value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} style={field} />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Full Name</span>
+              <input value={newUserFullName} onChange={(e) => setNewUserFullName(e.target.value)} style={field} />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Primary Club</span>
+              <select value={newUserPrimaryClubId ?? ''} onChange={(e) => setNewUserPrimaryClubId(e.target.value ? Number(e.target.value) : null)} style={field}>
+                <option value="">Select club</option>
+                {clubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Role</span>
+              <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'CLUB_ADMIN' | 'RECORDER' | 'USER')} style={field}>
+                <option value="USER">USER</option>
+                <option value="RECORDER">RECORDER</option>
+                <option value="CLUB_ADMIN">CLUB_ADMIN</option>
+              </select>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={outlineBtn} onClick={() => setShowAddUserModal(false)}>Cancel</button>
+              <button style={primaryBtn} disabled={!newUserEmail.trim() || !newUserFullName.trim() || !newUserPrimaryClubId} onClick={() => void onCreate()}>Save</button>
             </div>
           </div>
         </div>
