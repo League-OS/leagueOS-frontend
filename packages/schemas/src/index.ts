@@ -60,6 +60,22 @@ export const clubSchema = z.object({
   created_at: z.string(),
 });
 
+export const adminUserSchema = z.object({
+  id: z.number(),
+  email: z.string(),
+  full_name: z.string().nullable().optional(),
+  display_name: z.string().nullable().optional(),
+  global_role: z.string().nullable().optional(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  memberships: z.array(z.object({
+    club_id: z.number(),
+    club_name: z.string(),
+    role: z.string(),
+    is_active: z.boolean(),
+  })).optional().default([]),
+});
+
 export const playerSchema = z.object({
   id: z.number(),
   club_id: z.number(),
@@ -112,6 +128,7 @@ export type Session = z.infer<typeof sessionSchema>;
 export type LeaderboardEntry = z.infer<typeof leaderboardEntrySchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Club = z.infer<typeof clubSchema>;
+export type AdminUser = z.infer<typeof adminUserSchema>;
 export type Player = z.infer<typeof playerSchema>;
 export type Court = z.infer<typeof courtSchema>;
 export type Game = z.infer<typeof gameSchema>;

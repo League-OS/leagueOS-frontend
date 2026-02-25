@@ -1,6 +1,7 @@
 import type { RuntimeConfig } from '@leagueos/config';
 import {
   authResponseSchema,
+  adminUserSchema,
   clubSchema,
   courtSchema,
   gameSchema,
@@ -12,6 +13,7 @@ import {
   seasonSchema,
   sessionSchema,
   type AuthResponse,
+  type AdminUser,
   type Club,
   type Court,
   type Game,
@@ -198,6 +200,32 @@ export class LeagueOsApiClient {
       body: payload,
     });
     return clubSchema.parse(data);
+  }
+
+  async adminUsers(token: string): Promise<AdminUser[]> {
+    const data = await this.request<unknown[]>('/admin/users', { token });
+    return data.map((d) => adminUserSchema.parse(d));
+  }
+
+  async createAdminUser(
+    token: string,
+    payload: { email: string; full_name: string; primary_club_id: number; role: 'CLUB_ADMIN' | 'RECORDER' | 'USER' },
+  ): Promise<AdminUser> {
+    const data = await this.request<unknown>('/admin/users', {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+    return adminUserSchema.parse(data);
+  }
+
+  async setAdminUserStatus(token: string, userId: number, isActive: boolean): Promise<AdminUser> {
+    const data = await this.request<unknown>(`/admin/users/${userId}/status`, {
+      method: 'PATCH',
+      token,
+      body: { is_active: isActive },
+    });
+    return adminUserSchema.parse(data);
   }
 
   async deleteClub(token: string, clubId: number): Promise<{ ok: boolean; club_id: number }> {

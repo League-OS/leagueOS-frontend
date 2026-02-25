@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-export type AdminNavKey = 'dashboard' | 'clubs' | 'seasons' | 'sessions' | 'courts' | 'players';
+export type AdminNavKey = 'dashboard' | 'clubs' | 'seasons' | 'sessions' | 'courts' | 'players' | 'users';
 
 export function AdminSidebar({
   active,
@@ -19,6 +19,7 @@ export function AdminSidebar({
     { key: 'sessions', label: 'Sessions', href: '/admin/sessions' },
     { key: 'courts', label: 'Courts', href: '/admin/courts' },
     { key: 'players', label: 'Club Players', href: '/admin/players' },
+    { key: 'users', label: 'Users', href: '/admin/users' },
   ];
   const allowed = new Set(visibleItems ?? items.map((item) => item.key));
   const renderedItems = items.filter((item) => allowed.has(item.key));

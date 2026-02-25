@@ -4,6 +4,7 @@ export type AdminPage =
   | 'dashboard'
   | 'clubs'
   | 'players'
+  | 'users'
   | 'courts'
   | 'seasons'
   | 'sessions'
@@ -21,6 +22,7 @@ export function adminPageTitle(page: AdminPage): string {
     case 'dashboard': return 'Admin Dashboard';
     case 'clubs': return 'Clubs';
     case 'players': return 'Club Players';
+    case 'users': return 'Users';
     case 'courts': return 'Courts';
     case 'seasons': return 'Seasons';
     case 'sessions': return 'Sessions';
@@ -49,6 +51,7 @@ export function buildAdminBreadcrumbs(args: {
     dashboard: 'Dashboard',
     clubs: 'Clubs',
     players: 'Club Players',
+    users: 'Users',
     courts: 'Courts',
     seasons: 'Seasons',
     sessions: 'Sessions',
