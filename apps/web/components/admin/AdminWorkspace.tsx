@@ -1047,6 +1047,7 @@ function SessionDetailPanel(props: {
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title={`Session Info: ${session.location || `Session ${session.id}`}`} action={
         <div style={{ display: 'flex', gap: 8 }}>
+          {session.status === 'UPCOMING' ? <button style={outlineBtn} onClick={() => void onStatusChange('OPEN')}>Open Session</button> : null}
           {session.status === 'OPEN' ? <button style={outlineBtn} onClick={() => void onClose()}>Close Session</button> : null}
           {session.status === 'CLOSED' ? <button style={outlineBtn} onClick={() => void onOpen()}>Open Session</button> : null}
           {session.status === 'CLOSED' ? <button style={primaryBtn} onClick={() => void onFinalize()}>Finalize Session</button> : null}
