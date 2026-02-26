@@ -58,6 +58,23 @@ function fmtDateTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
+function toLocalDateInputValue(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function localDateInputToUtcIso(dateInput: string): string {
+  const [y, m, d] = dateInput.split('-').map(Number);
+  if (!y || !m || !d) return dateInput;
+  const localMidnight = new Date(y, m - 1, d, 0, 0, 0, 0);
+  return localMidnight.toISOString();
+}
+
 export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const client = useMemo(() => new LeagueOsApiClient({ apiBaseUrl: API_BASE }), []);
   const [auth, setAuth] = useState<AuthState | null>(() => {
@@ -144,7 +161,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newSeasonWeekday, setNewSeasonWeekday] = useState(2);
   const [newSeasonStartTime, setNewSeasonStartTime] = useState('19:00');
   const [newSessionSeasonId, setNewSessionSeasonId] = useState<number | null>(null);
-  const [newSessionDate, setNewSessionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [newSessionDate, setNewSessionDate] = useState(() => toLocalDateInputValue(new Date().toISOString()));
   const [newSessionStatus, setNewSessionStatus] = useState<'UPCOMING' | 'OPEN' | 'CANCELLED'>('UPCOMING');
   const [newSessionName, setNewSessionName] = useState('Club Session');
 
@@ -714,7 +731,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth || !selectedSeason || !newSessionDate) return;
               await client.createSession(auth.token, selectedClubId, {
                 season_id: selectedSeason.id,
-                session_date: newSessionDate,
+                session_date: localDateInputToUtcIso(newSessionDate),
                 status: newSessionStatus,
                 location: newSessionName,
               });
@@ -748,7 +765,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth || !newSessionSeasonId) return;
               await client.createSession(auth.token, selectedClubId, {
                 season_id: newSessionSeasonId,
-                session_date: newSessionDate,
+                session_date: localDateInputToUtcIso(newSessionDate),
                 status: newSessionStatus,
                 location: newSessionName,
               });
