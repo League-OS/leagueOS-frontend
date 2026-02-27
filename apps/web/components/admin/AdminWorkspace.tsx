@@ -155,10 +155,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [lastClubInvite, setLastClubInvite] = useState<null | { email: string; temporary_password: string; invite_link: string }>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addUserError, setAddUserError] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserPrimaryClubId, setNewUserPrimaryClubId] = useState<number | null>(null);
-  const [newUserRole, setNewUserRole] = useState<'CLUB_ADMIN' | 'RECORDER' | 'USER'>('USER');
+  const [newUserRole, setNewUserRole] = useState<'CLUB_ADMIN' | 'RECORDER'>('RECORDER');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerEmail, setNewPlayerEmail] = useState('');
   const [newPlayerType, setNewPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
@@ -498,6 +499,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     ? games.filter((g) => g.session_id === selectedSession.id)
     : [];
 
+  const showClubSelector = role === 'GLOBAL_ADMIN' && page !== 'clubs';
+
   return (
     <main style={adminPageShell}>
       <AdminSidebar active={activeNav} visibleItems={visibleNavItems} />
@@ -512,7 +515,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
           seasonOptions={seasons.map((s) => ({ id: s.id, name: s.name }))}
           selectedSeasonId={ctx.selectedSeasonId}
           onSeasonChange={(id) => setCtx((prev) => ({ ...prev, selectedSeasonId: id }))}
-          canSelectClub={role === 'GLOBAL_ADMIN'}
+          canSelectClub={showClubSelector}
           showSeasonFilter={!isGlobalAdmin}
           onRefresh={() => void refresh()}
           onLogout={logout}
@@ -599,6 +602,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             selectedClubId={selectedClubId}
             showAddUserModal={showAddUserModal}
             setShowAddUserModal={setShowAddUserModal}
+            addUserError={addUserError}
+            setAddUserError={setAddUserError}
             newUserEmail={newUserEmail}
             setNewUserEmail={setNewUserEmail}
             newUserFullName={newUserFullName}
@@ -611,6 +616,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth || !newUserEmail.trim() || !newUserFullName.trim() || !newUserPrimaryClubId) return;
               setError(null);
               setSuccess(null);
+              setAddUserError(null);
               try {
                 await client.createAdminUser(auth.token, {
                   email: newUserEmail.trim(),
@@ -621,8 +627,9 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 setNewUserEmail('');
                 setNewUserFullName('');
                 setNewUserPrimaryClubId(null);
-                setNewUserRole('USER');
+                setNewUserRole('RECORDER');
                 setShowAddUserModal(false);
+                setAddUserError(null);
                 setSuccess('User created.');
                 await refresh();
               } catch (e) {
@@ -630,8 +637,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 const msg = isDuplicate
                   ? 'User with this email already exists. Please use a different email or assign the existing user.'
                   : getMessage(e, 'Failed to create user.');
-                setError(msg);
-                window.alert(msg);
+                setAddUserError(msg);
               }
             }}
             onToggleStatus={async (u) => {
@@ -1072,14 +1078,16 @@ function UsersPanel(props: {
   selectedClubId: number;
   showAddUserModal: boolean;
   setShowAddUserModal: (v: boolean) => void;
+  addUserError: string | null;
+  setAddUserError: (v: string | null) => void;
   newUserEmail: string;
   setNewUserEmail: (v: string) => void;
   newUserFullName: string;
   setNewUserFullName: (v: string) => void;
   newUserPrimaryClubId: number | null;
   setNewUserPrimaryClubId: (v: number | null) => void;
-  newUserRole: 'CLUB_ADMIN' | 'RECORDER' | 'USER';
-  setNewUserRole: (v: 'CLUB_ADMIN' | 'RECORDER' | 'USER') => void;
+  newUserRole: 'CLUB_ADMIN' | 'RECORDER';
+  setNewUserRole: (v: 'CLUB_ADMIN' | 'RECORDER') => void;
   onCreate: () => Promise<void>;
   onToggleStatus: (u: AdminUser) => Promise<void>;
 }) {
@@ -1090,6 +1098,8 @@ function UsersPanel(props: {
     selectedClubId,
     showAddUserModal,
     setShowAddUserModal,
+    addUserError,
+    setAddUserError,
     newUserEmail,
     setNewUserEmail,
     newUserFullName,
@@ -1109,7 +1119,7 @@ function UsersPanel(props: {
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard
         title={`Users in ${selectedClub?.name ?? `Club ${selectedClubId}`}`}
-        action={canManage ? <button style={primaryBtn} onClick={() => { setNewUserPrimaryClubId(selectedClubId); setShowAddUserModal(true); }}>Add User</button> : null}
+        action={canManage ? <button style={primaryBtn} onClick={() => { setNewUserPrimaryClubId(selectedClubId); setAddUserError(null); setShowAddUserModal(true); }}>Add User</button> : null}
       >
         <AdminTable
           columns={['User Email', 'Full Name', 'Role in Club', 'Status', 'Action']}
@@ -1138,31 +1148,31 @@ function UsersPanel(props: {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add User</div>
+            {addUserError ? <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 10, padding: '8px 10px', fontSize: 13 }}>{addUserError}</div> : null}
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>User Email</span>
-              <input value={newUserEmail} onChange={(e) => setNewUserEmail(e.target.value)} style={field} />
+              <input value={newUserEmail} onChange={(e) => { setAddUserError(null); setNewUserEmail(e.target.value); }} style={field} />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>Full Name</span>
-              <input value={newUserFullName} onChange={(e) => setNewUserFullName(e.target.value)} style={field} />
+              <input value={newUserFullName} onChange={(e) => { setAddUserError(null); setNewUserFullName(e.target.value); }} style={field} />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>Primary Club</span>
-              <select value={newUserPrimaryClubId ?? ''} onChange={(e) => setNewUserPrimaryClubId(e.target.value ? Number(e.target.value) : null)} style={field}>
+              <select value={newUserPrimaryClubId ?? ''} onChange={(e) => { setAddUserError(null); setNewUserPrimaryClubId(e.target.value ? Number(e.target.value) : null); }} style={field}>
                 <option value="">Select club</option>
                 {clubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>Role</span>
-              <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as 'CLUB_ADMIN' | 'RECORDER' | 'USER')} style={field}>
-                <option value="USER">USER</option>
+              <select value={newUserRole} onChange={(e) => { setAddUserError(null); setNewUserRole(e.target.value as 'CLUB_ADMIN' | 'RECORDER'); }} style={field}>
                 <option value="RECORDER">RECORDER</option>
                 <option value="CLUB_ADMIN">CLUB_ADMIN</option>
               </select>
             </label>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button style={outlineBtn} onClick={() => setShowAddUserModal(false)}>Cancel</button>
+              <button style={outlineBtn} onClick={() => { setAddUserError(null); setShowAddUserModal(false); }}>Cancel</button>
               <button style={primaryBtn} disabled={!newUserEmail.trim() || !newUserFullName.trim() || !newUserPrimaryClubId} onClick={() => void onCreate()}>Save</button>
             </div>
           </div>
