@@ -780,10 +780,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             leaderboardSession={seasonLeaderboardSession}
             onSessionCreate={async () => {
               if (!auth || !selectedSeason || !newSessionDate) return;
+              const sessionStartIso = combineSessionDateAndTimeToIso(newSessionDate, newSessionStartTime);
+              if (!sessionStartIso) throw new Error('Invalid session start date/time.');
               await client.createSession(auth.token, selectedClubId, {
                 season_id: selectedSeason.id,
-                session_date: newSessionDate,
-                start_time_local: newSessionStartTime,
+                session_start_time: sessionStartIso,
                 status: newSessionStatus,
                 location: newSessionName,
                 address: newSessionLocation || undefined,
@@ -823,10 +824,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewSessionName={setNewSessionName}
             onCreate={async () => {
               if (!auth || !newSessionSeasonId) return;
+              const sessionStartIso = combineSessionDateAndTimeToIso(newSessionDate, newSessionStartTime);
+              if (!sessionStartIso) throw new Error('Invalid session start date/time.');
               await client.createSession(auth.token, selectedClubId, {
                 season_id: newSessionSeasonId,
-                session_date: newSessionDate,
-                start_time_local: newSessionStartTime,
+                session_start_time: sessionStartIso,
                 status: newSessionStatus,
                 location: newSessionName,
               });
