@@ -1752,7 +1752,6 @@ function SessionDetailPanel(props: {
     message: string;
     payload: AddMatchPayload;
   }>(null);
-  if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
   const timeOptions = Array.from({ length: 24 * 12 }, (_, i) => {
@@ -1773,9 +1772,11 @@ function SessionDetailPanel(props: {
     return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
   };
   const isSoftDuplicate = (payload: AddMatchPayload): boolean => {
+    if (!session) return false;
+    const targetSessionId = session.id;
     const incomingPlayers = [...payload.sideAPlayerIds, ...payload.sideBPlayerIds].sort((x, y) => x - y).join(',');
     return sessionMatches.some((game) => {
-      if (game.session_id !== session.id) return false;
+      if (game.session_id !== targetSessionId) return false;
       const gamePlayers = (participantsByGame[game.id] ?? []).map((p) => p.player_id).sort((x, y) => x - y).join(',');
       const samePlayers = gamePlayers === incomingPlayers;
       const sameScore =
@@ -1797,9 +1798,12 @@ function SessionDetailPanel(props: {
   }, [courts]);
 
   useEffect(() => {
+    if (!session) return;
     const normalized = floorToFiveMinuteIncrement((session.start_time_local || '19:00:00').slice(0, 5));
     setStartTime(normalized);
-  }, [session.id, session.start_time_local]);
+  }, [session?.id, session?.start_time_local]);
+
+  if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
 
   async function submitAddMatch(payload: AddMatchPayload) {
     try {
