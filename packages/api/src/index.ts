@@ -421,6 +421,7 @@ export class LeagueOsApiClient {
     payload: {
       season_id: number;
       session_date: string;
+      start_time_local: string;
       status: 'UPCOMING' | 'OPEN' | 'CANCELLED';
       location?: string;
       address?: string;
@@ -442,6 +443,7 @@ export class LeagueOsApiClient {
     sessionId: number,
     payload: Partial<{
       session_date: string;
+      start_time_local: string;
       status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED';
       location: string;
       address: string;

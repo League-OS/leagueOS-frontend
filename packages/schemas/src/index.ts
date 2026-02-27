@@ -23,6 +23,7 @@ export const sessionSchema = z.object({
   id: z.number(),
   season_id: z.number(),
   session_date: z.string(),
+  start_time_local: z.string(),
   status: z.enum(['UPCOMING', 'OPEN', 'CLOSED', 'FINALIZED', 'CANCELLED']),
   location: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
