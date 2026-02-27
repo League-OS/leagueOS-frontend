@@ -67,19 +67,13 @@ function formatWeekday(value?: number | null): string {
 
 function toLocalDateInputValue(value?: string | null): string {
   if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-function localDateInputToUtcIso(dateInput: string): string {
-  const [y, m, d] = dateInput.split('-').map(Number);
-  if (!y || !m || !d) return dateInput;
-  const localMidnight = new Date(y, m - 1, d, 0, 0, 0, 0);
-  return localMidnight.toISOString();
 }
 
 export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
@@ -170,6 +164,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newSeasonStartTime, setNewSeasonStartTime] = useState('19:00');
   const [newSessionSeasonId, setNewSessionSeasonId] = useState<number | null>(null);
   const [newSessionDate, setNewSessionDate] = useState(() => toLocalDateInputValue(new Date().toISOString()));
+  const [newSessionStartTime, setNewSessionStartTime] = useState('19:00:00');
   const [newSessionStatus, setNewSessionStatus] = useState<'UPCOMING' | 'OPEN' | 'CANCELLED'>('UPCOMING');
   const [newSessionName, setNewSessionName] = useState('Club Session');
 
@@ -757,7 +752,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth || !selectedSeason || !newSessionDate) return;
               await client.createSession(auth.token, selectedClubId, {
                 season_id: selectedSeason.id,
-                session_date: localDateInputToUtcIso(newSessionDate),
+                session_date: newSessionDate,
+                start_time_local: newSessionStartTime,
                 status: newSessionStatus,
                 location: newSessionName,
               });
@@ -766,6 +762,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
             newSessionDate={newSessionDate}
             setNewSessionDate={setNewSessionDate}
+            newSessionStartTime={newSessionStartTime}
+            setNewSessionStartTime={setNewSessionStartTime}
             newSessionStatus={newSessionStatus}
             setNewSessionStatus={setNewSessionStatus}
             newSessionName={newSessionName}
@@ -783,6 +781,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewSessionSeasonId={setNewSessionSeasonId}
             newSessionDate={newSessionDate}
             setNewSessionDate={setNewSessionDate}
+            newSessionStartTime={newSessionStartTime}
+            setNewSessionStartTime={setNewSessionStartTime}
             newSessionStatus={newSessionStatus}
             setNewSessionStatus={setNewSessionStatus}
             newSessionName={newSessionName}
@@ -791,7 +791,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth || !newSessionSeasonId) return;
               await client.createSession(auth.token, selectedClubId, {
                 season_id: newSessionSeasonId,
-                session_date: localDateInputToUtcIso(newSessionDate),
+                session_date: newSessionDate,
+                start_time_local: newSessionStartTime,
                 status: newSessionStatus,
                 location: newSessionName,
               });
@@ -1329,6 +1330,8 @@ function SeasonDetailPanel(props: {
   onSessionCreate: () => Promise<void>;
   newSessionDate: string;
   setNewSessionDate: (v: string) => void;
+  newSessionStartTime: string;
+  setNewSessionStartTime: (v: string) => void;
   newSessionStatus: 'UPCOMING' | 'OPEN' | 'CANCELLED';
   setNewSessionStatus: (v: 'UPCOMING' | 'OPEN' | 'CANCELLED') => void;
   newSessionName: string;
@@ -1337,7 +1340,7 @@ function SeasonDetailPanel(props: {
   leaderboardRows: LeaderboardEntry[];
   leaderboardSession: Session | null;
 }) {
-  const { season, sessions, players, onSessionCreate, newSessionDate, setNewSessionDate, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, loading, leaderboardRows, leaderboardSession } = props;
+  const { season, sessions, players, onSessionCreate, newSessionDate, setNewSessionDate, newSessionStartTime, setNewSessionStartTime, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, loading, leaderboardRows, leaderboardSession } = props;
   if (!season) return <AdminEmptyState title="Season not found" description="Select a valid season from the Seasons page." />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -1354,6 +1357,7 @@ function SeasonDetailPanel(props: {
       <AdminCard title="Sessions in Season" action={
         <div style={{ display: 'flex', gap: 8 }}>
           <input type="date" value={newSessionDate} onChange={(e) => setNewSessionDate(e.target.value)} style={field} />
+          <input type="time" step={300} value={newSessionStartTime.slice(0,5)} onChange={(e) => setNewSessionStartTime(`${e.target.value}:00`)} style={field} />
           <input value={newSessionName} onChange={(e) => setNewSessionName(e.target.value)} placeholder="Session Name" style={field} />
           <select value={newSessionStatus} onChange={(e) => setNewSessionStatus(e.target.value as 'UPCOMING' | 'OPEN' | 'CANCELLED')} style={field}>
             <option value="UPCOMING">UPCOMING</option>
@@ -1368,7 +1372,7 @@ function SeasonDetailPanel(props: {
           rows={sessions.map((s) => [
             <Link key={`sess-link-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
             fmtDate(s.session_date),
-            season.start_time_local,
+            s.start_time_local,
             s.status,
             '-', // match count can be derived later from games
             '-', // session player count can be derived later from participants
@@ -1419,23 +1423,26 @@ function SessionsPanel(props: {
   setNewSessionSeasonId: (v: number | null) => void;
   newSessionDate: string;
   setNewSessionDate: (v: string) => void;
+  newSessionStartTime: string;
+  setNewSessionStartTime: (v: string) => void;
   newSessionStatus: 'UPCOMING' | 'OPEN' | 'CANCELLED';
   setNewSessionStatus: (v: 'UPCOMING' | 'OPEN' | 'CANCELLED') => void;
   newSessionName: string;
   setNewSessionName: (v: string) => void;
   onCreate: () => Promise<void>;
 }) {
-  const { sessions, seasons, games, participantsByGame, newSessionSeasonId, setNewSessionSeasonId, newSessionDate, setNewSessionDate, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, onCreate } = props;
+  const { sessions, seasons, games, participantsByGame, newSessionSeasonId, setNewSessionSeasonId, newSessionDate, setNewSessionDate, newSessionStartTime, setNewSessionStartTime, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, onCreate } = props;
   const seasonById = new Map(seasons.map((s) => [s.id, s]));
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title="Add New Session">
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr auto', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr auto', gap: 8 }}>
           <select value={newSessionSeasonId ?? ''} onChange={(e) => setNewSessionSeasonId(e.target.value ? Number(e.target.value) : null)} style={field}>
             <option value="">Select season</option>
             {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <input type="date" value={newSessionDate} onChange={(e) => setNewSessionDate(e.target.value)} style={field} />
+          <input type="time" step={300} value={newSessionStartTime.slice(0,5)} onChange={(e) => setNewSessionStartTime(`${e.target.value}:00`)} style={field} />
           <select value={newSessionStatus} onChange={(e) => setNewSessionStatus(e.target.value as 'UPCOMING' | 'OPEN' | 'CANCELLED')} style={field}>
             <option value="UPCOMING">UPCOMING</option>
             <option value="OPEN">OPEN</option>
@@ -1458,7 +1465,7 @@ function SessionsPanel(props: {
               return [
                 <Link key={`sd-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
                 fmtDate(s.session_date),
-                season?.start_time_local || '-',
+                s.start_time_local || '-',
                 s.status,
                 sessionGames.length,
                 playerCount || '-',
@@ -1546,7 +1553,7 @@ function SessionDetailPanel(props: {
             )}
           </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
-          <Info label="Start Time" value={season?.start_time_local || '-'} />
+          <Info label="Start Time" value={session.start_time_local || '-'} />
           <Info label="Opened" value={fmtDateTime(session.opened_at)} />
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>

@@ -696,10 +696,14 @@ export default function Page() {
       let cursor = new Date(from);
       let status: 'OPEN' | 'UPCOMING' = 'OPEN';
       while (cursor.getTime() <= to.getTime()) {
-        const dateStr = cursor.toISOString().slice(0, 10);
+        const y = cursor.getFullYear();
+        const m = String(cursor.getMonth() + 1).padStart(2, '0');
+        const d = String(cursor.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
         await client.createSession(auth.token, recordClubId, {
           season_id: recordSeasonId,
           session_date: dateStr,
+          start_time_local: time,
           status,
           location: 'Club Session',
           address: 'TBD',
