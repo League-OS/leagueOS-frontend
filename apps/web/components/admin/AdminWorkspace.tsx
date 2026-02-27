@@ -58,13 +58,6 @@ function fmtDateTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
-const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
-
-function formatWeekday(value?: number | null): string {
-  if (value == null) return '-';
-  return WEEKDAY_NAMES[value] ?? `Weekday ${value}`;
-}
-
 function toLocalDateInputValue(value?: string | null): string {
   if (!value) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -160,13 +153,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newCourtName, setNewCourtName] = useState('');
   const [newSeasonName, setNewSeasonName] = useState('');
   const [newSeasonFormat, setNewSeasonFormat] = useState<'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES'>('DOUBLES');
-  const [newSeasonWeekday, setNewSeasonWeekday] = useState(2);
-  const [newSeasonStartTime, setNewSeasonStartTime] = useState('19:00');
   const [newSessionSeasonId, setNewSessionSeasonId] = useState<number | null>(null);
   const [newSessionDate, setNewSessionDate] = useState(() => toLocalDateInputValue(new Date().toISOString()));
   const [newSessionStartTime, setNewSessionStartTime] = useState('19:00:00');
   const [newSessionStatus, setNewSessionStatus] = useState<'UPCOMING' | 'OPEN' | 'CANCELLED'>('UPCOMING');
   const [newSessionName, setNewSessionName] = useState('Club Session');
+  const [newSessionLocation, setNewSessionLocation] = useState('');
 
   const role = toAdminEffectiveRole(profile?.role, profile?.club_role);
   const allowed = canAccessAdmin(role);
@@ -715,17 +707,13 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewSeasonName={setNewSeasonName}
             newSeasonFormat={newSeasonFormat}
             setNewSeasonFormat={setNewSeasonFormat}
-            newSeasonWeekday={newSeasonWeekday}
-            setNewSeasonWeekday={setNewSeasonWeekday}
-            newSeasonStartTime={newSeasonStartTime}
-            setNewSeasonStartTime={setNewSeasonStartTime}
             onCreate={async () => {
               if (!auth || !newSeasonName.trim()) return;
               await client.createSeason(auth.token, selectedClubId, {
                 name: newSeasonName.trim(),
                 format: newSeasonFormat,
-                weekday: newSeasonWeekday,
-                start_time_local: newSeasonStartTime,
+                weekday: 0,
+                start_time_local: '00:00:00',
                 timezone: 'America/Vancouver',
                 is_active: true,
               });
@@ -756,8 +744,10 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 start_time_local: newSessionStartTime,
                 status: newSessionStatus,
                 location: newSessionName,
+                address: newSessionLocation || undefined,
               });
               setSuccess('Session created.');
+              setNewSessionLocation('');
               await refresh();
             }}
             newSessionDate={newSessionDate}
@@ -768,6 +758,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewSessionStatus={setNewSessionStatus}
             newSessionName={newSessionName}
             setNewSessionName={setNewSessionName}
+            newSessionLocation={newSessionLocation}
+            setNewSessionLocation={setNewSessionLocation}
             loading={loading}
           />
         ) : null}
@@ -1273,30 +1265,22 @@ function SeasonsPanel(props: {
   setNewSeasonName: (v: string) => void;
   newSeasonFormat: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
   setNewSeasonFormat: (v: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES') => void;
-  newSeasonWeekday: number;
-  setNewSeasonWeekday: (v: number) => void;
-  newSeasonStartTime: string;
-  setNewSeasonStartTime: (v: string) => void;
   onCreate: () => Promise<void>;
   onToggle: (s: Season) => Promise<void>;
 }) {
   const {
-    seasons, sessions, players, newSeasonName, setNewSeasonName, newSeasonFormat, setNewSeasonFormat, newSeasonWeekday, setNewSeasonWeekday, newSeasonStartTime, setNewSeasonStartTime, onCreate, onToggle,
+    seasons, sessions, players, newSeasonName, setNewSeasonName, newSeasonFormat, setNewSeasonFormat, onCreate, onToggle,
   } = props;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title="Create Season">
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8 }}>
           <input value={newSeasonName} onChange={(e) => setNewSeasonName(e.target.value)} placeholder="Season name" style={field} />
           <select value={newSeasonFormat} onChange={(e) => setNewSeasonFormat(e.target.value as 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES')} style={field}>
             <option value="DOUBLES">DOUBLES</option>
             <option value="SINGLES">SINGLES</option>
             <option value="MIXED_DOUBLES">MIXED_DOUBLES</option>
           </select>
-          <select value={newSeasonWeekday} onChange={(e) => setNewSeasonWeekday(Number(e.target.value))} style={field}>
-            {[0,1,2,3,4,5,6].map((n) => <option key={n} value={n}>{formatWeekday(n)}</option>)}
-          </select>
-          <input type="time" step={300} value={newSeasonStartTime} onChange={(e) => setNewSeasonStartTime(e.target.value)} style={field} />
           <button style={primaryBtn} onClick={() => void onCreate()} disabled={!newSeasonName.trim()}>Create</button>
         </div>
       </AdminCard>
@@ -1336,37 +1320,45 @@ function SeasonDetailPanel(props: {
   setNewSessionStatus: (v: 'UPCOMING' | 'OPEN' | 'CANCELLED') => void;
   newSessionName: string;
   setNewSessionName: (v: string) => void;
+  newSessionLocation: string;
+  setNewSessionLocation: (v: string) => void;
   loading: boolean;
   leaderboardRows: LeaderboardEntry[];
   leaderboardSession: Session | null;
 }) {
-  const { season, sessions, players, onSessionCreate, newSessionDate, setNewSessionDate, newSessionStartTime, setNewSessionStartTime, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, loading, leaderboardRows, leaderboardSession } = props;
+  const {
+    season,
+    sessions,
+    players,
+    onSessionCreate,
+    newSessionDate,
+    setNewSessionDate,
+    newSessionStartTime,
+    setNewSessionStartTime,
+    newSessionStatus,
+    setNewSessionStatus,
+    newSessionName,
+    setNewSessionName,
+    newSessionLocation,
+    setNewSessionLocation,
+    loading,
+    leaderboardRows,
+    leaderboardSession,
+  } = props;
+  const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
+  const [newSessionEndTime, setNewSessionEndTime] = useState('20:00');
   if (!season) return <AdminEmptyState title="Season not found" description="Select a valid season from the Seasons page." />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title={`Season Info: ${season.name}`}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
           <Info label="Format" value={season.format} />
-          <Info label="Weekday" value={formatWeekday(season.weekday)} />
-          <Info label="Start Time" value={season.start_time_local} />
           <Info label="Timezone" value={season.timezone} />
           <Info label="Status" value={season.is_active ? 'Active' : 'Closed'} />
         </div>
       </AdminCard>
 
-      <AdminCard title="Sessions in Season" action={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input type="date" value={newSessionDate} onChange={(e) => setNewSessionDate(e.target.value)} style={field} />
-          <input type="time" step={300} value={newSessionStartTime.slice(0,5)} onChange={(e) => setNewSessionStartTime(`${e.target.value}:00`)} style={field} />
-          <input value={newSessionName} onChange={(e) => setNewSessionName(e.target.value)} placeholder="Session Name" style={field} />
-          <select value={newSessionStatus} onChange={(e) => setNewSessionStatus(e.target.value as 'UPCOMING' | 'OPEN' | 'CANCELLED')} style={field}>
-            <option value="UPCOMING">UPCOMING</option>
-            <option value="OPEN">OPEN</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </select>
-          <button style={primaryBtn} onClick={() => void onSessionCreate()} disabled={loading}>Add Session</button>
-        </div>
-      }>
+      <AdminCard title="Sessions in Season" action={<button style={primaryBtn} onClick={() => setShowCreateSessionModal(true)}>Add Session</button>}>
         <AdminTable
           columns={['Session Name', 'Session Date', 'Start Time', 'Status', 'Matches', 'Players']}
           rows={sessions.map((s) => [
@@ -1379,6 +1371,60 @@ function SeasonDetailPanel(props: {
           ])}
         />
       </AdminCard>
+      {showCreateSessionModal ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ width: 'min(760px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add Session</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Session Name</label>
+                <input value={newSessionName} onChange={(e) => setNewSessionName(e.target.value)} placeholder="Session Name" style={field} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Session Date</label>
+                <input type="date" value={newSessionDate} onChange={(e) => setNewSessionDate(e.target.value)} style={field} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Start Time</label>
+                <input type="time" step={300} value={newSessionStartTime.slice(0, 5)} onChange={(e) => setNewSessionStartTime(`${e.target.value}:00`)} style={field} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>End Time</label>
+                <input type="time" step={300} value={newSessionEndTime} onChange={(e) => setNewSessionEndTime(e.target.value)} style={field} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Location</label>
+                <input value={newSessionLocation} onChange={(e) => setNewSessionLocation(e.target.value)} placeholder="Main Hall" style={field} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Status</label>
+                <select value={newSessionStatus} onChange={(e) => setNewSessionStatus(e.target.value as 'UPCOMING' | 'OPEN' | 'CANCELLED')} style={field}>
+                  <option value="UPCOMING">UPCOMING</option>
+                  <option value="OPEN">OPEN</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={outlineBtn} onClick={() => setShowCreateSessionModal(false)} disabled={loading}>Cancel</button>
+              <button
+                style={primaryBtn}
+                disabled={loading || !newSessionName.trim() || !newSessionDate}
+                onClick={async () => {
+                  try {
+                    await onSessionCreate();
+                    setShowCreateSessionModal(false);
+                  } catch {
+                    // parent handler surfaces error banner
+                  }
+                }}
+              >
+                {loading ? 'Creating...' : 'Create Session'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <AdminCard title="Players in Season" action={<Link href="/admin/players" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Manage Club Players</Link>}>
         <AdminTable
