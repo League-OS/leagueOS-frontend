@@ -22,15 +22,37 @@ export const seasonSchema = z.object({
 export const sessionSchema = z.object({
   id: z.number(),
   season_id: z.number(),
-  session_date: z.string(),
-  start_time_local: z.string(),
+  session_start_time: z.string(),
+  session_end_time: z.string().nullable().optional(),
   status: z.enum(['UPCOMING', 'OPEN', 'CLOSED', 'FINALIZED', 'CANCELLED']),
   location: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
   opened_at: z.string().nullable().optional(),
   closed_at: z.string().nullable().optional(),
   finalized_at: z.string().nullable().optional(),
-  created_at: z.string(),
+  created_at: z.string().nullable().optional(),
+}).transform((row) => {
+  const dt = new Date(row.session_start_time);
+  if (Number.isNaN(dt.getTime())) {
+    return {
+      ...row,
+      session_date: '',
+      start_time_local: '',
+    };
+  }
+
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mm = String(dt.getMinutes()).padStart(2, '0');
+  const ss = String(dt.getSeconds()).padStart(2, '0');
+
+  return {
+    ...row,
+    session_date: `${y}-${m}-${d}`,
+    start_time_local: `${hh}:${mm}:${ss}`,
+  };
 });
 
 export const leaderboardEntrySchema = z.object({

@@ -420,8 +420,8 @@ export class LeagueOsApiClient {
     clubId: number,
     payload: {
       season_id: number;
-      session_date: string;
-      start_time_local: string;
+      session_start_time: string;
+      session_end_time?: string;
       status: 'UPCOMING' | 'OPEN' | 'CANCELLED';
       location?: string;
       address?: string;
@@ -442,8 +442,8 @@ export class LeagueOsApiClient {
     clubId: number,
     sessionId: number,
     payload: Partial<{
-      session_date: string;
-      start_time_local: string;
+      session_start_time: string;
+      session_end_time: string;
       status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED';
       location: string;
       address: string;
@@ -585,7 +585,7 @@ export class LeagueOsApiClient {
     const sessions = await this.sessions(token, clubId, seasonId);
     const finalized = sessions
       .filter((s) => s.status === 'FINALIZED')
-      .sort((a, b) => b.session_date.localeCompare(a.session_date));
+      .sort((a, b) => b.session_start_time.localeCompare(a.session_start_time));
 
     if (!finalized.length) {
       return { session: null, leaderboard: [] };

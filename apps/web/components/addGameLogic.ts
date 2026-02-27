@@ -8,7 +8,7 @@ export function selectSingleOpenSession(sessions: Session[]): { session: Session
   const openSessions = sessions
     .filter((session) => session.status === 'OPEN')
     .sort((a, b) => {
-      const byDate = b.session_date.localeCompare(a.session_date);
+      const byDate = b.session_start_time.localeCompare(a.session_start_time);
       if (byDate !== 0) return byDate;
       return b.id - a.id;
     });

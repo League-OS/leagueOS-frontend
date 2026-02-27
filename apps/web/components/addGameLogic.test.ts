@@ -21,8 +21,8 @@ test('listOpenSeasons only returns active seasons', () => {
 
 test('selectSingleOpenSession auto-selects the only open session', () => {
   const sessions = [
-    { id: 1, session_date: '2026-02-10', status: 'CLOSED' },
-    { id: 2, session_date: '2026-02-17', status: 'OPEN' },
+    { id: 1, session_start_time: '2026-02-10T19:00:00Z', status: 'CLOSED' },
+    { id: 2, session_start_time: '2026-02-17T19:00:00Z', status: 'OPEN' },
   ] as const;
 
   const result = selectSingleOpenSession(sessions as never);
@@ -31,14 +31,14 @@ test('selectSingleOpenSession auto-selects the only open session', () => {
 });
 
 test('selectSingleOpenSession fails when zero or multiple open sessions exist', () => {
-  const noOpen = selectSingleOpenSession([{ id: 1, session_date: '2026-02-10', status: 'CLOSED' }] as never);
+  const noOpen = selectSingleOpenSession([{ id: 1, session_start_time: '2026-02-10T19:00:00Z', status: 'CLOSED' }] as never);
   assert.equal(noOpen.session, null);
   assert.match(noOpen.error ?? '', /No open session/i);
 
   const multipleOpen = selectSingleOpenSession(
     [
-      { id: 1, session_date: '2026-02-10', status: 'OPEN' },
-      { id: 2, session_date: '2026-02-17', status: 'OPEN' },
+      { id: 1, session_start_time: '2026-02-10T19:00:00Z', status: 'OPEN' },
+      { id: 2, session_start_time: '2026-02-17T19:00:00Z', status: 'OPEN' },
     ] as never,
   );
   assert.equal(multipleOpen.session, null);

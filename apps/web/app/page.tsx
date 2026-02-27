@@ -700,10 +700,13 @@ export default function Page() {
         const m = String(cursor.getMonth() + 1).padStart(2, '0');
         const d = String(cursor.getDate()).padStart(2, '0');
         const dateStr = `${y}-${m}-${d}`;
+        const sessionStartIso = combineSessionDateAndTimeToIso(dateStr, time.slice(0, 5));
+        if (!sessionStartIso) {
+          throw new Error(`Invalid session date/time generated for ${dateStr} ${time}.`);
+        }
         await client.createSession(auth.token, recordClubId, {
           season_id: recordSeasonId,
-          session_date: dateStr,
-          start_time_local: time,
+          session_start_time: sessionStartIso,
           status,
           location: 'Club Session',
           address: 'TBD',
