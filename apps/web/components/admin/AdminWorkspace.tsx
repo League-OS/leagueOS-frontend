@@ -58,6 +58,13 @@ function fmtDateTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+
+function formatWeekday(value?: number | null): string {
+  if (value == null) return '-';
+  return WEEKDAY_NAMES[value] ?? `Weekday ${value}`;
+}
+
 function toLocalDateInputValue(value?: string | null): string {
   if (!value) return '';
   const d = new Date(value);
@@ -1263,7 +1270,7 @@ function SeasonsPanel(props: {
             <option value="MIXED_DOUBLES">MIXED_DOUBLES</option>
           </select>
           <select value={newSeasonWeekday} onChange={(e) => setNewSeasonWeekday(Number(e.target.value))} style={field}>
-            {[0,1,2,3,4,5,6].map((n) => <option key={n} value={n}>Weekday {n}</option>)}
+            {[0,1,2,3,4,5,6].map((n) => <option key={n} value={n}>{formatWeekday(n)}</option>)}
           </select>
           <input type="time" step={300} value={newSeasonStartTime} onChange={(e) => setNewSeasonStartTime(e.target.value)} style={field} />
           <button style={primaryBtn} onClick={() => void onCreate()} disabled={!newSeasonName.trim()}>Create</button>
@@ -1314,7 +1321,7 @@ function SeasonDetailPanel(props: {
       <AdminCard title={`Season Info: ${season.name}`}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
           <Info label="Format" value={season.format} />
-          <Info label="Weekday" value={String(season.weekday)} />
+          <Info label="Weekday" value={formatWeekday(season.weekday)} />
           <Info label="Start Time" value={season.start_time_local} />
           <Info label="Timezone" value={season.timezone} />
           <Info label="Status" value={season.is_active ? 'Active' : 'Closed'} />
