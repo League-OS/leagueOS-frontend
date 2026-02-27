@@ -253,6 +253,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setSelectedClubId(activeClubId);
 
       if (me.role === 'GLOBAL_ADMIN') {
+        const usersList = await client.adminUsers(token).catch(() => [] as AdminUser[]);
+        setAdminUsers(usersList);
         setPlayers([]);
         setCourts([]);
         setSeasons([]);
@@ -607,19 +609,30 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewUserRole={setNewUserRole}
             onCreate={async () => {
               if (!auth || !newUserEmail.trim() || !newUserFullName.trim() || !newUserPrimaryClubId) return;
-              await client.createAdminUser(auth.token, {
-                email: newUserEmail.trim(),
-                full_name: newUserFullName.trim(),
-                primary_club_id: newUserPrimaryClubId,
-                role: newUserRole,
-              });
-              setNewUserEmail('');
-              setNewUserFullName('');
-              setNewUserPrimaryClubId(null);
-              setNewUserRole('USER');
-              setShowAddUserModal(false);
-              setSuccess('User created.');
-              await refresh();
+              setError(null);
+              setSuccess(null);
+              try {
+                await client.createAdminUser(auth.token, {
+                  email: newUserEmail.trim(),
+                  full_name: newUserFullName.trim(),
+                  primary_club_id: newUserPrimaryClubId,
+                  role: newUserRole,
+                });
+                setNewUserEmail('');
+                setNewUserFullName('');
+                setNewUserPrimaryClubId(null);
+                setNewUserRole('USER');
+                setShowAddUserModal(false);
+                setSuccess('User created.');
+                await refresh();
+              } catch (e) {
+                const isDuplicate = e instanceof ApiError && (e.code === 'USER_EMAIL_EXISTS' || e.status === 409);
+                const msg = isDuplicate
+                  ? 'User with this email already exists. Please use a different email or assign the existing user.'
+                  : getMessage(e, 'Failed to create user.');
+                setError(msg);
+                window.alert(msg);
+              }
             }}
             onToggleStatus={async (u) => {
               if (!auth) return;
