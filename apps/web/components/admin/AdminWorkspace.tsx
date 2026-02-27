@@ -24,6 +24,7 @@ import {
 } from './AdminShellParts';
 import type { AdminNavKey } from './AdminShellParts';
 import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
+import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const STORAGE_AUTH = 'leagueos.admin.auth';
@@ -38,6 +39,15 @@ type Props = {
 
 type AdminCtx = {
   selectedSeasonId: number | null;
+};
+
+type AddMatchPayload = {
+  courtId: number | null;
+  startTimeLocal: string;
+  scoreA: number;
+  scoreB: number;
+  sideAPlayerIds: [number, number];
+  sideBPlayerIds: [number, number];
 };
 
 function getMessage(e: unknown, fallback: string): string {
@@ -833,6 +843,31 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             participantsByGame={participantsByGame}
             players={players}
             courts={courts}
+            onAddMatch={async (payload) => {
+              if (!auth || !selectedSession) return;
+              const startTimeIso = combineSessionDateAndTimeToIso(selectedSession.session_date, payload.startTimeLocal);
+              if (!startTimeIso) {
+                throw new Error('Invalid start time. Please pick a valid time in 5-minute increments.');
+              }
+              if (!payload.courtId) {
+                throw new Error('Please select a court.');
+              }
+              const game = await client.createGame(auth.token, selectedClubId, {
+                session_id: selectedSession.id,
+                court_id: payload.courtId,
+                start_time: startTimeIso,
+                score_a: payload.scoreA,
+                score_b: payload.scoreB,
+              });
+              await client.upsertGameParticipants(auth.token, selectedClubId, game.id, [
+                { player_id: payload.sideAPlayerIds[0], side: 'A' },
+                { player_id: payload.sideAPlayerIds[1], side: 'A' },
+                { player_id: payload.sideBPlayerIds[0], side: 'B' },
+                { player_id: payload.sideBPlayerIds[1], side: 'B' },
+              ]);
+              setSuccess('Match added.');
+              await refresh();
+            }}
             onClose={async () => {
               if (!auth || !selectedSession) return;
               await client.closeSession(auth.token, selectedClubId, selectedSession.id);
@@ -1693,16 +1728,108 @@ function SessionDetailPanel(props: {
   participantsByGame: Record<number, GameParticipant[]>;
   players: Player[];
   courts: Court[];
+  onAddMatch: (payload: AddMatchPayload) => Promise<void>;
   onClose: () => Promise<void>;
   onOpen: () => Promise<void>;
   onFinalize: () => Promise<void>;
   onRevert: () => Promise<void>;
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, courts, onClose, onOpen, onFinalize, onRevert, onStatusChange } = props;
+  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onStatusChange } = props;
   const [statusSaving, setStatusSaving] = useState(false);
+  const [showAddMatchModal, setShowAddMatchModal] = useState(false);
+  const [addMatchBusy, setAddMatchBusy] = useState(false);
+  const [addMatchError, setAddMatchError] = useState<string | null>(null);
+  const [courtId, setCourtId] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState('19:00');
+  const [scoreA, setScoreA] = useState(21);
+  const [scoreB, setScoreB] = useState(17);
+  const [a1, setA1] = useState<number>(players[0]?.id ?? 0);
+  const [a2, setA2] = useState<number>(players[1]?.id ?? 0);
+  const [b1, setB1] = useState<number>(players[2]?.id ?? 0);
+  const [b2, setB2] = useState<number>(players[3]?.id ?? 0);
+  const [confirmSoftDuplicate, setConfirmSoftDuplicate] = useState<null | {
+    message: string;
+    payload: AddMatchPayload;
+  }>(null);
   if (!session) return <AdminEmptyState title="Session not found" description="Select a valid session from the Sessions page." />;
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
+  const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
+  const timeOptions = Array.from({ length: 24 * 12 }, (_, i) => {
+    const hh = String(Math.floor(i / 12)).padStart(2, '0');
+    const mm = String((i % 12) * 5).padStart(2, '0');
+    return `${hh}:${mm}`;
+  });
+  const getHHmm = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const formatTimeLabel = (value: string) => {
+    const [hh, mm] = value.split(':').map(Number);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
+    const suffix = hh >= 12 ? 'PM' : 'AM';
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+    return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
+  };
+  const isSoftDuplicate = (payload: AddMatchPayload): boolean => {
+    const incomingPlayers = [...payload.sideAPlayerIds, ...payload.sideBPlayerIds].sort((x, y) => x - y).join(',');
+    return sessionMatches.some((game) => {
+      if (game.session_id !== session.id) return false;
+      const gamePlayers = (participantsByGame[game.id] ?? []).map((p) => p.player_id).sort((x, y) => x - y).join(',');
+      const samePlayers = gamePlayers === incomingPlayers;
+      const sameScore =
+        (game.score_a === payload.scoreA && game.score_b === payload.scoreB) ||
+        (game.score_a === payload.scoreB && game.score_b === payload.scoreA);
+      return samePlayers && sameScore;
+    });
+  };
+
+  useEffect(() => {
+    setA1(players[0]?.id ?? 0);
+    setA2(players[1]?.id ?? 0);
+    setB1(players[2]?.id ?? 0);
+    setB2(players[3]?.id ?? 0);
+  }, [players]);
+
+  useEffect(() => {
+    setCourtId(courts[0]?.id ?? null);
+  }, [courts]);
+
+  useEffect(() => {
+    const normalized = floorToFiveMinuteIncrement((session.start_time_local || '19:00:00').slice(0, 5));
+    setStartTime(normalized);
+  }, [session.id, session.start_time_local]);
+
+  async function submitAddMatch(payload: AddMatchPayload) {
+    try {
+      setAddMatchBusy(true);
+      setAddMatchError(null);
+      await onAddMatch(payload);
+      setShowAddMatchModal(false);
+      setConfirmSoftDuplicate(null);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'GAME_CONFLICT') {
+        const [hoursRaw, minutesRaw] = floorToFiveMinuteIncrement(startTime).split(':');
+        const hours = Number(hoursRaw);
+        const minutes = Number(minutesRaw);
+        if (Number.isInteger(hours) && Number.isInteger(minutes)) {
+          const next = new Date(0, 0, 1, hours, minutes + 5, 0, 0);
+          setStartTime(`${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`);
+        }
+        setAddMatchError('A game already exists for this court and start time. Time moved to the next 5-minute slot.');
+      } else if (e instanceof ApiError && e.code === 'INVALID_GAME_TIME') {
+        setAddMatchError('Start time must be on a 5-minute boundary. Try 7:00, 7:05, 7:10.');
+      } else if (e instanceof ApiError && e.code === 'SESSION_IMMUTABLE') {
+        setAddMatchError('Session is not writable anymore.');
+      } else {
+        setAddMatchError(e instanceof Error ? e.message : 'Failed to add match.');
+      }
+    } finally {
+      setAddMatchBusy(false);
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title={`Session Info: ${session.location || `Session ${session.id}`}`} action={
@@ -1768,9 +1895,16 @@ function SessionDetailPanel(props: {
         </div>
       </AdminCard>
       <AdminCard title="Matches in Session" action={
-        <Link href="/" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-          Add Match (open User Add Game)
-        </Link>
+        <button
+          style={outlineBtn}
+          onClick={() => {
+            setAddMatchError(null);
+            setConfirmSoftDuplicate(null);
+            setShowAddMatchModal(true);
+          }}
+        >
+          Add Match
+        </button>
       }>
         <AdminTable
           columns={['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Court', 'Start Time', 'Score A', 'Score B', 'Status']}
@@ -1792,6 +1926,139 @@ function SessionDetailPanel(props: {
           })}
         />
       </AdminCard>
+      {showAddMatchModal ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ width: 'min(880px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 20 }}>Add Match</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Session Name</label>
+                <input value={session.location || `Session ${session.id}`} readOnly style={{ ...field, background: '#f8fafc' }} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Session Date</label>
+                <input value={session.session_date} readOnly style={{ ...field, background: '#f8fafc' }} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Court</label>
+                <select value={courtId ?? ''} onChange={(e) => setCourtId(e.target.value ? Number(e.target.value) : null)} style={field}>
+                  <option value="">Select court</option>
+                  {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Start Time</label>
+                <select value={startTime} onChange={(e) => setStartTime(e.target.value)} style={field}>
+                  {timeOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {formatTimeLabel(value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ borderRadius: 14, background: '#818cf8', border: '1px solid #6366f1', padding: 12, display: 'grid', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#eef2ff' }}>Team A</div>
+                <select value={a1} onChange={(e) => setA1(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
+                <select value={a2} onChange={(e) => setA2(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#eef2ff', fontWeight: 700 }}>Score A</span>
+                  <input type="number" min={0} value={scoreA} onChange={(e) => setScoreA(Number(e.target.value))} style={field} />
+                </label>
+              </div>
+              <div style={{ borderRadius: 14, background: '#fda4af', border: '1px solid #fb7185', padding: 12, display: 'grid', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#881337' }}>Team B</div>
+                <select value={b1} onChange={(e) => setB1(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
+                <select value={b2} onChange={(e) => setB2(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#881337', fontWeight: 700 }}>Score B</span>
+                  <input type="number" min={0} value={scoreB} onChange={(e) => setScoreB(Number(e.target.value))} style={field} />
+                </label>
+              </div>
+            </div>
+            {addMatchError ? <div style={adminAlertError}>{addMatchError}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={outlineBtn} onClick={() => setShowAddMatchModal(false)} disabled={addMatchBusy}>Cancel</button>
+              <button
+                style={primaryBtn}
+                disabled={addMatchBusy}
+                onClick={async () => {
+                  const normalizedTime = floorToFiveMinuteIncrement(startTime);
+                  const [hRaw, mRaw] = normalizedTime.split(':');
+                  const h = Number(hRaw);
+                  const m = Number(mRaw);
+                  if (!Number.isInteger(h) || !Number.isInteger(m) || m % 5 !== 0) {
+                    setAddMatchError('Start time must be aligned to 5-minute increments.');
+                    return;
+                  }
+                  const duplicateBySlot = sessionMatches.some((game) => {
+                    if (!courtId) return false;
+                    const gameHhmm = getHHmm(game.start_time);
+                    return game.session_id === session.id && game.court_id === courtId && gameHhmm === normalizedTime;
+                  });
+                  if (duplicateBySlot) {
+                    setAddMatchError('A game already exists for this session, court, and start time.');
+                    return;
+                  }
+                  const payload: AddMatchPayload = {
+                    courtId,
+                    startTimeLocal: normalizedTime,
+                    scoreA,
+                    scoreB,
+                    sideAPlayerIds: [a1, a2],
+                    sideBPlayerIds: [b1, b2],
+                  };
+                  const validationError = validateAddGameInput({
+                    courtId,
+                    scoreA,
+                    scoreB,
+                    sideAPlayerIds: [a1, a2],
+                    sideBPlayerIds: [b1, b2],
+                    sessionId: session.id,
+                    startTime: normalizedTime,
+                  });
+                  if (validationError) {
+                    setAddMatchError(validationError);
+                    return;
+                  }
+                  if (isSoftDuplicate(payload)) {
+                    setConfirmSoftDuplicate({
+                      message: 'Potential duplicate: same session, same 4 players, and same score. Save anyway?',
+                      payload,
+                    });
+                    return;
+                  }
+                  await submitAddMatch(payload);
+                }}
+              >
+                {addMatchBusy ? 'Saving...' : 'Save Game'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {confirmSoftDuplicate ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1001, padding: 16 }}>
+          <div style={{ width: 'min(520px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 10 }}>
+            <h3 style={{ margin: 0, color: '#0f766e' }}>Confirm Duplicate</h3>
+            <p style={{ margin: 0, color: '#334155' }}>{confirmSoftDuplicate.message}</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={outlineBtn} onClick={() => setConfirmSoftDuplicate(null)}>Cancel</button>
+              <button
+                style={primaryBtn}
+                onClick={async () => {
+                  const payload = confirmSoftDuplicate.payload;
+                  setConfirmSoftDuplicate(null);
+                  await submitAddMatch(payload);
+                }}
+              >
+                Continue Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
