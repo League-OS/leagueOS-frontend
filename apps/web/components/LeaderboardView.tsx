@@ -369,40 +369,42 @@ export function LeaderboardView(props: Props) {
             {error ? <div style={{ color: 'var(--bad)', marginBottom: 8 }}>{error}</div> : null}
 
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
-              <div style={leaderboardHeaderRow}>
-                <div style={{ textAlign: 'center' }}>#</div>
-                <div>Player</div>
-                <div style={{ textAlign: 'center' }}>Delta</div>
-                <div style={{ textAlign: 'center' }}>Played</div>
-                <div style={{ textAlign: 'center' }}>Won</div>
-                <div style={{ textAlign: 'right' }}>Global ELO</div>
-              </div>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={leaderboardHeaderRow}>
+                  <div style={{ textAlign: 'center' }}>#</div>
+                  <div>Player</div>
+                  <div style={{ textAlign: 'center' }}>Delta</div>
+                  <div style={{ textAlign: 'center' }}>Played</div>
+                  <div style={{ textAlign: 'center' }}>Won</div>
+                  <div style={{ textAlign: 'right' }}>Global ELO</div>
+                </div>
 
-              {!leaderboard.length ? (
-                <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
-              ) : (
-                leaderboard.map((row, i) => (
-                  <div key={row.player_id} style={leaderboardRow}>
-                    <div style={{ textAlign: 'center' }}>{rankBadge(i + 1)}</div>
-                    <button
-                      style={{ ...linkBtn, textAlign: 'left', fontWeight: 600 }}
-                      onClick={() => {
-                        setProfileTitle(row.display_name);
-                        setTab('profile');
-                      }}
-                    >
-                      {row.display_name}
-                    </button>
-                    <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
-                      {row.season_elo_delta >= 0 ? '+' : ''}
-                      {row.season_elo_delta}
+                {!leaderboard.length ? (
+                  <div style={{ minWidth: 700, padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
+                ) : (
+                  leaderboard.map((row, i) => (
+                    <div key={row.player_id} style={leaderboardRow}>
+                      <div style={{ textAlign: 'center' }}>{rankBadge(i + 1)}</div>
+                      <button
+                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600 }}
+                        onClick={() => {
+                          setProfileTitle(row.display_name);
+                          setTab('profile');
+                        }}
+                      >
+                        {row.display_name}
+                      </button>
+                      <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
+                        {row.season_elo_delta >= 0 ? '+' : ''}
+                        {row.season_elo_delta}
+                      </div>
+                      <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
+                      <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
+                      <div style={{ textAlign: 'right', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
                     </div>
-                    <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
-                    <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
-                    <div style={{ textAlign: 'right', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </section>
         </section>
@@ -1505,7 +1507,8 @@ function rankBadge(rank: number) {
 
 const leaderboardHeaderRow: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '70px 1fr 120px 120px 120px 120px',
+  gridTemplateColumns: '70px minmax(180px, 1fr) 120px 120px 120px 120px',
+  minWidth: 700,
   gap: 10,
   padding: '12px 14px',
   fontSize: 12,
@@ -1517,7 +1520,8 @@ const leaderboardHeaderRow: React.CSSProperties = {
 
 const leaderboardRow: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '70px 1fr 120px 120px 120px 120px',
+  gridTemplateColumns: '70px minmax(180px, 1fr) 120px 120px 120px 120px',
+  minWidth: 700,
   gap: 10,
   padding: '12px 14px',
   borderBottom: '1px solid var(--border)',
