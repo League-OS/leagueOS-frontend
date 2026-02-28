@@ -30,6 +30,12 @@ const CLUB_NAME_FALLBACK: Record<number, string> = {
 };
 
 function formatMonthDay(dateish: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateish)) {
+    const [y, m, d] = dateish.split('-').map(Number);
+    const localDate = new Date(y, (m || 1) - 1, d || 1);
+    if (Number.isNaN(localDate.getTime())) return dateish;
+    return localDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
   const value = new Date(dateish);
   if (Number.isNaN(value.getTime())) return dateish;
   return value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
