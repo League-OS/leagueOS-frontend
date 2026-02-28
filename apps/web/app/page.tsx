@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
 import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
@@ -22,6 +22,8 @@ import type { AuthState } from '../components/types';
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const ADMIN_STORAGE_AUTH = 'leagueos.admin.auth';
 const ADMIN_STORAGE_PROFILE = 'leagueos.admin.profile';
+const PLAYER_STORAGE_AUTH = 'leagueos.player.auth';
+const PLAYER_STORAGE_PROFILE = 'leagueos.player.profile';
 const CLUB_NAME_FALLBACK: Record<number, string> = {
   1: 'Fraser Valley Badminton Club',
   2: 'BC Panthers Badminton Club',
@@ -123,6 +125,7 @@ export default function Page() {
   const [allUpcomingSessions, setAllUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hydratingAuth, setHydratingAuth] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -414,6 +417,73 @@ export default function Page() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setHydratingAuth(false);
+      return;
+    }
+
+    const restore = async () => {
+      try {
+        const rawAuth = window.localStorage.getItem(PLAYER_STORAGE_AUTH);
+        if (!rawAuth) {
+          setHydratingAuth(false);
+          return;
+        }
+
+        const parsed = JSON.parse(rawAuth) as AuthState;
+        if (!parsed?.token || !Number.isInteger(parsed?.clubId)) {
+          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+          setHydratingAuth(false);
+          return;
+        }
+
+        setAuth(parsed);
+        setSelectedClubId(parsed.clubId);
+
+        const rawProfile = window.localStorage.getItem(PLAYER_STORAGE_PROFILE);
+        if (rawProfile) {
+          try {
+            setProfile(JSON.parse(rawProfile) as Profile);
+          } catch {
+            window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+          }
+        }
+
+        await loadDashboard(parsed.token, parsed.clubId);
+      } catch {
+        window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+        window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+        setAuth(null);
+        setProfile(null);
+      } finally {
+        setHydratingAuth(false);
+      }
+    };
+
+    void restore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!auth) {
+      window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+      return;
+    }
+    window.localStorage.setItem(PLAYER_STORAGE_AUTH, JSON.stringify(auth));
+  }, [auth]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!profile) {
+      window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+      return;
+    }
+    window.localStorage.setItem(PLAYER_STORAGE_PROFILE, JSON.stringify(profile));
+  }, [profile]);
 
   async function handleLogin(args: { email: string; password: string }) {
     setLoading(true);
@@ -752,6 +822,10 @@ export default function Page() {
     await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, playerId);
   }
 
+  if (hydratingAuth) {
+    return <LoginView onLogin={handleLogin} error={null} loading={true} />;
+  }
+
   if (!auth) {
     return <LoginView onLogin={handleLogin} error={error} loading={loading} />;
   }
@@ -809,6 +883,10 @@ export default function Page() {
       onOpenSession={handleOpenRecordSession}
       onProfilePlayerChange={handleProfilePlayerChange}
       onLogout={() => {
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+        }
         setAuth(null);
         setProfile(null);
         setClubs([]);
