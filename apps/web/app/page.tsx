@@ -839,7 +839,21 @@ export default function Page() {
   }
 
   if (hydratingAuth) {
-    return <LoginView onLogin={handleLogin} error={null} loading={true} />;
+    return (
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#eef5ff',
+          color: '#0f172a',
+          fontWeight: 600,
+        }}
+      >
+        Restoring your session…
+      </main>
+    );
   }
 
   if (!auth) {
