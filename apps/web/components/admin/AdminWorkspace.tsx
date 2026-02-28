@@ -1039,6 +1039,30 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setSuccess('Match deleted.');
               await refresh();
             }}
+            onEditMatch={async (gameId, payload) => {
+              if (!auth || !selectedSession) return;
+              const startTimeIso = combineSessionDateAndTimeToIso(selectedSession.session_date, payload.startTimeLocal);
+              if (!startTimeIso) {
+                throw new Error('Invalid start time. Please pick a valid time in 5-minute increments.');
+              }
+              if (!payload.courtId) {
+                throw new Error('Please select a court.');
+              }
+              await client.updateGame(auth.token, selectedClubId, gameId, {
+                court_id: payload.courtId,
+                start_time: startTimeIso,
+                score_a: payload.scoreA,
+                score_b: payload.scoreB,
+              });
+              await client.upsertGameParticipants(auth.token, selectedClubId, gameId, [
+                { player_id: payload.sideAPlayerIds[0], side: 'A' },
+                { player_id: payload.sideAPlayerIds[1], side: 'A' },
+                { player_id: payload.sideBPlayerIds[0], side: 'B' },
+                { player_id: payload.sideBPlayerIds[1], side: 'B' },
+              ]);
+              setSuccess('Match updated.');
+              await refresh();
+            }}
             onStatusChange={async (nextStatus) => {
               if (!auth || !selectedSession) return;
               if (nextStatus === selectedSession.status) return;
@@ -2241,9 +2265,10 @@ function SessionDetailPanel(props: {
   onFinalize: () => Promise<void>;
   onRevert: () => Promise<void>;
   onDeleteMatch: (gameId: number) => Promise<void>;
+  onEditMatch: (gameId: number, payload: AddMatchPayload) => Promise<void>;
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onDeleteMatch, onStatusChange } = props;
+  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onDeleteMatch, onEditMatch, onStatusChange } = props;
   const [statusSaving, setStatusSaving] = useState(false);
   const [showAddMatchModal, setShowAddMatchModal] = useState(false);
   const [addMatchBusy, setAddMatchBusy] = useState(false);
@@ -2251,6 +2276,17 @@ function SessionDetailPanel(props: {
   const [deleteGameTarget, setDeleteGameTarget] = useState<Game | null>(null);
   const [deleteGameBusy, setDeleteGameBusy] = useState(false);
   const [deleteGameError, setDeleteGameError] = useState<string | null>(null);
+  const [editGameTarget, setEditGameTarget] = useState<Game | null>(null);
+  const [editMatchBusy, setEditMatchBusy] = useState(false);
+  const [editMatchError, setEditMatchError] = useState<string | null>(null);
+  const [editCourtId, setEditCourtId] = useState<number | null>(null);
+  const [editStartTime, setEditStartTime] = useState('19:00');
+  const [editScoreA, setEditScoreA] = useState(21);
+  const [editScoreB, setEditScoreB] = useState(17);
+  const [editA1, setEditA1] = useState<number>(players[0]?.id ?? 0);
+  const [editA2, setEditA2] = useState<number>(players[1]?.id ?? 0);
+  const [editB1, setEditB1] = useState<number>(players[2]?.id ?? 0);
+  const [editB2, setEditB2] = useState<number>(players[3]?.id ?? 0);
   const [courtId, setCourtId] = useState<number | null>(null);
   const [startTime, setStartTime] = useState('19:00');
   const [scoreA, setScoreA] = useState(21);
@@ -2345,6 +2381,24 @@ function SessionDetailPanel(props: {
     }
   }
 
+  function openEditModal(game: Game) {
+    const participants = participantsByGame[game.id] ?? [];
+    const sideA = participants.filter((p) => p.side === 'A').map((p) => p.player_id);
+    const sideB = participants.filter((p) => p.side === 'B').map((p) => p.player_id);
+    const gameHhmm = getHHmm(game.start_time) ?? floorToFiveMinuteIncrement((session?.start_time_local || '19:00:00').slice(0, 5));
+
+    setEditGameTarget(game);
+    setEditMatchError(null);
+    setEditCourtId(game.court_id);
+    setEditStartTime(gameHhmm);
+    setEditScoreA(game.score_a);
+    setEditScoreB(game.score_b);
+    setEditA1(sideA[0] ?? players[0]?.id ?? 0);
+    setEditA2(sideA[1] ?? players[1]?.id ?? players[0]?.id ?? 0);
+    setEditB1(sideB[0] ?? players[2]?.id ?? players[0]?.id ?? 0);
+    setEditB2(sideB[1] ?? players[3]?.id ?? players[1]?.id ?? 0);
+  }
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title={`Session Info: ${session.location || `Session ${session.id}`}`} action={
@@ -2437,21 +2491,146 @@ function SessionDetailPanel(props: {
               g.score_a,
               g.score_b,
               'Created',
-              <button
-                key={`delete-game-${g.id}`}
-                style={outlineBtn}
-                disabled={session.status !== 'OPEN' && session.status !== 'CLOSED'}
-                onClick={() => {
-                  setDeleteGameError(null);
-                  setDeleteGameTarget(g);
-                }}
-              >
-                Delete
-              </button>,
+              <div key={`game-actions-${g.id}`} style={{ display: 'flex', gap: 6 }}>
+                <button
+                  style={outlineBtn}
+                  disabled={session.status !== 'OPEN' && session.status !== 'CLOSED'}
+                  onClick={() => openEditModal(g)}
+                >
+                  Edit
+                </button>
+                <button
+                  style={outlineBtn}
+                  disabled={session.status !== 'OPEN' && session.status !== 'CLOSED'}
+                  onClick={() => {
+                    setDeleteGameError(null);
+                    setDeleteGameTarget(g);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>,
             ];
           })}
         />
       </AdminCard>
+      {editGameTarget ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1001, padding: 16 }}>
+          <div style={{ width: 'min(880px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 20 }}>Edit Match</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Session Name</label>
+                <input value={session.location || `Session ${session.id}`} readOnly style={{ ...field, background: '#f8fafc' }} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Session Date</label>
+                <input value={session.session_date} readOnly style={{ ...field, background: '#f8fafc' }} />
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Court</label>
+                <select value={editCourtId ?? ''} onChange={(e) => setEditCourtId(e.target.value ? Number(e.target.value) : null)} style={field}>
+                  <option value="">Select court</option>
+                  {courts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Start Time</label>
+                <select value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} style={field}>
+                  {timeOptions.map((value) => (
+                    <option key={`edit-time-${value}`} value={value}>
+                      {formatTimeLabel(value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ borderRadius: 14, background: '#818cf8', border: '1px solid #6366f1', padding: 12, display: 'grid', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#eef2ff' }}>Team A</div>
+                <select value={editA1} onChange={(e) => setEditA1(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={`ea1-${p.id}`} value={p.id}>{p.display_name}</option>)}</select>
+                <select value={editA2} onChange={(e) => setEditA2(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={`ea2-${p.id}`} value={p.id}>{p.display_name}</option>)}</select>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#eef2ff', fontWeight: 700 }}>Score A</span>
+                  <input type="number" min={0} value={editScoreA} onChange={(e) => setEditScoreA(Number(e.target.value))} style={field} />
+                </label>
+              </div>
+              <div style={{ borderRadius: 14, background: '#fda4af', border: '1px solid #fb7185', padding: 12, display: 'grid', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#881337' }}>Team B</div>
+                <select value={editB1} onChange={(e) => setEditB1(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={`eb1-${p.id}`} value={p.id}>{p.display_name}</option>)}</select>
+                <select value={editB2} onChange={(e) => setEditB2(Number(e.target.value))} style={field}>{playerOptions.map((p) => <option key={`eb2-${p.id}`} value={p.id}>{p.display_name}</option>)}</select>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#881337', fontWeight: 700 }}>Score B</span>
+                  <input type="number" min={0} value={editScoreB} onChange={(e) => setEditScoreB(Number(e.target.value))} style={field} />
+                </label>
+              </div>
+            </div>
+            {editMatchError ? <div style={adminAlertError}>{editMatchError}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                style={outlineBtn}
+                disabled={editMatchBusy}
+                onClick={() => {
+                  setEditGameTarget(null);
+                  setEditMatchError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                style={primaryBtn}
+                disabled={editMatchBusy}
+                onClick={async () => {
+                  if (!editGameTarget) return;
+                  const normalizedTime = floorToFiveMinuteIncrement(editStartTime);
+                  const duplicateBySlot = sessionMatches.some((game) => {
+                    if (!editCourtId) return false;
+                    if (game.id === editGameTarget.id) return false;
+                    const gameHhmm = getHHmm(game.start_time);
+                    return game.session_id === session.id && game.court_id === editCourtId && gameHhmm === normalizedTime;
+                  });
+                  if (duplicateBySlot) {
+                    setEditMatchError('A game already exists for this session, court, and start time.');
+                    return;
+                  }
+                  const validationError = validateAddGameInput({
+                    courtId: editCourtId,
+                    scoreA: editScoreA,
+                    scoreB: editScoreB,
+                    sideAPlayerIds: [editA1, editA2],
+                    sideBPlayerIds: [editB1, editB2],
+                    sessionId: session.id,
+                    startTime: normalizedTime,
+                  });
+                  if (validationError) {
+                    setEditMatchError(validationError);
+                    return;
+                  }
+                  try {
+                    setEditMatchBusy(true);
+                    await onEditMatch(editGameTarget.id, {
+                      courtId: editCourtId,
+                      startTimeLocal: normalizedTime,
+                      scoreA: editScoreA,
+                      scoreB: editScoreB,
+                      sideAPlayerIds: [editA1, editA2],
+                      sideBPlayerIds: [editB1, editB2],
+                    });
+                    setEditGameTarget(null);
+                    setEditMatchError(null);
+                  } catch (e) {
+                    setEditMatchError(getMessage(e, 'Failed to update match.'));
+                  } finally {
+                    setEditMatchBusy(false);
+                  }
+                }}
+              >
+                {editMatchBusy ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {deleteGameTarget ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1001, padding: 16 }}>
           <div style={{ width: 'min(520px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 10 }}>

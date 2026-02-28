@@ -652,6 +652,27 @@ export class LeagueOsApiClient {
     return gameSchema.parse(data);
   }
 
+  async updateGame(
+    token: string,
+    clubId: number,
+    gameId: number,
+    payload: Partial<{
+      court_id: number;
+      start_time: string;
+      score_a: number;
+      score_b: number;
+    }>,
+  ): Promise<Game> {
+    const data = await this.request<unknown>(`/games/${gameId}`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return gameSchema.parse(data);
+  }
+
   async games(token: string, clubId: number, sessionId?: number): Promise<Game[]> {
     const data = await this.request<unknown[]>('/games', {
       token,
