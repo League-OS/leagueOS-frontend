@@ -297,6 +297,26 @@ export class LeagueOsApiClient {
     return clubUserSchema.parse(data);
   }
 
+  async inviteUserFromPlayer(
+    token: string,
+    clubId: number,
+    playerId: number,
+  ): Promise<{
+    status: string;
+    club_id: number;
+    player_id: number;
+    user_id: number;
+    email: string;
+    temporary_password?: string | null;
+    invite_link: string;
+  }> {
+    return this.request(`/club-users/invite-from-player/${playerId}`, {
+      method: 'POST',
+      token,
+      query: { club_id: clubId },
+    });
+  }
+
   async resetClubUserPassword(
     token: string,
     clubId: number,

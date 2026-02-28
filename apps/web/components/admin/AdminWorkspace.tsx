@@ -184,6 +184,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [selectedClubAdminId, setSelectedClubAdminId] = useState<number | null>(null);
   const [clubAdminSearching, setClubAdminSearching] = useState(false);
   const [lastClubInvite, setLastClubInvite] = useState<null | { email: string; temporary_password: string; invite_link: string }>(null);
+  const [lastPlayerInvite, setLastPlayerInvite] = useState<null | { email: string; temporary_password?: string | null; invite_link: string; status: string }>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [clubUsers, setClubUsers] = useState<ClubUser[]>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -769,6 +770,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         {page === 'players' ? (
           <PlayersPanel
             players={players}
+            clubUsers={clubUsers}
             newPlayerName={newPlayerName}
             setNewPlayerName={setNewPlayerName}
             newPlayerEmail={newPlayerEmail}
@@ -789,6 +791,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setShowAddPlayerModal={setShowAddPlayerModal}
             newPlayerType={newPlayerType}
             setNewPlayerType={setNewPlayerType}
+            lastPlayerInvite={lastPlayerInvite}
+            setLastPlayerInvite={setLastPlayerInvite}
             onCreate={async () => {
               if (!auth || !newPlayerName.trim()) return;
               await client.createPlayer(auth.token, selectedClubId, {
@@ -811,7 +815,20 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setNewPlayerEloDoubles('1000');
               setNewPlayerEloMixed('1000');
               setShowAddPlayerModal(false);
+              setLastPlayerInvite(null);
               setSuccess('Player created.');
+              await refresh();
+            }}
+            onInviteFromPlayer={async (p) => {
+              if (!auth) return;
+              const invite = await client.inviteUserFromPlayer(auth.token, selectedClubId, p.id);
+              setLastPlayerInvite({
+                email: invite.email,
+                temporary_password: invite.temporary_password ?? undefined,
+                invite_link: invite.invite_link,
+                status: invite.status,
+              });
+              setSuccess(invite.status === 'USER_CREATED_INVITE_READY' ? 'User account created and assigned to this club.' : 'User account linked to this club.');
               await refresh();
             }}
             onToggle={async (p) => {
@@ -1598,6 +1615,7 @@ function UsersPanel(props: {
 
 function PlayersPanel(props: {
   players: Player[];
+  clubUsers: ClubUser[];
   newPlayerName: string;
   setNewPlayerName: (v: string) => void;
   newPlayerEmail: string;
@@ -1618,12 +1636,16 @@ function PlayersPanel(props: {
   setShowAddPlayerModal: (v: boolean) => void;
   newPlayerType: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
   setNewPlayerType: (v: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1') => void;
+  lastPlayerInvite: null | { email: string; temporary_password?: string | null; invite_link: string; status: string };
+  setLastPlayerInvite: (v: null | { email: string; temporary_password?: string | null; invite_link: string; status: string }) => void;
   onCreate: () => Promise<void>;
+  onInviteFromPlayer: (p: Player) => Promise<void>;
   onToggle: (p: Player) => Promise<void>;
   onDelete: (p: Player) => Promise<void>;
 }) {
   const {
     players,
+    clubUsers,
     newPlayerName,
     setNewPlayerName,
     newPlayerEmail,
@@ -1644,7 +1666,10 @@ function PlayersPanel(props: {
     setShowAddPlayerModal,
     newPlayerType,
     setNewPlayerType,
+    lastPlayerInvite,
+    setLastPlayerInvite,
     onCreate,
+    onInviteFromPlayer,
     onToggle,
     onDelete,
   } = props;
@@ -1710,6 +1735,28 @@ function PlayersPanel(props: {
         </div>
       ) : null}
       <AdminCard title="Club Players">
+        {lastPlayerInvite ? (
+          <div style={{ ...adminAlertSuccess, marginBottom: 10 }}>
+            Invite ready for <strong>{lastPlayerInvite.email}</strong>.
+            {lastPlayerInvite.temporary_password ? (
+              <> Temporary password: <code>{lastPlayerInvite.temporary_password}</code></>
+            ) : (
+              <> Existing user linked to this club.</>
+            )}
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <a href={lastPlayerInvite.invite_link} target="_blank" rel="noreferrer" style={{ color: '#0d9488', fontWeight: 700 }}>
+                Open invite link
+              </a>
+              <button
+                style={outlineBtn}
+                onClick={() => void navigator.clipboard?.writeText(lastPlayerInvite.invite_link)}
+              >
+                Copy Invite Link
+              </button>
+              <button style={outlineBtn} onClick={() => setLastPlayerInvite(null)}>Dismiss</button>
+            </div>
+          </div>
+        ) : null}
         <AdminTable
           columns={['Player Name', 'ID', 'Email', 'Type', 'Status', 'Actions']}
           rows={players.map((p) => [
@@ -1719,6 +1766,13 @@ function PlayersPanel(props: {
             p.player_type || '-',
             p.is_active ? 'Active' : 'Inactive',
             <div key={`actions-${p.id}`} style={{ display: 'flex', gap: 8 }}>
+              <button
+                style={outlineBtn}
+                disabled={!p.email || clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase())}
+                onClick={() => void onInviteFromPlayer(p)}
+              >
+                {!p.email ? 'Email Required' : clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase()) ? 'User Linked' : 'Create/Link User'}
+              </button>
               <button style={outlineBtn} onClick={() => void onToggle(p)}>{p.is_active ? 'Deactivate' : 'Activate'}</button>
               <button style={outlineBtn} onClick={() => { if (window.confirm(`Delete ${p.display_name}?`)) void onDelete(p); }}>Delete</button>
             </div>,
