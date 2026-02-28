@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError } from '@leagueos/api';
 import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import { floorToFiveMinuteIncrement, validateAddGameInput } from './addGameLogic';
@@ -176,7 +176,6 @@ export function LeaderboardView(props: Props) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>(PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro');
-  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [createSeasonOpen, setCreateSeasonOpen] = useState(false);
   const [createSeasonName, setCreateSeasonName] = useState('');
   const [createSeasonFormat, setCreateSeasonFormat] = useState<'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES'>('DOUBLES');
@@ -441,22 +440,6 @@ export function LeaderboardView(props: Props) {
                     <div style={{ fontSize: 16, fontWeight: 800 }}>{profileInitials || 'P'}</div>
                   </div>
                 ) : null}
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      setAvatarPreview(typeof reader.result === 'string' ? reader.result : null);
-                      setAvatarPickerOpen(false);
-                    };
-                    reader.readAsDataURL(file);
-                  }}
-                />
                 <button
                   style={{ position: 'absolute', right: -2, bottom: -2, border: 0, borderRadius: '50%', width: 28, height: 28, background: '#fff', boxShadow: '0 4px 10px rgba(0,0,0,.16)', cursor: 'pointer' }}
                   onClick={(e) => {
@@ -535,14 +518,8 @@ export function LeaderboardView(props: Props) {
                   ))}
                 </div>
                 <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button style={outlineBtn} onClick={() => avatarInputRef.current?.click()}>Upload Photo</button>
                   {avatarPreview ? (
-                    <button
-                      style={outlineBtn}
-                      onClick={() => {
-                        setAvatarPreview(null);
-                      }}
-                    >
+                    <button style={outlineBtn} onClick={() => setAvatarPreview(null)}>
                       Remove Photo
                     </button>
                   ) : null}
