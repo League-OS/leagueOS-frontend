@@ -2300,6 +2300,7 @@ function SessionDetailPanel(props: {
     payload: AddMatchPayload;
   }>(null);
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
+  const canManageMatches = session?.status === 'OPEN' || session?.status === 'CLOSED';
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
   const timeOptions = Array.from({ length: 24 * 12 }, (_, i) => {
     const hh = String(Math.floor(i / 12)).padStart(2, '0');
@@ -2466,6 +2467,7 @@ function SessionDetailPanel(props: {
       <AdminCard title="Matches in Session" action={
         <button
           style={outlineBtn}
+          disabled={!canManageMatches}
           onClick={() => {
             setAddMatchError(null);
             setConfirmSoftDuplicate(null);
@@ -2475,6 +2477,11 @@ function SessionDetailPanel(props: {
           Add Match
         </button>
       }>
+        {!canManageMatches ? (
+          <div style={{ ...adminAlertError, marginBottom: 10 }}>
+            Match edits are disabled for {session.status} sessions. Revert finalize or reopen the session first.
+          </div>
+        ) : null}
         <AdminTable
           columns={['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Court', 'Start Time', 'Score A', 'Score B', 'Status', 'Actions']}
           rows={sessionMatches.map((g) => {
@@ -2492,23 +2499,27 @@ function SessionDetailPanel(props: {
               g.score_b,
               'Created',
               <div key={`game-actions-${g.id}`} style={{ display: 'flex', gap: 6 }}>
-                <button
-                  style={outlineBtn}
-                  disabled={session.status !== 'OPEN' && session.status !== 'CLOSED'}
-                  onClick={() => openEditModal(g)}
-                >
-                  Edit
-                </button>
-                <button
-                  style={outlineBtn}
-                  disabled={session.status !== 'OPEN' && session.status !== 'CLOSED'}
-                  onClick={() => {
-                    setDeleteGameError(null);
-                    setDeleteGameTarget(g);
-                  }}
-                >
-                  Delete
-                </button>
+                {canManageMatches ? (
+                  <>
+                    <button
+                      style={outlineBtn}
+                      onClick={() => openEditModal(g)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      style={outlineBtn}
+                      onClick={() => {
+                        setDeleteGameError(null);
+                        setDeleteGameTarget(g);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </>
+                ) : (
+                  <span style={{ color: '#64748b', fontSize: 13 }}>Locked</span>
+                )}
               </div>,
             ];
           })}
