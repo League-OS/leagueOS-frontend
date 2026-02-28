@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
@@ -52,12 +53,21 @@ type AddMatchPayload = {
 
 function getMessage(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message;
+  if (typeof e === 'object' && e !== null && 'issues' in e) {
+    const issues = (e as { issues?: Array<{ message?: string }> }).issues;
+    if (Array.isArray(issues) && issues.length) return issues[0]?.message || fallback;
+  }
   if (e instanceof Error) return e.message;
   return fallback;
 }
 
 function fmtDate(value?: string | null) {
   if (!value) return '-';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number);
+    const localDate = new Date(y, (m || 1) - 1, d || 1);
+    return Number.isNaN(localDate.getTime()) ? value : localDate.toLocaleDateString();
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString();
 }
@@ -79,8 +89,32 @@ function toLocalDateInputValue(value?: string | null): string {
   return `${y}-${m}-${day}`;
 }
 
+function defaultSessionTimes(base = new Date()) {
+  const start = new Date(base);
+  start.setSeconds(0, 0);
+  start.setMinutes(Math.floor(start.getMinutes() / 5) * 5);
+  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const date = toLocalDateInputValue(start.toISOString());
+  const pad2 = (v: number) => String(v).padStart(2, '0');
+  return {
+    date,
+    startTimeHHMMSS: `${pad2(start.getHours())}:${pad2(start.getMinutes())}:00`,
+    endTimeHHMM: `${pad2(end.getHours())}:${pad2(end.getMinutes())}`,
+  };
+}
+
+function generateTempPassword(length = 12): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `Temp@${out}`;
+}
+
 export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const client = useMemo(() => new LeagueOsApiClient({ apiBaseUrl: API_BASE }), []);
+  const router = useRouter();
   const [auth, setAuth] = useState<AuthState | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -138,8 +172,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [loginEmail, setLoginEmail] = useState('fvma-clubAdmin@leagueos.local');
-  const [loginPassword, setLoginPassword] = useState('Admin@123');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   const [showAddClubModal, setShowAddClubModal] = useState(false);
   const [newClubName, setNewClubName] = useState('');
@@ -172,8 +206,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newSeasonName, setNewSeasonName] = useState('');
   const [newSeasonFormat, setNewSeasonFormat] = useState<'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES'>('DOUBLES');
   const [newSessionSeasonId, setNewSessionSeasonId] = useState<number | null>(null);
-  const [newSessionDate, setNewSessionDate] = useState(() => toLocalDateInputValue(new Date().toISOString()));
-  const [newSessionStartTime, setNewSessionStartTime] = useState('19:00:00');
+  const [newSessionDate, setNewSessionDate] = useState(() => defaultSessionTimes().date);
+  const [newSessionStartTime, setNewSessionStartTime] = useState(() => defaultSessionTimes().startTimeHHMMSS);
   const [newSessionStatus, setNewSessionStatus] = useState<'UPCOMING' | 'OPEN' | 'CANCELLED'>('UPCOMING');
   const [newSessionName, setNewSessionName] = useState('Club Session');
   const [newSessionLocation, setNewSessionLocation] = useState('');
@@ -197,6 +231,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   useEffect(() => {
     setHydrated(true);
     try {
+      const flash = sessionStorage.getItem('leagueos.admin.flash.error');
+      if (flash) {
+        setError(flash);
+        sessionStorage.removeItem('leagueos.admin.flash.error');
+      }
       const params = new URLSearchParams(window.location.search);
       const inviteEmail = (params.get('email') || '').trim();
       if (inviteEmail) setLoginEmail(inviteEmail);
@@ -247,6 +286,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setLoading(true);
     setError(null);
     try {
+      let effectiveToken = token;
       const me = await client.profile(token);
       setProfile(me);
       const availableClubs =
@@ -258,8 +298,15 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       const activeClubId = availableClubs.find((c) => c.id === clubId)?.id ?? availableClubs[0]?.id ?? clubId;
       setSelectedClubId(activeClubId);
 
+      // Keep global-admin token scoped to selected club so club-scoped routes work from Users modal.
+      if (me.role === 'GLOBAL_ADMIN' && activeClubId > 0 && clubId !== activeClubId) {
+        const scoped = await client.switchClub(token, activeClubId);
+        effectiveToken = scoped.token;
+        setAuth({ token: scoped.token, clubId: activeClubId });
+      }
+
       if (me.role === 'GLOBAL_ADMIN') {
-        const usersList = await client.adminUsers(token).catch(() => [] as AdminUser[]);
+        const usersList = await client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]);
         setAdminUsers(usersList);
         setClubUsers([]);
         setPlayers([]);
@@ -324,6 +371,17 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         setSeasonLeaderboardSession(null);
       }
     } catch (e) {
+      if (page === 'users' && token) {
+        const msg = 'Users page is currently unavailable. Redirected to dashboard.';
+        setError(msg);
+        try {
+          sessionStorage.setItem('leagueos.admin.flash.error', msg);
+        } catch {
+          // no-op
+        }
+        router.replace('/admin');
+        return;
+      }
       setProfile(null);
       setAuth(null);
       setClubs([]);
@@ -346,11 +404,29 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   }
 
   async function doLogin() {
+    const email = loginEmail.trim();
+    const password = loginPassword;
+    if (!email) {
+      setError('Email is required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!password) {
+      setError('Password is required.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     setLoading(true);
     setError(null);
     setSuccess(null);
     try {
-      const res = await client.login({ email: loginEmail, password: loginPassword });
+      const res = await client.login({ email, password });
       const me = await client.profile(res.token);
       const nextRole = toAdminEffectiveRole(me.role, me.club_role);
       if (!canAccessAdmin(nextRole)) {
@@ -451,6 +527,9 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>Password</span>
               <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} style={field} />
             </label>
+            <div style={{ textAlign: 'right', marginTop: -4 }}>
+              <a href="/forgot-password" style={{ color: '#0d9488', fontSize: 13, textDecoration: 'none' }}>Forgot Password?</a>
+            </div>
             {error ? <div style={adminAlertError}>{error}</div> : null}
             {success ? <div style={adminAlertSuccess}>{success}</div> : null}
             <button style={primaryBtn} onClick={() => void doLogin()} disabled={loading}>
@@ -847,6 +926,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             seasons={seasons}
             games={games}
             participantsByGame={participantsByGame}
+            selectedSeasonId={ctx.selectedSeasonId}
+            setSelectedSeasonId={(id) => setCtx((prev) => ({ ...prev, selectedSeasonId: id }))}
             newSessionSeasonId={newSessionSeasonId}
             setNewSessionSeasonId={setNewSessionSeasonId}
             newSessionDate={newSessionDate}
@@ -868,6 +949,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 location: newSessionName,
               });
               setSuccess('Session created.');
+              await refresh();
+            }}
+            onDeleteSession={async (sessionId) => {
+              if (!auth) return;
+              await client.deleteSession(auth.token, selectedClubId, sessionId);
+              setSuccess('Session deleted.');
               await refresh();
             }}
           />
@@ -1309,7 +1396,13 @@ function UsersPanel(props: {
                 const memberships = u.memberships ?? [];
                 const clubMembership = memberships.find((m) => m.club_id === selectedClubId);
                 return [
-                  <a key={`email-${u.id}`} href="#" style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{u.email}</a>,
+                  <button
+                    key={`email-${u.id}`}
+                    style={{ ...outlineBtn, padding: 0, border: 'none', background: 'transparent', color: '#0d9488', fontWeight: 700, cursor: 'pointer' }}
+                    onClick={() => void openDetail(u.id)}
+                  >
+                    {u.email}
+                  </button>,
                   u.full_name || u.display_name || '-',
                   clubMembership?.role || '-',
                   u.is_active ? 'Enabled' : 'Disabled',
@@ -1382,7 +1475,7 @@ function UsersPanel(props: {
         </div>
       ) : null}
 
-      {!isGlobalAdmin && showUserDetailModal ? (
+      {showUserDetailModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: '100%', maxWidth: 760, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>User Information</div>
@@ -1450,6 +1543,26 @@ function UsersPanel(props: {
               >
                 Change Password
               </button>
+              {isGlobalAdmin ? (
+                <button
+                  style={outlineBtn}
+                  disabled={!selectedUserId || detailLoading}
+                  onClick={async () => {
+                    if (!selectedUserId) return;
+                    const tempPassword = generateTempPassword();
+                    try {
+                      setDetailError(null);
+                      await onResetClubUserPassword(selectedUserId, tempPassword, tempPassword);
+                      setPasswordResetNotice({ email: detailEmail.trim(), password: tempPassword });
+                      setShowUserDetailModal(false);
+                    } catch (e) {
+                      setDetailError(getMessage(e, 'Failed to reset password.'));
+                    }
+                  }}
+                >
+                  Reset to Default
+                </button>
+              ) : null}
               <button
                 style={primaryBtn}
                 disabled={!selectedUserId || !detailName.trim() || !detailEmail.trim() || detailLoading}
@@ -1740,7 +1853,14 @@ function SeasonDetailPanel(props: {
     leaderboardSession,
   } = props;
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
-  const [newSessionEndTime, setNewSessionEndTime] = useState('20:00');
+  const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
+  const openCreateSessionModal = () => {
+    const defaults = defaultSessionTimes();
+    setNewSessionDate(defaults.date);
+    setNewSessionStartTime(defaults.startTimeHHMMSS);
+    setNewSessionEndTime(defaults.endTimeHHMM);
+    setShowCreateSessionModal(true);
+  };
   if (!season) return <AdminEmptyState title="Season not found" description="Select a valid season from the Seasons page." />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -1752,7 +1872,7 @@ function SeasonDetailPanel(props: {
         </div>
       </AdminCard>
 
-      <AdminCard title="Sessions in Season" action={<button style={primaryBtn} onClick={() => setShowCreateSessionModal(true)}>Add Session</button>}>
+      <AdminCard title="Sessions in Season" action={<button style={primaryBtn} onClick={openCreateSessionModal}>Add Session</button>}>
         <AdminTable
           columns={['Session Name', 'Session Date', 'Start Time', 'Status', 'Matches', 'Players']}
           rows={sessions.map((s) => [
@@ -1859,6 +1979,8 @@ function SessionsPanel(props: {
   seasons: Season[];
   games: Game[];
   participantsByGame: Record<number, GameParticipant[]>;
+  selectedSeasonId: number | null;
+  setSelectedSeasonId: (v: number | null) => void;
   newSessionSeasonId: number | null;
   setNewSessionSeasonId: (v: number | null) => void;
   newSessionDate: string;
@@ -1870,15 +1992,58 @@ function SessionsPanel(props: {
   newSessionName: string;
   setNewSessionName: (v: string) => void;
   onCreate: () => Promise<void>;
+  onDeleteSession: (sessionId: number) => Promise<void>;
 }) {
-  const { sessions, seasons, games, participantsByGame, newSessionSeasonId, setNewSessionSeasonId, newSessionDate, setNewSessionDate, newSessionStartTime, setNewSessionStartTime, newSessionStatus, setNewSessionStatus, newSessionName, setNewSessionName, onCreate } = props;
+  const {
+    sessions,
+    seasons,
+    games,
+    participantsByGame,
+    selectedSeasonId,
+    setSelectedSeasonId,
+    newSessionSeasonId,
+    setNewSessionSeasonId,
+    newSessionDate,
+    setNewSessionDate,
+    newSessionStartTime,
+    setNewSessionStartTime,
+    newSessionStatus,
+    setNewSessionStatus,
+    newSessionName,
+    setNewSessionName,
+    onCreate,
+    onDeleteSession,
+  } = props;
   const seasonById = new Map(seasons.map((s) => [s.id, s]));
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
-  const [newSessionEndTime, setNewSessionEndTime] = useState('20:00');
+  const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
+  const openCreateSessionModal = () => {
+    const defaults = defaultSessionTimes();
+    setNewSessionDate(defaults.date);
+    setNewSessionStartTime(defaults.startTimeHHMMSS);
+    setNewSessionEndTime(defaults.endTimeHHMM);
+    setShowCreateSessionModal(true);
+  };
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <AdminCard title="Add New Session" action={<button style={primaryBtn} onClick={() => setShowCreateSessionModal(true)}>Create</button>}>
-        <div style={{ color: '#64748b', fontSize: 13 }}>Use Create to open session setup.</div>
+      {panelError ? <div style={adminAlertError}>{panelError}</div> : null}
+      <AdminCard title="Add New Session" action={<button style={primaryBtn} onClick={openCreateSessionModal}>Create</button>}>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ color: '#64748b', fontSize: 13 }}>Use Create to open session setup.</div>
+          <div style={{ display: 'grid', gap: 6, maxWidth: 320 }}>
+            <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Season Filter</label>
+            <select
+              value={selectedSeasonId ?? ''}
+              onChange={(e) => setSelectedSeasonId(e.target.value ? Number(e.target.value) : null)}
+              style={field}
+            >
+              <option value="">All Seasons</option>
+              {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        </div>
       </AdminCard>
       {showCreateSessionModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
@@ -1937,9 +2102,36 @@ function SessionsPanel(props: {
           </div>
         </div>
       ) : null}
+      {deleteTarget ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ width: 'min(520px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 20 }}>Delete Session</div>
+            <div style={{ color: '#475569' }}>
+              Delete <strong>{deleteTarget.location || `Session ${deleteTarget.id}`}</strong>? This action permanently removes the session.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={outlineBtn} onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                style={{ ...primaryBtn, background: '#dc2626' }}
+                onClick={async () => {
+                  try {
+                    await onDeleteSession(deleteTarget.id);
+                    setDeleteTarget(null);
+                    setPanelError(null);
+                  } catch (e) {
+                    setPanelError(getMessage(e, 'Unable to delete session.'));
+                  }
+                }}
+              >
+                Delete Session
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <AdminCard title="Club Sessions">
         <AdminTable
-          columns={['Session Name', 'Session Date', 'Start Time', 'Session Status', 'Matches', 'Players']}
+          columns={['Session Name', 'Session Date', 'Start Time', 'Session Status', 'Matches', 'Players', 'Actions']}
           rows={sessions
             .slice()
             .sort((a, b) => b.session_date.localeCompare(a.session_date))
@@ -1954,6 +2146,20 @@ function SessionsPanel(props: {
                 s.status,
                 sessionGames.length,
                 playerCount || '-',
+                <button
+                  key={`delete-${s.id}`}
+                  style={outlineBtn}
+                  onClick={() => {
+                    if (sessionGames.length > 0) {
+                      setPanelError('This session has recorded matches. Resolve matches before deleting the session.');
+                      return;
+                    }
+                    setPanelError(null);
+                    setDeleteTarget(s);
+                  }}
+                >
+                  Delete
+                </button>,
               ];
             })}
         />
