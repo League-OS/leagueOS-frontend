@@ -20,6 +20,8 @@ import { LoginView } from '../components/LoginView';
 import type { AuthState } from '../components/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const ADMIN_STORAGE_AUTH = 'leagueos.admin.auth';
+const ADMIN_STORAGE_PROFILE = 'leagueos.admin.profile';
 const CLUB_NAME_FALLBACK: Record<number, string> = {
   1: 'Fraser Valley Badminton Club',
   2: 'BC Panthers Badminton Club',
@@ -420,6 +422,18 @@ export default function Page() {
       const initialClubId = res.club_id ?? clubsForUser[0].id;
       const scoped = res.club_id === initialClubId ? res : await client.switchClub(res.token, initialClubId);
       const nextAuth = { token: scoped.token, clubId: initialClubId };
+      const me = await client.profile(nextAuth.token);
+      const effectiveRole = String(me.club_role ?? me.role ?? '').toUpperCase();
+
+      if (effectiveRole === 'CLUB_ADMIN') {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(ADMIN_STORAGE_AUTH, JSON.stringify(nextAuth));
+          window.localStorage.setItem(ADMIN_STORAGE_PROFILE, JSON.stringify(me));
+          window.location.assign('/admin');
+        }
+        return;
+      }
+
       setSelectedClubId(initialClubId);
       setAuth(nextAuth);
       await loadDashboard(nextAuth.token, nextAuth.clubId);
