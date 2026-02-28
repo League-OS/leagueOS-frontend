@@ -173,6 +173,27 @@ export function LeaderboardView(props: Props) {
   const [createSeasonStartTime, setCreateSeasonStartTime] = useState('19:00');
   const [createSeasonBusy, setCreateSeasonBusy] = useState(false);
   const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
+  const profileDisplayName = profileTitle || profile?.display_name || profile?.full_name || 'LeagueOS User';
+  const profileInitials = profileDisplayName
+    .split(' ')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+  const topFormat =
+    profileStats.doubles >= profileStats.singles && profileStats.doubles >= profileStats.mixed
+      ? 'DOUBLES'
+      : profileStats.singles >= profileStats.mixed
+        ? 'SINGLES'
+        : 'MIXED';
+  const topFormatEmoji = topFormat === 'DOUBLES' ? '🏸🏸' : topFormat === 'SINGLES' ? '🏸' : '🏸✨';
+  const profileTier =
+    profileStats.winPct >= 75
+      ? { label: 'Smash Elite', emoji: '🥇' }
+      : profileStats.winPct >= 50
+        ? { label: 'Rally Pro', emoji: '🔥' }
+        : { label: 'In Training', emoji: '🎯' };
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>
@@ -354,13 +375,22 @@ export function LeaderboardView(props: Props) {
                   width: 88,
                   height: 88,
                   borderRadius: '50%',
-                  background: avatarPreview ? '#e2e8f0' : 'linear-gradient(135deg,#d1d5db,#9ca3af)',
+                  background: avatarPreview ? '#e2e8f0' : 'linear-gradient(135deg,#0f766e,#14b8a6)',
                   border: '3px solid #fff',
                   position: 'relative',
                   overflow: 'hidden',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#fff',
                 }}
               >
                 {avatarPreview ? <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                {!avatarPreview ? (
+                  <div style={{ display: 'grid', placeItems: 'center', lineHeight: 1 }}>
+                    <div style={{ fontSize: 22 }}>🏸</div>
+                    <div style={{ fontSize: 16, fontWeight: 800 }}>{profileInitials || 'P'}</div>
+                  </div>
+                ) : null}
                 <input
                   ref={avatarInputRef}
                   type="file"
@@ -383,7 +413,15 @@ export function LeaderboardView(props: Props) {
                 </button>
               </div>
               <div style={{ marginTop: 10, fontSize: 28, fontWeight: 700 }}>
-                {profileTitle || profile?.display_name || profile?.full_name || 'LeagueOS User'}
+                {profileDisplayName}
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <span style={{ background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 999, padding: '4px 10px', fontSize: 13 }}>
+                  {profileTier.emoji} {profileTier.label}
+                </span>
+                <span style={{ background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 999, padding: '4px 10px', fontSize: 13 }}>
+                  {topFormatEmoji} {topFormat}
+                </span>
               </div>
               {allowProfilePlayerPick ? (
                 <div style={{ marginTop: 10, width: 'min(420px, 100%)' }}>
@@ -411,13 +449,13 @@ export function LeaderboardView(props: Props) {
             <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.06)', padding: 16 }}>
               <h2 style={{ margin: 0, fontSize: 22 }}>Headline Statistics</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 10, marginTop: 12 }}>
-                <StatCard title="Singles" value={profileStats.singles} bg="#dbeafe" color="#2563eb" />
-                <StatCard title="Doubles" value={profileStats.doubles} bg="#ede9fe" color="#7c3aed" />
-                <StatCard title="Mixed" value={profileStats.mixed} bg="#fce7f3" color="#db2777" />
+                <StatCard title="Singles 🏸" value={profileStats.singles} bg="#dbeafe" color="#2563eb" />
+                <StatCard title="Doubles 🏸🏸" value={profileStats.doubles} bg="#ede9fe" color="#7c3aed" />
+                <StatCard title="Mixed ✨" value={profileStats.mixed} bg="#fce7f3" color="#db2777" />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10, marginTop: 10 }}>
-                <StatLine title="Points For" value={profileStats.pointsFor.toLocaleString()} />
-                <StatLine title="Points Against" value={profileStats.pointsAgainst.toLocaleString()} />
+                <StatLine title="Points For 🚀" value={profileStats.pointsFor.toLocaleString()} />
+                <StatLine title="Points Against 🛡️" value={profileStats.pointsAgainst.toLocaleString()} />
               </div>
               <div style={{ marginTop: 12, borderRadius: 16, background: '#ccfbf1', textAlign: 'center', padding: '16px 10px', color: '#0f766e' }}>
                 <div style={{ fontSize: 15 }}>Win Percentage</div>
