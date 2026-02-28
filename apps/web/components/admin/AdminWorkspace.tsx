@@ -138,8 +138,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [loginEmail, setLoginEmail] = useState('fvma-clubAdmin@leagueos.local');
-  const [loginPassword, setLoginPassword] = useState('Admin@123');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   const [showAddClubModal, setShowAddClubModal] = useState(false);
   const [newClubName, setNewClubName] = useState('');
@@ -451,6 +451,9 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>Password</span>
               <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} style={field} />
             </label>
+            <div style={{ textAlign: 'right', marginTop: -4 }}>
+              <a href="/forgot-password" style={{ color: '#0d9488', fontSize: 13, textDecoration: 'none' }}>Forgot Password?</a>
+            </div>
             {error ? <div style={adminAlertError}>{error}</div> : null}
             {success ? <div style={adminAlertSuccess}>{success}</div> : null}
             <button style={primaryBtn} onClick={() => void doLogin()} disabled={loading}>

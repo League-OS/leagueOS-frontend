@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { SEEDED_USERS } from '@leagueos/config';
 
@@ -105,9 +106,9 @@ export function LoginView({ onLogin, error, loading }: Props) {
           </label>
 
           <div style={{ textAlign: 'right', marginTop: -4 }}>
-            <button type="button" style={{ border: 0, background: 'transparent', color: '#0d9488', fontSize: 13, cursor: 'pointer' }}>
+            <Link href="/forgot-password" style={{ color: '#0d9488', fontSize: 13, textDecoration: 'none' }}>
               Forgot Password?
-            </button>
+            </Link>
           </div>
 
           {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}

@@ -127,6 +127,24 @@ export class LeagueOsApiClient {
     return authResponseSchema.parse(data);
   }
 
+  async forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
+    return this.request<{ ok: boolean; message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: { email },
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string, confirmPassword: string): Promise<{ ok: boolean; message: string }> {
+    return this.request<{ ok: boolean; message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: {
+        token,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      },
+    });
+  }
+
   async switchClub(token: string, clubId: number): Promise<AuthResponse> {
     const data = await this.request<unknown>('/auth/switch-club', {
       method: 'POST',
