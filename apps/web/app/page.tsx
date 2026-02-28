@@ -512,9 +512,9 @@ export default function Page() {
     if (!auth) return;
     const effectiveRole = String(profile?.club_role ?? profile?.role ?? '').toUpperCase();
     const canRecord =
-      effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'RECORDER';
+      effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'RECORDER' || effectiveRole === 'USER';
     if (!canRecord) {
-      throw new Error('Only club admins or recorders can record games.');
+      throw new Error('Only club members with recording access can record games.');
     }
     const sessionToUse = recordSession;
     if (!sessionToUse) {
@@ -600,8 +600,10 @@ export default function Page() {
     const canRecord =
       profile?.role === 'CLUB_ADMIN' ||
       profile?.role === 'RECORDER' ||
+      profile?.role === 'USER' ||
       profile?.club_role === 'CLUB_ADMIN' ||
-      profile?.club_role === 'RECORDER';
+      profile?.club_role === 'RECORDER' ||
+      profile?.club_role === 'USER';
     if (!canRecord) return;
     try {
       setSelectedProfilePlayerId(null);
@@ -751,6 +753,7 @@ export default function Page() {
   const effectiveRole = String(profile?.club_role ?? profile?.role ?? '').toUpperCase();
   const isClubAdmin = effectiveRole === 'CLUB_ADMIN';
   const isRecorder = effectiveRole === 'RECORDER';
+  const isUser = effectiveRole === 'USER';
   const canFinalizeSession = Boolean(isClubAdmin && selectedSession?.status === 'CLOSED');
   const canRevertSessionFinalize = Boolean(isClubAdmin && selectedSession?.status === 'FINALIZED');
 
@@ -790,7 +793,7 @@ export default function Page() {
       canFinalizeSession={canFinalizeSession}
       canRevertSessionFinalize={canRevertSessionFinalize}
       showFinalizeAction={Boolean(isClubAdmin)}
-      canManageRecords={Boolean(isClubAdmin || isRecorder)}
+      canManageRecords={Boolean(isClubAdmin || isRecorder || isUser)}
       onFinalizeSession={handleFinalizeSession}
       onRevertSessionFinalize={handleRevertSessionFinalize}
       onRecordGame={handleRecordGame}
