@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { AdminUser, Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import type { AdminUser, Club, ClubUser, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
 import {
@@ -151,6 +151,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [clubAdminSearching, setClubAdminSearching] = useState(false);
   const [lastClubInvite, setLastClubInvite] = useState<null | { email: string; temporary_password: string; invite_link: string }>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [clubUsers, setClubUsers] = useState<ClubUser[]>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -184,7 +185,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const pageAllowedForRole = !isGlobalAdmin || globalAdminAllowedPages.has(page);
   const visibleNavItems: AdminNavKey[] = isGlobalAdmin
     ? ['dashboard', 'clubs', 'users']
-    : ['dashboard', 'clubs', 'seasons', 'sessions', 'courts', 'players'];
+    : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
 
@@ -260,6 +261,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       if (me.role === 'GLOBAL_ADMIN') {
         const usersList = await client.adminUsers(token).catch(() => [] as AdminUser[]);
         setAdminUsers(usersList);
+        setClubUsers([]);
         setPlayers([]);
         setCourts([]);
         setSeasons([]);
@@ -272,14 +274,14 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         return;
       }
 
-      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames, usersList] = await Promise.all([
+      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames, clubUsersList] = await Promise.all([
         client.players(token, activeClubId, true),
         client.players(token, activeClubId, false).catch(() => [] as Player[]),
         client.courts(token, activeClubId),
         client.seasons(token, activeClubId),
         client.sessions(token, activeClubId),
         client.games(token, activeClubId).catch(() => [] as Game[]),
-        me.role === 'GLOBAL_ADMIN' ? client.adminUsers(token).catch(() => [] as AdminUser[]) : Promise.resolve([] as AdminUser[]),
+        client.clubUsers(token, activeClubId).catch(() => [] as ClubUser[]),
       ]);
       const clubPlayers = mergeAdminPlayers(activePlayers, inactivePlayers);
 
@@ -288,7 +290,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setSeasons(clubSeasons);
       setSessions(clubSessions);
       setGames(clubGames);
-      setAdminUsers(usersList);
+      setAdminUsers([]);
+      setClubUsers(clubUsersList);
       setNewSessionSeasonId((prev) => prev ?? clubSeasons[0]?.id ?? null);
 
       const needParticipants = page === 'sessions' || page === 'sessionDetail' || page === 'seasonDetail';
@@ -322,7 +325,21 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       }
     } catch (e) {
       setProfile(null);
-      setError(getMessage(e, 'Failed to load admin data.'));
+      setAuth(null);
+      setClubs([]);
+      setPlayers([]);
+      setCourts([]);
+      setSeasons([]);
+      setSessions([]);
+      setGames([]);
+      setAdminUsers([]);
+      setClubUsers([]);
+      setParticipantsByGame({});
+      setSeasonLeaderboardRows([]);
+      setSeasonLeaderboardSession(null);
+      localStorage.removeItem(STORAGE_AUTH);
+      localStorage.removeItem(STORAGE_PROFILE);
+      setError(getMessage(e, 'Session restore failed. Please sign in again.'));
     } finally {
       setLoading(false);
     }
@@ -389,6 +406,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setSessions([]);
     setGames([]);
     setAdminUsers([]);
+    setClubUsers([]);
     setParticipantsByGame({});
     setError(null);
     setSuccess(null);
@@ -601,7 +619,9 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         {page === 'users' ? (
           <UsersPanel
             canManage={role === 'GLOBAL_ADMIN'}
+            isGlobalAdmin={role === 'GLOBAL_ADMIN'}
             users={adminUsers}
+            clubUsers={clubUsers}
             clubs={clubs}
             selectedClubId={selectedClubId}
             showAddUserModal={showAddUserModal}
@@ -649,6 +669,21 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               await client.setAdminUserStatus(auth.token, u.id, !u.is_active);
               setSuccess(`User ${u.is_active ? 'disabled' : 'enabled'}.`);
               await refresh();
+            }}
+            onLoadClubUser={async (userId) => {
+              if (!auth) throw new Error('Not authenticated');
+              return client.clubUserDetail(auth.token, selectedClubId, userId);
+            }}
+            onSaveClubUser={async (userId, payload) => {
+              if (!auth) throw new Error('Not authenticated');
+              await client.updateClubUser(auth.token, selectedClubId, userId, payload);
+              setSuccess('User updated.');
+              await refresh();
+            }}
+            onResetClubUserPassword={async (userId, newPassword, confirmPassword) => {
+              if (!auth) throw new Error('Not authenticated');
+              await client.resetClubUserPassword(auth.token, selectedClubId, userId, newPassword, confirmPassword);
+              setSuccess('Password changed.');
             }}
           />
         ) : null}
@@ -1135,7 +1170,9 @@ function ClubsPanel({
 
 function UsersPanel(props: {
   canManage: boolean;
+  isGlobalAdmin: boolean;
   users: AdminUser[];
+  clubUsers: ClubUser[];
   clubs: Club[];
   selectedClubId: number;
   showAddUserModal: boolean;
@@ -1152,10 +1189,28 @@ function UsersPanel(props: {
   setNewUserRole: (v: 'CLUB_ADMIN' | 'RECORDER') => void;
   onCreate: () => Promise<void>;
   onToggleStatus: (u: AdminUser) => Promise<void>;
+  onLoadClubUser: (userId: number) => Promise<ClubUser>;
+  onSaveClubUser: (
+    userId: number,
+    payload: {
+      full_name: string;
+      email: string;
+      phone?: string;
+      sex: 'M' | 'F';
+      player_type: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
+      elo_initial_singles: number;
+      elo_initial_doubles: number;
+      elo_initial_mixed: number;
+      is_active: boolean;
+    },
+  ) => Promise<void>;
+  onResetClubUserPassword: (userId: number, newPassword: string, confirmPassword: string) => Promise<void>;
 }) {
   const {
     canManage,
+    isGlobalAdmin,
     users,
+    clubUsers,
     clubs,
     selectedClubId,
     showAddUserModal,
@@ -1172,41 +1227,127 @@ function UsersPanel(props: {
     setNewUserRole,
     onCreate,
     onToggleStatus,
+    onLoadClubUser,
+    onSaveClubUser,
+    onResetClubUserPassword,
   } = props;
 
   const selectedClub = clubs.find((c) => c.id === selectedClubId);
   const clubScopedUsers = users.filter((u) => (u.memberships ?? []).some((m) => m.club_id === selectedClubId));
+  const [showUserDetailModal, setShowUserDetailModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailName, setDetailName] = useState('');
+  const [detailEmail, setDetailEmail] = useState('');
+  const [detailPhone, setDetailPhone] = useState('');
+  const [detailSex, setDetailSex] = useState<'M' | 'F'>('M');
+  const [detailPlayerType, setDetailPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
+  const [detailEloSingles, setDetailEloSingles] = useState('1000');
+  const [detailEloDoubles, setDetailEloDoubles] = useState('1000');
+  const [detailEloMixed, setDetailEloMixed] = useState('1000');
+  const [detailActive, setDetailActive] = useState(true);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordResetNotice, setPasswordResetNotice] = useState<null | { email: string; password: string }>(null);
+
+  async function openDetail(userId: number) {
+    try {
+      setShowUserDetailModal(true);
+      setSelectedUserId(userId);
+      setDetailError(null);
+      setDetailLoading(true);
+      const row = await onLoadClubUser(userId);
+      setDetailName(row.full_name || '');
+      setDetailEmail(row.email || '');
+      setDetailPhone(row.phone || '');
+      setDetailSex((row.sex === 'F' ? 'F' : 'M'));
+      setDetailPlayerType((row.player_type as 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1') || 'ROSTER');
+      setDetailEloSingles(String(row.elo_initial_singles ?? 1000));
+      setDetailEloDoubles(String(row.elo_initial_doubles ?? 1000));
+      setDetailEloMixed(String(row.elo_initial_mixed ?? 1000));
+      setDetailActive(Boolean(row.is_active));
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (e) {
+      setDetailError(getMessage(e, 'Failed to load user detail.'));
+    } finally {
+      setDetailLoading(false);
+    }
+  }
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard
         title={`Users in ${selectedClub?.name ?? `Club ${selectedClubId}`}`}
-        action={canManage ? <button style={primaryBtn} onClick={() => { setNewUserPrimaryClubId(selectedClubId); setAddUserError(null); setShowAddUserModal(true); }}>Add User</button> : null}
+        action={isGlobalAdmin && canManage ? <button style={primaryBtn} onClick={() => { setNewUserPrimaryClubId(selectedClubId); setAddUserError(null); setShowAddUserModal(true); }}>Add User</button> : null}
       >
-        <AdminTable
-          columns={['User Email', 'Full Name', 'Role in Club', 'Status', 'Action']}
-          rows={clubScopedUsers.map((u) => {
-            const memberships = u.memberships ?? [];
-            const clubMembership = memberships.find((m) => m.club_id === selectedClubId);
-            return [
-              <a key={`email-${u.id}`} href="#" style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{u.email}</a>,
-              u.full_name || u.display_name || '-',
-              clubMembership?.role || '-',
-              u.is_active ? 'Enabled' : 'Disabled',
-              canManage ? (
-                <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
-                  {u.is_active ? 'Disable' : 'Enable'}
-                </button>
-              ) : '-',
-            ];
-          })}
-        />
-        {!clubScopedUsers.length ? (
-          <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>No users assigned to this club yet.</div>
+        {passwordResetNotice ? (
+          <div style={{ border: '1px solid #86efac', background: '#f0fdf4', color: '#166534', borderRadius: 10, padding: '8px 10px', fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span>
+              Password updated for <strong>{passwordResetNotice.email}</strong>. New password: <code>{passwordResetNotice.password}</code>
+            </span>
+            <button
+              style={outlineBtn}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(passwordResetNotice.password);
+                } catch {
+                  // no-op
+                }
+              }}
+            >
+              Copy
+            </button>
+          </div>
         ) : null}
+        {isGlobalAdmin ? (
+          <>
+            <AdminTable
+              columns={['User Email', 'Full Name', 'Role in Club', 'Status', 'Action']}
+              rows={clubScopedUsers.map((u) => {
+                const memberships = u.memberships ?? [];
+                const clubMembership = memberships.find((m) => m.club_id === selectedClubId);
+                return [
+                  <a key={`email-${u.id}`} href="#" style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{u.email}</a>,
+                  u.full_name || u.display_name || '-',
+                  clubMembership?.role || '-',
+                  u.is_active ? 'Enabled' : 'Disabled',
+                  canManage ? (
+                    <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
+                      {u.is_active ? 'Disable' : 'Enable'}
+                    </button>
+                  ) : '-',
+                ];
+              })}
+            />
+            {!clubScopedUsers.length ? (
+              <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>No users assigned to this club yet.</div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <AdminTable
+              columns={['User Name', 'Email', 'Role in Club', 'Status']}
+              rows={clubUsers.map((u) => [
+                <button
+                  key={`name-${u.id}`}
+                  style={{ ...outlineBtn, padding: 0, border: 'none', background: 'transparent', color: '#0d9488', fontWeight: 700, cursor: 'pointer' }}
+                  onClick={() => void openDetail(u.id)}
+                >
+                  {u.full_name}
+                </button>,
+                u.email,
+                u.role_in_club,
+                u.is_active ? 'Enabled' : 'Disabled',
+              ])}
+            />
+            {!clubUsers.length ? <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>No users in this club.</div> : null}
+          </>
+        )}
       </AdminCard>
 
-      {showAddUserModal ? (
+      {isGlobalAdmin && showAddUserModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add User</div>
@@ -1236,6 +1377,104 @@ function UsersPanel(props: {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button style={outlineBtn} onClick={() => { setAddUserError(null); setShowAddUserModal(false); }}>Cancel</button>
               <button style={primaryBtn} disabled={!newUserEmail.trim() || !newUserFullName.trim() || !newUserPrimaryClubId} onClick={() => void onCreate()}>Save</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {!isGlobalAdmin && showUserDetailModal ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ width: '100%', maxWidth: 760, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>User Information</div>
+            {detailError ? <div style={{ ...adminAlertError }}>{detailError}</div> : null}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Name</span><input value={detailName} onChange={(e) => setDetailName(e.target.value)} style={field} /></label>
+              <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Email</span><input value={detailEmail} onChange={(e) => setDetailEmail(e.target.value)} style={field} /></label>
+              <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Phone</span><input value={detailPhone} onChange={(e) => setDetailPhone(e.target.value)} style={field} /></label>
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Sex</span>
+                <select value={detailSex} onChange={(e) => setDetailSex(e.target.value as 'M' | 'F')} style={field}><option value="M">M</option><option value="F">F</option></select>
+              </label>
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Player Type</span>
+                <select value={detailPlayerType} onChange={(e) => setDetailPlayerType(e.target.value as 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1')} style={field}>
+                  <option value="ROSTER">ROSTER</option>
+                  <option value="DROP_IN">DROP_IN</option>
+                  <option value="DROP_IN_A1">DROP_IN_A1</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Status</span>
+                <select value={detailActive ? 'active' : 'inactive'} onChange={(e) => setDetailActive(e.target.value === 'active')} style={field}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Initial ELO Singles</span><input type="number" min={0} value={detailEloSingles} onChange={(e) => setDetailEloSingles(e.target.value)} style={field} /></label>
+              <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Initial ELO Doubles</span><input type="number" min={0} value={detailEloDoubles} onChange={(e) => setDetailEloDoubles(e.target.value)} style={field} /></label>
+              <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Initial ELO Mixed Doubles</span><input type="number" min={0} value={detailEloMixed} onChange={(e) => setDetailEloMixed(e.target.value)} style={field} /></label>
+            </div>
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gap: 8 }}>
+              <div style={{ fontWeight: 700, color: '#0f172a' }}>Change Password</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>New Password</span><input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={field} /></label>
+                <label style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 12, color: '#64748b' }}>Confirm Password</span><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={field} /></label>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button style={outlineBtn} onClick={() => setShowUserDetailModal(false)}>Close</button>
+              <button
+                style={outlineBtn}
+                disabled={!selectedUserId || !newPassword || !confirmPassword || detailLoading}
+                onClick={async () => {
+                  if (!selectedUserId) return;
+                  try {
+                    setDetailError(null);
+                    if (newPassword.length < 8) {
+                      setDetailError('Password must be at least 8 characters.');
+                      return;
+                    }
+                    if (newPassword !== confirmPassword) {
+                      setDetailError('New password and confirm password must match.');
+                      return;
+                    }
+                    await onResetClubUserPassword(selectedUserId, newPassword, confirmPassword);
+                    setPasswordResetNotice({ email: detailEmail.trim(), password: newPassword });
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowUserDetailModal(false);
+                  } catch (e) {
+                    setDetailError(getMessage(e, 'Failed to change password.'));
+                  }
+                }}
+              >
+                Change Password
+              </button>
+              <button
+                style={primaryBtn}
+                disabled={!selectedUserId || !detailName.trim() || !detailEmail.trim() || detailLoading}
+                onClick={async () => {
+                  if (!selectedUserId) return;
+                  try {
+                    setDetailError(null);
+                    await onSaveClubUser(selectedUserId, {
+                      full_name: detailName.trim(),
+                      email: detailEmail.trim(),
+                      phone: detailPhone.trim() || undefined,
+                      sex: detailSex,
+                      player_type: detailPlayerType,
+                      elo_initial_singles: Number(detailEloSingles) || 0,
+                      elo_initial_doubles: Number(detailEloDoubles) || 0,
+                      elo_initial_mixed: Number(detailEloMixed) || 0,
+                      is_active: detailActive,
+                    });
+                  } catch (e) {
+                    setDetailError(getMessage(e, 'Failed to save user.'));
+                  }
+                }}
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>

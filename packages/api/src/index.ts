@@ -2,6 +2,7 @@ import type { RuntimeConfig } from '@leagueos/config';
 import {
   authResponseSchema,
   adminUserSchema,
+  clubUserSchema,
   clubSchema,
   courtSchema,
   gameSchema,
@@ -14,6 +15,7 @@ import {
   sessionSchema,
   type AuthResponse,
   type AdminUser,
+  type ClubUser,
   type Club,
   type Court,
   type Game,
@@ -89,6 +91,14 @@ export class LeagueOsApiClient {
 
       const detail = (parsed as { detail?: unknown })?.detail;
       if (detail && typeof detail === 'object') {
+        if (Array.isArray(detail)) {
+          const first = detail[0] as { msg?: string } | undefined;
+          throw new ApiError({
+            status: res.status,
+            message: first?.msg ?? `API ${res.status} ${res.statusText}`,
+            detail,
+          });
+        }
         const d = detail as { code?: string; message?: string };
         throw new ApiError({
           status: res.status,
@@ -226,6 +236,62 @@ export class LeagueOsApiClient {
       body: { is_active: isActive },
     });
     return adminUserSchema.parse(data);
+  }
+
+  async clubUsers(token: string, clubId: number): Promise<ClubUser[]> {
+    const data = await this.request<unknown[]>('/club-users', {
+      token,
+      query: { club_id: clubId },
+    });
+    return data.map((d) => clubUserSchema.parse(d));
+  }
+
+  async clubUserDetail(token: string, clubId: number, userId: number): Promise<ClubUser> {
+    const data = await this.request<unknown>(`/club-users/${userId}`, {
+      token,
+      query: { club_id: clubId },
+    });
+    return clubUserSchema.parse(data);
+  }
+
+  async updateClubUser(
+    token: string,
+    clubId: number,
+    userId: number,
+    payload: {
+      full_name: string;
+      email: string;
+      phone?: string;
+      sex: 'M' | 'F';
+      player_type: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
+      elo_initial_singles: number;
+      elo_initial_doubles: number;
+      elo_initial_mixed: number;
+      is_active: boolean;
+    },
+  ): Promise<ClubUser> {
+    const data = await this.request<unknown>(`/club-users/${userId}`, {
+      method: 'PUT',
+      token,
+      query: { club_id: clubId },
+      body: payload,
+    });
+    return clubUserSchema.parse(data);
+  }
+
+  async resetClubUserPassword(
+    token: string,
+    clubId: number,
+    userId: number,
+    newPassword: string,
+    confirmPassword: string,
+  ): Promise<{ ok: boolean; user_id: number }> {
+    return this.request<{ ok: boolean; user_id: number }>(`/club-users/${userId}/password`, {
+      method: 'POST',
+      token,
+      query: { club_id: clubId },
+      body: { new_password: newPassword, confirm_password: confirmPassword },
+    });
   }
 
   async deleteClub(token: string, clubId: number): Promise<{ ok: boolean; club_id: number }> {
