@@ -114,6 +114,15 @@ type Props = {
   onLogout: () => void;
 };
 
+const PROFILE_AVATAR_OPTIONS: Array<{ id: string; emoji: string; label: string; gradient: string }> = [
+  { id: 'shuttle-pro', emoji: '🏸', label: 'Shuttle Pro', gradient: 'linear-gradient(135deg,#0f766e,#14b8a6)' },
+  { id: 'smash-star', emoji: '💥', label: 'Smash Star', gradient: 'linear-gradient(135deg,#7c3aed,#a78bfa)' },
+  { id: 'trophy-chaser', emoji: '🏆', label: 'Trophy Chaser', gradient: 'linear-gradient(135deg,#d97706,#f59e0b)' },
+  { id: 'rally-ace', emoji: '🎯', label: 'Rally Ace', gradient: 'linear-gradient(135deg,#0f766e,#22c55e)' },
+  { id: 'lightning-shot', emoji: '⚡', label: 'Lightning Shot', gradient: 'linear-gradient(135deg,#be123c,#f43f5e)' },
+  { id: 'phoenix-player', emoji: '🔥', label: 'Phoenix Player', gradient: 'linear-gradient(135deg,#b45309,#f97316)' },
+];
+
 export function LeaderboardView(props: Props) {
   const {
     profile,
@@ -165,6 +174,8 @@ export function LeaderboardView(props: Props) {
   const [tab, setTab] = useState<TabKey>('home');
   const [profileTitle, setProfileTitle] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string>(PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro');
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [createSeasonOpen, setCreateSeasonOpen] = useState(false);
   const [createSeasonName, setCreateSeasonName] = useState('');
@@ -194,6 +205,42 @@ export function LeaderboardView(props: Props) {
       : profileStats.winPct >= 50
         ? { label: 'Rally Pro', emoji: '🔥' }
         : { label: 'In Training', emoji: '🎯' };
+  const selectedAvatar = PROFILE_AVATAR_OPTIONS.find((option) => option.id === selectedAvatarId) ?? PROFILE_AVATAR_OPTIONS[0];
+  const avatarStorageKey = profile?.email ? `leagueos.profile.avatar.${profile.email.toLowerCase()}` : null;
+
+  useEffect(() => {
+    if (!avatarStorageKey || typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(avatarStorageKey);
+      if (!raw) {
+        setAvatarPreview(null);
+        setSelectedAvatarId(PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro');
+        return;
+      }
+      const parsed = JSON.parse(raw) as { avatarPreview?: string | null; selectedAvatarId?: string | null };
+      setAvatarPreview(parsed.avatarPreview ?? null);
+      const nextId = parsed.selectedAvatarId ?? PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro';
+      setSelectedAvatarId(PROFILE_AVATAR_OPTIONS.some((option) => option.id === nextId) ? nextId : (PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro'));
+    } catch {
+      setAvatarPreview(null);
+      setSelectedAvatarId(PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro');
+    }
+  }, [avatarStorageKey]);
+
+  useEffect(() => {
+    if (!avatarStorageKey || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        avatarStorageKey,
+        JSON.stringify({
+          avatarPreview,
+          selectedAvatarId,
+        }),
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [avatarStorageKey, avatarPreview, selectedAvatarId]);
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>
@@ -375,19 +422,22 @@ export function LeaderboardView(props: Props) {
                   width: 88,
                   height: 88,
                   borderRadius: '50%',
-                  background: avatarPreview ? '#e2e8f0' : 'linear-gradient(135deg,#0f766e,#14b8a6)',
+                  background: avatarPreview ? '#e2e8f0' : selectedAvatar.gradient,
                   border: '3px solid #fff',
                   position: 'relative',
                   overflow: 'hidden',
                   display: 'grid',
                   placeItems: 'center',
                   color: '#fff',
+                  cursor: 'pointer',
                 }}
+                onClick={() => setAvatarPickerOpen(true)}
+                title="Choose avatar"
               >
                 {avatarPreview ? <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 {!avatarPreview ? (
                   <div style={{ display: 'grid', placeItems: 'center', lineHeight: 1 }}>
-                    <div style={{ fontSize: 22 }}>🏸</div>
+                    <div style={{ fontSize: 22 }}>{selectedAvatar.emoji}</div>
                     <div style={{ fontSize: 16, fontWeight: 800 }}>{profileInitials || 'P'}</div>
                   </div>
                 ) : null}
@@ -400,16 +450,22 @@ export function LeaderboardView(props: Props) {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     const reader = new FileReader();
-                    reader.onload = () => setAvatarPreview(typeof reader.result === 'string' ? reader.result : null);
+                    reader.onload = () => {
+                      setAvatarPreview(typeof reader.result === 'string' ? reader.result : null);
+                      setAvatarPickerOpen(false);
+                    };
                     reader.readAsDataURL(file);
                   }}
                 />
                 <button
                   style={{ position: 'absolute', right: -2, bottom: -2, border: 0, borderRadius: '50%', width: 28, height: 28, background: '#fff', boxShadow: '0 4px 10px rgba(0,0,0,.16)', cursor: 'pointer' }}
-                  onClick={() => avatarInputRef.current?.click()}
-                  aria-label="Change profile photo"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAvatarPickerOpen(true);
+                  }}
+                  aria-label="Change avatar"
                 >
-                  📷
+                  ✨
                 </button>
               </div>
               <div style={{ marginTop: 10, fontSize: 28, fontWeight: 700 }}>
@@ -444,6 +500,56 @@ export function LeaderboardView(props: Props) {
               ) : null}
             </div>
           </header>
+
+          {avatarPickerOpen ? (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
+              <div style={{ width: 'min(560px, 100%)', background: '#fff', borderRadius: 16, border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(15,23,42,.3)', padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Choose Your Avatar</h3>
+                  <button style={outlineBtn} onClick={() => setAvatarPickerOpen(false)}>Close</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 10 }}>
+                  {PROFILE_AVATAR_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      style={{
+                        border: option.id === selectedAvatarId && !avatarPreview ? '2px solid #0f766e' : '1px solid #dbe3ef',
+                        borderRadius: 12,
+                        background: option.gradient,
+                        color: '#fff',
+                        padding: '10px 8px',
+                        display: 'grid',
+                        placeItems: 'center',
+                        gap: 4,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        setSelectedAvatarId(option.id);
+                        setAvatarPreview(null);
+                        setAvatarPickerOpen(false);
+                      }}
+                    >
+                      <span style={{ fontSize: 24 }}>{option.emoji}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button style={outlineBtn} onClick={() => avatarInputRef.current?.click()}>Upload Photo</button>
+                  {avatarPreview ? (
+                    <button
+                      style={outlineBtn}
+                      onClick={() => {
+                        setAvatarPreview(null);
+                      }}
+                    >
+                      Remove Photo
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <section style={{ maxWidth: 1100, margin: '-12px auto 0', padding: '0 16px 16px' }}>
             <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.06)', padding: 16 }}>
