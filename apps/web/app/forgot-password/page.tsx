@@ -11,6 +11,8 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [resetLink, setResetLink] = useState<string | null>(null);
+  const [mailError, setMailError] = useState<string | null>(null);
 
   return (
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 20, background: '#f8fafc' }}>
@@ -26,9 +28,13 @@ export default function ForgotPasswordPage() {
           disabled={loading || !email.trim()}
           onClick={async () => {
             setLoading(true);
+            setResetLink(null);
+            setMailError(null);
             try {
               const res = await client.forgotPassword(email.trim());
               setMessage(res.message);
+              if (res.reset_link) setResetLink(res.reset_link);
+              if (res.email_send_error) setMailError(res.email_send_error);
             } catch {
               setMessage('If the account exists, a reset email has been sent.');
             } finally {
@@ -39,6 +45,13 @@ export default function ForgotPasswordPage() {
           {loading ? 'Sending...' : 'Send Reset Link'}
         </button>
         {message ? <div style={{ fontSize: 13, color: '#0f766e' }}>{message}</div> : null}
+        {resetLink ? (
+          <div style={{ fontSize: 13, color: '#334155', display: 'grid', gap: 4 }}>
+            <span>Local reset link:</span>
+            <a href={resetLink} style={{ color: '#0d9488', wordBreak: 'break-all' }}>{resetLink}</a>
+          </div>
+        ) : null}
+        {mailError ? <div style={{ fontSize: 12, color: '#92400e' }}>Email delivery warning: {mailError}</div> : null}
         <Link href="/" style={{ color: '#0d9488', fontSize: 13, textDecoration: 'none' }}>Back to Login</Link>
       </section>
     </main>

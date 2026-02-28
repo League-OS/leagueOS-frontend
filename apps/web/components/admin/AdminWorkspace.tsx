@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
@@ -52,6 +53,10 @@ type AddMatchPayload = {
 
 function getMessage(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message;
+  if (typeof e === 'object' && e !== null && 'issues' in e) {
+    const issues = (e as { issues?: Array<{ message?: string }> }).issues;
+    if (Array.isArray(issues) && issues.length) return issues[0]?.message || fallback;
+  }
   if (e instanceof Error) return e.message;
   return fallback;
 }
@@ -79,8 +84,18 @@ function toLocalDateInputValue(value?: string | null): string {
   return `${y}-${m}-${day}`;
 }
 
+function generateTempPassword(length = 12): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `Temp@${out}`;
+}
+
 export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const client = useMemo(() => new LeagueOsApiClient({ apiBaseUrl: API_BASE }), []);
+  const router = useRouter();
   const [auth, setAuth] = useState<AuthState | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -197,6 +212,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   useEffect(() => {
     setHydrated(true);
     try {
+      const flash = sessionStorage.getItem('leagueos.admin.flash.error');
+      if (flash) {
+        setError(flash);
+        sessionStorage.removeItem('leagueos.admin.flash.error');
+      }
       const params = new URLSearchParams(window.location.search);
       const inviteEmail = (params.get('email') || '').trim();
       if (inviteEmail) setLoginEmail(inviteEmail);
@@ -247,6 +267,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setLoading(true);
     setError(null);
     try {
+      let effectiveToken = token;
       const me = await client.profile(token);
       setProfile(me);
       const availableClubs =
@@ -258,8 +279,15 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       const activeClubId = availableClubs.find((c) => c.id === clubId)?.id ?? availableClubs[0]?.id ?? clubId;
       setSelectedClubId(activeClubId);
 
+      // Keep global-admin token scoped to selected club so club-scoped routes work from Users modal.
+      if (me.role === 'GLOBAL_ADMIN' && activeClubId > 0 && clubId !== activeClubId) {
+        const scoped = await client.switchClub(token, activeClubId);
+        effectiveToken = scoped.token;
+        setAuth({ token: scoped.token, clubId: activeClubId });
+      }
+
       if (me.role === 'GLOBAL_ADMIN') {
-        const usersList = await client.adminUsers(token).catch(() => [] as AdminUser[]);
+        const usersList = await client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]);
         setAdminUsers(usersList);
         setClubUsers([]);
         setPlayers([]);
@@ -324,6 +352,17 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         setSeasonLeaderboardSession(null);
       }
     } catch (e) {
+      if (page === 'users' && token) {
+        const msg = 'Users page is currently unavailable. Redirected to dashboard.';
+        setError(msg);
+        try {
+          sessionStorage.setItem('leagueos.admin.flash.error', msg);
+        } catch {
+          // no-op
+        }
+        router.replace('/admin');
+        return;
+      }
       setProfile(null);
       setAuth(null);
       setClubs([]);
@@ -346,11 +385,29 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   }
 
   async function doLogin() {
+    const email = loginEmail.trim();
+    const password = loginPassword;
+    if (!email) {
+      setError('Email is required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!password) {
+      setError('Password is required.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     setLoading(true);
     setError(null);
     setSuccess(null);
     try {
-      const res = await client.login({ email: loginEmail, password: loginPassword });
+      const res = await client.login({ email, password });
       const me = await client.profile(res.token);
       const nextRole = toAdminEffectiveRole(me.role, me.club_role);
       if (!canAccessAdmin(nextRole)) {
@@ -1312,7 +1369,13 @@ function UsersPanel(props: {
                 const memberships = u.memberships ?? [];
                 const clubMembership = memberships.find((m) => m.club_id === selectedClubId);
                 return [
-                  <a key={`email-${u.id}`} href="#" style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{u.email}</a>,
+                  <button
+                    key={`email-${u.id}`}
+                    style={{ ...outlineBtn, padding: 0, border: 'none', background: 'transparent', color: '#0d9488', fontWeight: 700, cursor: 'pointer' }}
+                    onClick={() => void openDetail(u.id)}
+                  >
+                    {u.email}
+                  </button>,
                   u.full_name || u.display_name || '-',
                   clubMembership?.role || '-',
                   u.is_active ? 'Enabled' : 'Disabled',
@@ -1385,7 +1448,7 @@ function UsersPanel(props: {
         </div>
       ) : null}
 
-      {!isGlobalAdmin && showUserDetailModal ? (
+      {showUserDetailModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: '100%', maxWidth: 760, background: '#fff', borderRadius: 16, border: '1px solid #cbd5e1', boxShadow: '0 20px 50px rgba(15,23,42,.25)', padding: 16, display: 'grid', gap: 10 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>User Information</div>
@@ -1453,6 +1516,26 @@ function UsersPanel(props: {
               >
                 Change Password
               </button>
+              {isGlobalAdmin ? (
+                <button
+                  style={outlineBtn}
+                  disabled={!selectedUserId || detailLoading}
+                  onClick={async () => {
+                    if (!selectedUserId) return;
+                    const tempPassword = generateTempPassword();
+                    try {
+                      setDetailError(null);
+                      await onResetClubUserPassword(selectedUserId, tempPassword, tempPassword);
+                      setPasswordResetNotice({ email: detailEmail.trim(), password: tempPassword });
+                      setShowUserDetailModal(false);
+                    } catch (e) {
+                      setDetailError(getMessage(e, 'Failed to reset password.'));
+                    }
+                  }}
+                >
+                  Reset to Default
+                </button>
+              ) : null}
               <button
                 style={primaryBtn}
                 disabled={!selectedUserId || !detailName.trim() || !detailEmail.trim() || detailLoading}

@@ -127,8 +127,8 @@ export class LeagueOsApiClient {
     return authResponseSchema.parse(data);
   }
 
-  async forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
-    return this.request<{ ok: boolean; message: string }>('/auth/forgot-password', {
+  async forgotPassword(email: string): Promise<{ ok: boolean; message: string; reset_link?: string; email_send_error?: string | null }> {
+    return this.request<{ ok: boolean; message: string; reset_link?: string; email_send_error?: string | null }>('/auth/forgot-password', {
       method: 'POST',
       body: { email },
     });
