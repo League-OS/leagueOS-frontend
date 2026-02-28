@@ -661,6 +661,15 @@ export class LeagueOsApiClient {
     return data.map((d) => gameSchema.parse(d));
   }
 
+  async deleteGame(token: string, clubId: number, gameId: number): Promise<{ ok: boolean; id: number }> {
+    return this.request<{ ok: boolean; id: number }>(`/games/${gameId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
   async gameParticipants(token: string, clubId: number, gameId: number): Promise<GameParticipant[]> {
     const data = await this.request<unknown[]>(`/games/${gameId}/participants`, {
       token,

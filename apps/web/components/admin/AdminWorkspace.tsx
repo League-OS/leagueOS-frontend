@@ -1033,6 +1033,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setSuccess('Session reverted.');
               await refresh();
             }}
+            onDeleteMatch={async (gameId) => {
+              if (!auth || !selectedSession) return;
+              await client.deleteGame(auth.token, selectedClubId, gameId);
+              setSuccess('Match deleted.');
+              await refresh();
+            }}
             onStatusChange={async (nextStatus) => {
               if (!auth || !selectedSession) return;
               if (nextStatus === selectedSession.status) return;
@@ -2234,13 +2240,17 @@ function SessionDetailPanel(props: {
   onOpen: () => Promise<void>;
   onFinalize: () => Promise<void>;
   onRevert: () => Promise<void>;
+  onDeleteMatch: (gameId: number) => Promise<void>;
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onStatusChange } = props;
+  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onDeleteMatch, onStatusChange } = props;
   const [statusSaving, setStatusSaving] = useState(false);
   const [showAddMatchModal, setShowAddMatchModal] = useState(false);
   const [addMatchBusy, setAddMatchBusy] = useState(false);
   const [addMatchError, setAddMatchError] = useState<string | null>(null);
+  const [deleteGameTarget, setDeleteGameTarget] = useState<Game | null>(null);
+  const [deleteGameBusy, setDeleteGameBusy] = useState(false);
+  const [deleteGameError, setDeleteGameError] = useState<string | null>(null);
   const [courtId, setCourtId] = useState<number | null>(null);
   const [startTime, setStartTime] = useState('19:00');
   const [scoreA, setScoreA] = useState(21);
@@ -2412,7 +2422,7 @@ function SessionDetailPanel(props: {
         </button>
       }>
         <AdminTable
-          columns={['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Court', 'Start Time', 'Score A', 'Score B', 'Status']}
+          columns={['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Court', 'Start Time', 'Score A', 'Score B', 'Status', 'Actions']}
           rows={sessionMatches.map((g) => {
             const participants = participantsByGame[g.id] ?? [];
             const sideA = participants.filter((p) => p.side === 'A').map((p) => p.display_name);
@@ -2427,10 +2437,62 @@ function SessionDetailPanel(props: {
               g.score_a,
               g.score_b,
               'Created',
+              <button
+                key={`delete-game-${g.id}`}
+                style={outlineBtn}
+                disabled={session.status !== 'OPEN' && session.status !== 'CLOSED'}
+                onClick={() => {
+                  setDeleteGameError(null);
+                  setDeleteGameTarget(g);
+                }}
+              >
+                Delete
+              </button>,
             ];
           })}
         />
       </AdminCard>
+      {deleteGameTarget ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1001, padding: 16 }}>
+          <div style={{ width: 'min(520px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 10 }}>
+            <h3 style={{ margin: 0, color: '#0f172a' }}>Delete Match</h3>
+            <p style={{ margin: 0, color: '#334155' }}>
+              Delete this match from <strong>{session.location || `Session ${session.id}`}</strong>?
+            </p>
+            {deleteGameError ? <div style={adminAlertError}>{deleteGameError}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                style={outlineBtn}
+                disabled={deleteGameBusy}
+                onClick={() => {
+                  setDeleteGameTarget(null);
+                  setDeleteGameError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                style={{ ...primaryBtn, background: '#dc2626' }}
+                disabled={deleteGameBusy}
+                onClick={async () => {
+                  try {
+                    setDeleteGameBusy(true);
+                    await onDeleteMatch(deleteGameTarget.id);
+                    setDeleteGameTarget(null);
+                    setDeleteGameError(null);
+                  } catch (e) {
+                    setDeleteGameError(getMessage(e, 'Failed to delete match.'));
+                  } finally {
+                    setDeleteGameBusy(false);
+                  }
+                }}
+              >
+                {deleteGameBusy ? 'Deleting...' : 'Delete Match'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showAddMatchModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: 'min(880px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>

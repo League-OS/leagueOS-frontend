@@ -79,6 +79,17 @@ export function validateAddGameInput(args: {
   if (args.scoreA === args.scoreB) {
     return 'Draw is not allowed. Scores must differ.';
   }
+  const winner = Math.max(args.scoreA, args.scoreB);
+  const loser = Math.min(args.scoreA, args.scoreB);
+  if (winner > 30) {
+    return 'Maximum score allowed is 30.';
+  }
+  if (winner < 21) {
+    return 'Winner must score at least 21 points.';
+  }
+  if (winner < 30 && winner - loser < 2) {
+    return 'Winner must lead by at least 2 points unless winning at 30.';
+  }
 
   const ids = [...args.sideAPlayerIds, ...args.sideBPlayerIds];
   if (ids.some((id) => !id)) {

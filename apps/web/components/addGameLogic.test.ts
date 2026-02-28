@@ -82,4 +82,26 @@ test('validateAddGameInput enforces required fields and uniqueness', () => {
     startTime: '19:00',
   });
   assert.match(duplicatePlayers ?? '', /unique/i);
+
+  const invalidDiff = validateAddGameInput({
+    courtId: 3,
+    scoreA: 22,
+    scoreB: 21,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.match(invalidDiff ?? '', /2 points/i);
+
+  const overMax = validateAddGameInput({
+    courtId: 3,
+    scoreA: 31,
+    scoreB: 29,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.match(overMax ?? '', /Maximum score/i);
 });
