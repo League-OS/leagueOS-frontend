@@ -172,6 +172,8 @@ export function LeaderboardView(props: Props) {
   } = props;
 
   const [tab, setTab] = useState<TabKey>('home');
+  const tabStorageGlobalKey = 'leagueos.player.selectedTab';
+  const tabStorageProfileKey = profile?.email ? `leagueos.player.selectedTab.${profile.email.toLowerCase()}` : null;
   const [profileTitle, setProfileTitle] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -240,6 +242,32 @@ export function LeaderboardView(props: Props) {
       // ignore storage errors
     }
   }, [avatarStorageKey, avatarPreview, selectedAvatarId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = tabStorageProfileKey
+        ? window.localStorage.getItem(tabStorageProfileKey) ?? window.localStorage.getItem(tabStorageGlobalKey)
+        : window.localStorage.getItem(tabStorageGlobalKey);
+      if (stored === 'home' || stored === 'leaderboard' || stored === 'profile') {
+        setTab(stored);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [tabStorageProfileKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(tabStorageGlobalKey, tab);
+      if (tabStorageProfileKey) {
+        window.localStorage.setItem(tabStorageProfileKey, tab);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [tab, tabStorageGlobalKey, tabStorageProfileKey]);
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>

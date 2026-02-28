@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { LeagueOsApiClient } from '@leagueos/api';
+import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
 import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import {
@@ -24,6 +24,28 @@ const ADMIN_STORAGE_AUTH = 'leagueos.admin.auth';
 const ADMIN_STORAGE_PROFILE = 'leagueos.admin.profile';
 const PLAYER_STORAGE_AUTH = 'leagueos.player.auth';
 const PLAYER_STORAGE_PROFILE = 'leagueos.player.profile';
+
+function parseStoredAuth(raw: string | null): AuthState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { token?: unknown; clubId?: unknown };
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
+    const clubIdValue =
+      typeof parsed.clubId === 'number'
+        ? parsed.clubId
+        : typeof parsed.clubId === 'string'
+          ? Number.parseInt(parsed.clubId, 10)
+          : Number.NaN;
+    if (!token || !Number.isInteger(clubIdValue)) return null;
+    return { token, clubId: clubIdValue };
+  } catch {
+    return null;
+  }
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
 const CLUB_NAME_FALLBACK: Record<number, string> = {
   1: 'Fraser Valley Badminton Club',
   2: 'BC Panthers Badminton Club',
@@ -426,16 +448,8 @@ export default function Page() {
 
     const restore = async () => {
       try {
-        const rawAuth = window.localStorage.getItem(PLAYER_STORAGE_AUTH);
-        if (!rawAuth) {
-          setHydratingAuth(false);
-          return;
-        }
-
-        const parsed = JSON.parse(rawAuth) as AuthState;
-        if (!parsed?.token || !Number.isInteger(parsed?.clubId)) {
-          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
-          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+        const parsed = parseStoredAuth(window.localStorage.getItem(PLAYER_STORAGE_AUTH));
+        if (!parsed) {
           setHydratingAuth(false);
           return;
         }
@@ -453,11 +467,13 @@ export default function Page() {
         }
 
         await loadDashboard(parsed.token, parsed.clubId);
-      } catch {
-        window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
-        window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
-        setAuth(null);
-        setProfile(null);
+      } catch (e) {
+        if (isUnauthorizedError(e)) {
+          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+          setAuth(null);
+          setProfile(null);
+        }
       } finally {
         setHydratingAuth(false);
       }
@@ -468,22 +484,22 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || hydratingAuth) return;
     if (!auth) {
       window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
       return;
     }
     window.localStorage.setItem(PLAYER_STORAGE_AUTH, JSON.stringify(auth));
-  }, [auth]);
+  }, [auth, hydratingAuth]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || hydratingAuth) return;
     if (!profile) {
       window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
       return;
     }
     window.localStorage.setItem(PLAYER_STORAGE_PROFILE, JSON.stringify(profile));
-  }, [profile]);
+  }, [profile, hydratingAuth]);
 
   async function handleLogin(args: { email: string; password: string }) {
     setLoading(true);
@@ -823,7 +839,21 @@ export default function Page() {
   }
 
   if (hydratingAuth) {
-    return <LoginView onLogin={handleLogin} error={null} loading={true} />;
+    return (
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#eef5ff',
+          color: '#0f172a',
+          fontWeight: 600,
+        }}
+      >
+        Restoring your session…
+      </main>
+    );
   }
 
   if (!auth) {
