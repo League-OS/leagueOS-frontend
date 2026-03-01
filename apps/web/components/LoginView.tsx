@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { SEEDED_USERS } from '@leagueos/config';
 
@@ -37,21 +36,12 @@ export function LoginView({ onLogin, error, loading }: Props) {
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a' }}>LeagueOS</div>
+          <img
+            src="/LeagueOS_Full_Logo.png"
+            alt="LeagueOS Logo"
+            style={{ width: 220, height: 'auto', display: 'inline-block' }}
+          />
           <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 14 }}>Sign in to view season leaderboard</p>
-        </div>
-
-        <div
-          style={{
-            borderRadius: 16,
-            background: 'linear-gradient(135deg, var(--teal-start), var(--teal-end))',
-            color: 'white',
-            padding: '14px 16px',
-            marginBottom: 16,
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>Welcome Back</h1>
-          <p style={{ margin: '6px 0 0', opacity: 0.95, fontSize: 14 }}>Sign in to LeagueOS</p>
         </div>
 
         <form
@@ -104,12 +94,6 @@ export function LoginView({ onLogin, error, loading }: Props) {
               </button>
             </div>
           </label>
-
-          <div style={{ textAlign: 'right', marginTop: -4 }}>
-            <Link href="/forgot-password" style={{ color: '#0d9488', fontSize: 13, textDecoration: 'none' }}>
-              Forgot Password?
-            </Link>
-          </div>
 
           {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 
