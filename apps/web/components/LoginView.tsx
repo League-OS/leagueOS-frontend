@@ -49,11 +49,11 @@ export function LoginView({
           boxShadow: '0 24px 50px rgba(2, 6, 23, 0.12)',
         }}
       >
-          <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
             <img
               src="/LeagueOS_Full_Logo.png"
               alt="LeagueOS Logo"
-              style={{ width: 220, height: 'auto', display: 'inline-block' }}
+              style={{ width: 260, maxWidth: '90%', height: 'auto', display: 'inline-block' }}
             />
             <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 14 }}>{subtitle}</p>
             {infoMessage ? <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 12 }}>{infoMessage}</p> : null}
