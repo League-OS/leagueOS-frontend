@@ -2269,6 +2269,7 @@ function SessionDetailPanel(props: {
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
 }) {
   const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onDeleteMatch, onEditMatch, onStatusChange } = props;
+  type MatchSortKey = 'serial' | 'player1' | 'player2' | 'player3' | 'player4' | 'court' | 'startTime' | 'scoreA' | 'scoreB' | 'status';
   const [statusSaving, setStatusSaving] = useState(false);
   const [showAddMatchModal, setShowAddMatchModal] = useState(false);
   const [addMatchBusy, setAddMatchBusy] = useState(false);
@@ -2299,6 +2300,10 @@ function SessionDetailPanel(props: {
     message: string;
     payload: AddMatchPayload;
   }>(null);
+  const [matchSort, setMatchSort] = useState<{ key: MatchSortKey; direction: 'asc' | 'desc' }>({
+    key: 'serial',
+    direction: 'asc',
+  });
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   const canManageMatches = session?.status === 'OPEN' || session?.status === 'CLOSED';
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
@@ -2333,6 +2338,95 @@ function SessionDetailPanel(props: {
       return samePlayers && sameScore;
     });
   };
+
+  const compareString = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  const compareNumber = (a: number, b: number) => a - b;
+  const toggleMatchSort = (key: MatchSortKey) => {
+    setMatchSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const matchRows = useMemo(() => {
+    const mapped = sessionMatches.map((g, idx) => {
+      const participants = participantsByGame[g.id] ?? [];
+      const sideA = participants.filter((p) => p.side === 'A').map((p) => p.display_name);
+      const sideB = participants.filter((p) => p.side === 'B').map((p) => p.display_name);
+      const startTs = Date.parse(g.start_time);
+      return {
+        game: g,
+        serial: idx + 1,
+        player1: sideA[0] || '-',
+        player2: sideA[1] || '-',
+        player3: sideB[0] || '-',
+        player4: sideB[1] || '-',
+        court: courtById.get(g.court_id) || `Court ${g.court_id}`,
+        startTimeLabel: fmtDateTime(g.start_time),
+        startTimeTs: Number.isNaN(startTs) ? Number.NEGATIVE_INFINITY : startTs,
+        scoreA: g.score_a,
+        scoreB: g.score_b,
+        status: 'Created',
+      };
+    });
+
+    mapped.sort((a, b) => {
+      let result = 0;
+      switch (matchSort.key) {
+        case 'serial':
+          result = compareNumber(a.serial, b.serial);
+          break;
+        case 'player1':
+          result = compareString(a.player1, b.player1);
+          break;
+        case 'player2':
+          result = compareString(a.player2, b.player2);
+          break;
+        case 'player3':
+          result = compareString(a.player3, b.player3);
+          break;
+        case 'player4':
+          result = compareString(a.player4, b.player4);
+          break;
+        case 'court':
+          result = compareString(a.court, b.court);
+          break;
+        case 'startTime':
+          result = compareNumber(a.startTimeTs, b.startTimeTs);
+          break;
+        case 'scoreA':
+          result = compareNumber(a.scoreA, b.scoreA);
+          break;
+        case 'scoreB':
+          result = compareNumber(a.scoreB, b.scoreB);
+          break;
+        case 'status':
+          result = compareString(a.status, b.status);
+          break;
+      }
+      return matchSort.direction === 'asc' ? result : -result;
+    });
+
+    return mapped;
+  }, [courtById, matchSort.direction, matchSort.key, participantsByGame, sessionMatches]);
+
+  const sortArrow = (key: MatchSortKey) => {
+    if (matchSort.key !== key) return '↕';
+    return matchSort.direction === 'asc' ? '↑' : '↓';
+  };
+  const sortableHeader = (label: string, key: MatchSortKey) => (
+    <button
+      type="button"
+      onClick={() => toggleMatchSort(key)}
+      style={{ border: 0, background: 'transparent', padding: 0, fontWeight: 700, color: 'inherit', cursor: 'pointer' }}
+      aria-label={`Sort by ${label}. Current order ${matchSort.key === key ? matchSort.direction : 'none'}.`}
+      title={`Sort by ${label}`}
+    >
+      {label} {sortArrow(key)}
+    </button>
+  );
 
   useEffect(() => {
     setA1(players[0]?.id ?? 0);
@@ -2464,7 +2558,7 @@ function SessionDetailPanel(props: {
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>
       </AdminCard>
-      <AdminCard title="Matches in Session" action={
+      <AdminCard title={`Matches in Session (${sessionMatches.length})`} action={
         <button
           style={outlineBtn}
           disabled={!canManageMatches}
@@ -2483,38 +2577,55 @@ function SessionDetailPanel(props: {
           </div>
         ) : null}
         <AdminTable
-          columns={['Player 1', 'Player 2', 'Player 3', 'Player 4', 'Court', 'Start Time', 'Score A', 'Score B', 'Status', 'Actions']}
-          rows={sessionMatches.map((g) => {
-            const participants = participantsByGame[g.id] ?? [];
-            const sideA = participants.filter((p) => p.side === 'A').map((p) => p.display_name);
-            const sideB = participants.filter((p) => p.side === 'B').map((p) => p.display_name);
+          columns={[
+            sortableHeader('S/N', 'serial'),
+            sortableHeader('Player 1', 'player1'),
+            sortableHeader('Player 2', 'player2'),
+            sortableHeader('Player 3', 'player3'),
+            sortableHeader('Player 4', 'player4'),
+            sortableHeader('Court', 'court'),
+            sortableHeader('Start Time', 'startTime'),
+            sortableHeader('Score A', 'scoreA'),
+            sortableHeader('Score B', 'scoreB'),
+            sortableHeader('Status', 'status'),
+            'Actions',
+          ]}
+          rows={matchRows.map((row) => {
+            const g = row.game;
             return [
-              sideA[0] || '-',
-              sideA[1] || '-',
-              sideB[0] || '-',
-              sideB[1] || '-',
-              courtById.get(g.court_id) || `Court ${g.court_id}`,
-              fmtDateTime(g.start_time),
-              g.score_a,
-              g.score_b,
-              'Created',
+              row.serial,
+              row.player1,
+              row.player2,
+              row.player3,
+              row.player4,
+              row.court,
+              row.startTimeLabel,
+              row.scoreA,
+              row.scoreB,
+              row.status,
               <div key={`game-actions-${g.id}`} style={{ display: 'flex', gap: 6 }}>
                 {canManageMatches ? (
                   <>
                     <button
-                      style={outlineBtn}
+                      type="button"
+                      style={{ ...outlineBtn, minWidth: 34, padding: '8px 10px' }}
                       onClick={() => openEditModal(g)}
+                      title="Edit match"
+                      aria-label={`Edit match ${row.serial}`}
                     >
-                      Edit
+                      ✎
                     </button>
                     <button
-                      style={outlineBtn}
+                      type="button"
+                      style={{ ...outlineBtn, minWidth: 34, padding: '8px 10px', color: '#b91c1c', borderColor: '#fca5a5' }}
                       onClick={() => {
                         setDeleteGameError(null);
                         setDeleteGameTarget(g);
                       }}
+                      title="Delete match"
+                      aria-label={`Delete match ${row.serial}`}
                     >
-                      Delete
+                      🗑
                     </button>
                   </>
                 ) : (

@@ -159,7 +159,7 @@ export function AdminTable({
   columns,
   rows,
 }: {
-  columns: string[];
+  columns: ReactNode[];
   rows: Array<Array<ReactNode>>;
 }) {
   return (
@@ -167,8 +167,8 @@ export function AdminTable({
       <table style={table}>
         <thead>
           <tr>
-            {columns.map((column) => (
-              <th key={column} style={th}>{column}</th>
+            {columns.map((column, idx) => (
+              <th key={`col-${idx}`} style={th}>{column}</th>
             ))}
           </tr>
         </thead>
