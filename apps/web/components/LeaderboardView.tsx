@@ -174,7 +174,6 @@ export function LeaderboardView(props: Props) {
   const [tab, setTab] = useState<TabKey>('home');
   const tabStorageGlobalKey = 'leagueos.player.selectedTab';
   const tabStorageProfileKey = profile?.email ? `leagueos.player.selectedTab.${profile.email.toLowerCase()}` : null;
-  const [profileTitle, setProfileTitle] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>(PROFILE_AVATAR_OPTIONS[0]?.id ?? 'shuttle-pro');
@@ -186,7 +185,8 @@ export function LeaderboardView(props: Props) {
   const [createSeasonBusy, setCreateSeasonBusy] = useState(false);
   const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
   const [tooltipVisible, setTooltipVisible] = useState(false);
-  const profileDisplayName = profileTitle || profile?.display_name || profile?.full_name || 'LeagueOS User';
+  const [leaderboardPlayerPreview, setLeaderboardPlayerPreview] = useState<{ row: LeaderboardEntry; rank: number } | null>(null);
+  const profileDisplayName = profile?.display_name || profile?.full_name || 'LeagueOS User';
   const profileInitials = profileDisplayName
     .split(' ')
     .map((part) => part.trim())
@@ -275,6 +275,10 @@ export function LeaderboardView(props: Props) {
       {tab === 'home' ? (
         <HomeScreen
           profile={profile}
+          avatarPreview={avatarPreview}
+          avatarGradient={selectedAvatar.gradient}
+          avatarEmoji={selectedAvatar.emoji}
+          profileInitials={profileInitials}
           clubs={clubs}
           recordClubId={recordClubId}
           selectedSession={recordSession}
@@ -297,7 +301,6 @@ export function LeaderboardView(props: Props) {
           onGoHome={() => setTab('home')}
           onGoLeaderboard={() => setTab('leaderboard')}
           onGoProfile={() => {
-            setProfileTitle(null);
             setTab('profile');
           }}
           onLogout={onLogout}
@@ -415,13 +418,58 @@ export function LeaderboardView(props: Props) {
                     <div key={row.player_id} style={leaderboardRow}>
                       <div style={{ textAlign: 'center' }}>{rankBadge(i + 1)}</div>
                       <button
-                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600 }}
+                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
                         onClick={() => {
-                          setProfileTitle(row.display_name);
-                          setTab('profile');
+                          setLeaderboardPlayerPreview({ row, rank: i + 1 });
                         }}
                       >
-                        {row.display_name}
+                        {(() => {
+                          const rowName = (row.display_name || '').trim();
+                          const rowNameLower = rowName.toLowerCase();
+                          const currentNames = [
+                            profileDisplayName,
+                            profile?.display_name || '',
+                            profile?.full_name || '',
+                          ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+                          const isCurrentProfileRow = currentNames.includes(rowNameLower);
+                          const initials = rowName
+                            .split(' ')
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase() || '')
+                            .join('') || 'P';
+                          const hash = rowNameLower.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+                          const fallbackBg = `hsl(${hash % 360} 62% 38%)`;
+                          return (
+                            <>
+                              <span
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: '50%',
+                                  overflow: 'hidden',
+                                  display: 'grid',
+                                  placeItems: 'center',
+                                  background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
+                                  color: '#fff',
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  lineHeight: 1,
+                                  border: '1px solid rgba(255,255,255,0.75)',
+                                  boxShadow: '0 0 0 1px rgba(148,163,184,.35)',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {isCurrentProfileRow && avatarPreview ? (
+                                  <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  initials
+                                )}
+                              </span>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
+                            </>
+                          );
+                        })()}
                       </button>
                       <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
                         {row.season_elo_delta >= 0 ? '+' : ''}
@@ -437,6 +485,100 @@ export function LeaderboardView(props: Props) {
             </div>
           </section>
         </section>
+      ) : null}
+
+      {leaderboardPlayerPreview ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={() => setLeaderboardPlayerPreview(null)}
+        >
+          <div
+            style={{
+              width: 'min(460px, 100%)',
+              background: '#fff',
+              borderRadius: 16,
+              border: '1px solid var(--border)',
+              boxShadow: '0 20px 60px rgba(15,23,42,.3)',
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 20, color: '#0f172a' }}>Player Profile</h3>
+              <button style={outlineBtn} onClick={() => setLeaderboardPlayerPreview(null)}>Close</button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              {(() => {
+                const rowName = (leaderboardPlayerPreview.row.display_name || '').trim();
+                const rowNameLower = rowName.toLowerCase();
+                const currentNames = [
+                  profileDisplayName,
+                  profile?.display_name || '',
+                  profile?.full_name || '',
+                ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+                const isCurrentProfileRow = currentNames.includes(rowNameLower);
+                const initials = rowName
+                  .split(' ')
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((part) => part[0]?.toUpperCase() || '')
+                  .join('') || 'P';
+                const hash = rowNameLower.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+                const fallbackBg = `hsl(${hash % 360} 62% 38%)`;
+
+                return (
+                  <span
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
+                      color: '#fff',
+                      fontSize: 18,
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      border: '2px solid rgba(255,255,255,0.9)',
+                      boxShadow: '0 0 0 1px rgba(148,163,184,.35)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isCurrentProfileRow && avatarPreview ? (
+                      <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      initials
+                    )}
+                  </span>
+                );
+              })()}
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>{leaderboardPlayerPreview.row.display_name}</div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>Rank #{leaderboardPlayerPreview.rank}</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
+              <StatLine title="Global ELO" value={String(leaderboardPlayerPreview.row.global_elo_score ?? 1000)} />
+              <StatLine
+                title="Delta"
+                value={`${leaderboardPlayerPreview.row.season_elo_delta >= 0 ? '+' : ''}${leaderboardPlayerPreview.row.season_elo_delta}`}
+              />
+              <StatLine title="Played" value={String(leaderboardPlayerPreview.row.matches_played ?? 0)} />
+              <StatLine title="Won" value={String(leaderboardPlayerPreview.row.matches_won)} />
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {tab === 'profile' ? (
@@ -603,7 +745,7 @@ export function LeaderboardView(props: Props) {
         </section>
       ) : null}
 
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', maxWidth: 1100, margin: '0 auto' }}>
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', maxWidth: 1100, margin: '0 auto', zIndex: 90 }}>
         <TabButton active={tab === 'home'} onClick={() => setTab('home')} icon="⌂" label="Home" />
         <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon="🏆" label="Leaderboard" />
         <TabButton active={tab === 'profile'} onClick={() => setTab('profile')} icon="◉" label="Profile" />
@@ -714,6 +856,10 @@ export function LeaderboardView(props: Props) {
 
 function HomeScreen({
   profile,
+  avatarPreview,
+  avatarGradient,
+  avatarEmoji,
+  profileInitials,
   clubs,
   recordClubId,
   selectedSession,
@@ -739,6 +885,10 @@ function HomeScreen({
   onLogout,
 }: {
   profile: Profile | null;
+  avatarPreview: string | null;
+  avatarGradient: string;
+  avatarEmoji: string;
+  profileInitials: string;
   clubs: Club[];
   recordClubId: number;
   selectedSession: Session | null;
@@ -793,7 +943,34 @@ function HomeScreen({
               />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', background: '#0f766e', color: '#fff', fontWeight: 600 }}>{(profile?.display_name || 'P')[0].toUpperCase()}</span>
+            <button
+              onClick={onGoProfile}
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                background: avatarPreview ? '#e2e8f0' : avatarGradient,
+                border: '2px solid #fff',
+                boxShadow: '0 0 0 1px var(--border)',
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'grid',
+                placeItems: 'center',
+                color: '#fff',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+              title="Open profile"
+              aria-label="Open profile"
+            >
+              {avatarPreview ? <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+              {!avatarPreview ? (
+                <div style={{ display: 'grid', placeItems: 'center', lineHeight: 1 }}>
+                  <div style={{ fontSize: 12 }}>{avatarEmoji}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>{profileInitials || 'P'}</div>
+                </div>
+              ) : null}
+            </button>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{profile?.display_name || profile?.email || 'player_one'}</span>
           </div>
         </div>
@@ -845,8 +1022,8 @@ function HomeScreen({
           <div
             style={{
               position: 'fixed',
-              right: 32,
-              bottom: 110,
+              right: 'max(24px, calc((100vw - 1100px) / 2 + 24px))',
+              bottom: 100,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -883,6 +1060,7 @@ function HomeScreen({
                 color: '#fff',
                 fontSize: 36,
                 fontWeight: 600,
+                lineHeight: 1,
                 boxShadow: '0 12px 30px rgba(14, 165, 233, 0.35)',
                 cursor: 'pointer',
                 display: 'flex',
