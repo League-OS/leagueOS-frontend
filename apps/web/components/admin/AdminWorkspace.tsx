@@ -7,6 +7,7 @@ import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
 import type { AdminUser, Club, ClubUser, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
+import { LoginView } from '../LoginView';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
 import {
   adminAlertError,
@@ -494,9 +495,21 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   if (!hydrated) {
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#eef2f7', padding: 24 }}>
-        <section style={{ width: '100%', maxWidth: 520, background: '#fff', border: '1px solid #dbe3ef', borderRadius: 18, padding: 20, boxShadow: '0 16px 30px rgba(15,23,42,.08)' }}>
-          <h1 style={{ margin: 0, fontSize: 28, color: '#0f172a' }}>LeagueOS Admin</h1>
-          <p style={{ margin: '8px 0 0', color: '#64748b' }}>Loading admin workspace...</p>
+        <section
+          style={{
+            width: '100%',
+            maxWidth: 520,
+            background: '#fff',
+            border: '1px solid #dbe3ef',
+            borderRadius: 18,
+            padding: 20,
+            boxShadow: '0 16px 30px rgba(15,23,42,.08)',
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <img src="/LeagueOS_Full_Logo.png" alt="LeagueOS logo" style={{ width: 220, marginBottom: 8 }} />
+            <p style={{ margin: '0', color: '#64748b' }}>Admin workspace for club operations.</p>
+          </div>
         </section>
       </main>
     );
@@ -505,9 +518,21 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   if (auth && !profile) {
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#eef2f7', padding: 24 }}>
-        <section style={{ width: '100%', maxWidth: 520, background: '#fff', border: '1px solid #dbe3ef', borderRadius: 18, padding: 20, boxShadow: '0 16px 30px rgba(15,23,42,.08)' }}>
-          <h1 style={{ margin: 0, fontSize: 28, color: '#0f172a' }}>LeagueOS Admin</h1>
-          <p style={{ margin: '8px 0 0', color: '#64748b' }}>Restoring your admin session...</p>
+        <section
+          style={{
+            width: '100%',
+            maxWidth: 520,
+            background: '#fff',
+            border: '1px solid #dbe3ef',
+            borderRadius: 18,
+            padding: 20,
+            boxShadow: '0 16px 30px rgba(15,23,42,.08)',
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <img src="/LeagueOS_Full_Logo.png" alt="LeagueOS logo" style={{ width: 220, marginBottom: 8 }} />
+            <p style={{ margin: '0 0 12px', color: '#64748b' }}>Admin workspace for club operations.</p>
+          </div>
         </section>
       </main>
     );
@@ -517,8 +542,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#eef2f7', padding: 24 }}>
         <section style={{ width: '100%', maxWidth: 520, background: '#fff', border: '1px solid #dbe3ef', borderRadius: 18, padding: 20, boxShadow: '0 16px 30px rgba(15,23,42,.08)' }}>
-          <h1 style={{ margin: 0, fontSize: 28, color: '#0f172a' }}>LeagueOS Admin</h1>
-          <p style={{ margin: '8px 0 14px', color: '#64748b' }}>Desktop-first admin workspace for club operations.</p>
+          <img src="/LeagueOS_Full_Logo.png" alt="LeagueOS logo" style={{ width: 260, marginBottom: 8 }} />
+          <p style={{ margin: '0 0 12px', color: '#64748b' }}>Admin workspace for club operations.</p>
           <div style={{ display: 'grid', gap: 10 }}>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>Email</span>

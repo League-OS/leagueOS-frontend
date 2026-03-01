@@ -185,6 +185,7 @@ export function LeaderboardView(props: Props) {
   const [createSeasonStartTime, setCreateSeasonStartTime] = useState('19:00');
   const [createSeasonBusy, setCreateSeasonBusy] = useState(false);
   const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const profileDisplayName = profileTitle || profile?.display_name || profile?.full_name || 'LeagueOS User';
   const profileInitials = profileDisplayName
     .split(' ')
@@ -769,40 +770,37 @@ function HomeScreen({
   onGoProfile: () => void;
   onLogout: () => void;
 }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const [homeMode, setHomeMode] = useState<HomeMode>('main');
   const [activeGame, setActiveGame] = useState<HomeGameRow | null>(null);
   const [activeUpcoming, setActiveUpcoming] = useState<UpcomingRow | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
     <section>
       <header style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '18px 16px 14px', position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>LeagueOS</div>
-            <div style={{ color: '#6b7280', fontSize: 13 }}>{profile?.display_name || profile?.email || 'Welcome'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <img
+                src="/LeagueOS_Small_Logo.png"
+                alt="LeagueOS menu"
+                style={{
+                  height: 32,
+                  width: 'auto',
+                  maxHeight: 32,
+                  opacity: 1,
+                  transform: 'scale(2.0)',
+                  transformOrigin: 'left center',
+                }}
+              />
           </div>
-          <button onClick={() => setMenuOpen((v) => !v)} style={outlineBtn}>☰</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', background: '#0f766e', color: '#fff', fontWeight: 600 }}>{(profile?.display_name || 'P')[0].toUpperCase()}</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{profile?.display_name || profile?.email || 'player_one'}</span>
+          </div>
         </div>
-        {menuOpen ? (
-          <div style={{ position: 'absolute', right: 16, top: 56, background: '#fff', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)', overflow: 'hidden', zIndex: 20, minWidth: 170 }}>
-            <button style={menuItemBtn} onClick={() => { setMenuOpen(false); onGoHome(); }}>Home</button>
-            <button style={menuItemBtn} onClick={() => { setMenuOpen(false); onGoLeaderboard(); }}>Leaderboard</button>
-            <button style={menuItemBtn} onClick={() => { setMenuOpen(false); onGoProfile(); }}>Profile</button>
-            <button style={{ ...menuItemBtn, color: '#dc2626' }} onClick={onLogout}>Logout</button>
-          </div>
-        ) : null}
       </header>
 
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
-        {canManageRecords ? (
-          <button
-            onClick={() => setHomeMode('addGame')}
-            style={{ width: '100%', border: 0, borderRadius: 18, background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))', color: '#fff', padding: '18px 14px', fontSize: 18, fontWeight: 700, boxShadow: '0 12px 28px rgba(20,184,166,.35)', cursor: 'pointer' }}
-          >
-            + Add Game
-          </button>
-        ) : null}
+        {/* Floating button shown below */}
 
         {homeMode === 'main' ? (
           <>
@@ -841,6 +839,60 @@ function HomeScreen({
               }))}
             />
           </>
+        ) : null}
+
+        {canManageRecords ? (
+          <div
+            style={{
+              position: 'fixed',
+              right: 32,
+              bottom: 110,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+              zIndex: 50,
+            }}
+            onMouseEnter={() => setTooltipVisible(true)}
+            onMouseLeave={() => setTooltipVisible(false)}
+          >
+            <span
+              style={{
+                background: 'rgba(15, 118, 110, 0.9)',
+                color: '#fff',
+                padding: '4px 10px',
+                borderRadius: 999,
+                fontSize: 13,
+                fontWeight: 600,
+                boxShadow: '0 6px 18px rgba(15, 118, 110, 0.3)',
+                opacity: tooltipVisible ? 1 : 0,
+                transition: 'opacity 0.2s ease',
+                transform: tooltipVisible ? 'translateY(-4px)' : 'translateY(0)',
+              }}
+            >
+              Add Game
+            </span>
+            <button
+              onClick={() => setHomeMode('addGame')}
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'linear-gradient(135deg, var(--teal-start), var(--teal-end))',
+                color: '#fff',
+                fontSize: 36,
+                fontWeight: 600,
+                boxShadow: '0 12px 30px rgba(14, 165, 233, 0.35)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              +
+            </button>
+          </div>
         ) : null}
 
         {homeMode === 'addGame' && canManageRecords ? (

@@ -7,11 +7,25 @@ type Props = {
   onLogin: (args: { email: string; password: string }) => Promise<void>;
   error: string | null;
   loading: boolean;
+  subtitle?: string;
+  buttonLabel?: string;
+  infoMessage?: string | null;
+  initialEmail?: string;
+  initialPassword?: string;
 };
 
-export function LoginView({ onLogin, error, loading }: Props) {
-  const [email, setEmail] = useState(SEEDED_USERS.clubAdmin.email);
-  const [password, setPassword] = useState(SEEDED_USERS.clubAdmin.password);
+export function LoginView({
+  onLogin,
+  error,
+  loading,
+  subtitle = 'Sign in to view season leaderboard',
+  buttonLabel = 'Sign In',
+  infoMessage = null,
+  initialEmail = SEEDED_USERS.clubAdmin.email,
+  initialPassword = SEEDED_USERS.clubAdmin.password,
+}: Props) {
+  const [email, setEmail] = useState(initialEmail);
+  const [password, setPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -35,14 +49,15 @@ export function LoginView({ onLogin, error, loading }: Props) {
           boxShadow: '0 24px 50px rgba(2, 6, 23, 0.12)',
         }}
       >
-        <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <img
-            src="/LeagueOS_Full_Logo.png"
-            alt="LeagueOS Logo"
-            style={{ width: 220, height: 'auto', display: 'inline-block' }}
-          />
-          <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 14 }}>Sign in to view season leaderboard</p>
-        </div>
+          <div style={{ textAlign: 'center', marginBottom: 18 }}>
+            <img
+              src="/LeagueOS_Full_Logo.png"
+              alt="LeagueOS Logo"
+              style={{ width: 220, height: 'auto', display: 'inline-block' }}
+            />
+            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 14 }}>{subtitle}</p>
+            {infoMessage ? <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 12 }}>{infoMessage}</p> : null}
+          </div>
 
         <form
           onSubmit={async (e) => {
@@ -113,7 +128,7 @@ export function LoginView({ onLogin, error, loading }: Props) {
               opacity: loading ? 0.85 : 1,
             }}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Signing in...' : buttonLabel}
           </button>
         </form>
       </section>
