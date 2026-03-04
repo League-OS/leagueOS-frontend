@@ -5,9 +5,9 @@ export const metadata: Metadata = {
   title: 'LeagueOS',
   description: 'Season leaderboard frontend for LeagueOS API',
   icons: {
-    icon: '/LeagueOS_Small_Logo.png',
-    shortcut: '/LeagueOS_Small_Logo.png',
-    apple: '/LeagueOS_Small_Logo.png',
+    icon: '/leagueos-mark.png',
+    shortcut: '/leagueos-mark.png',
+    apple: '/leagueos-mark.png',
   },
 };
 
