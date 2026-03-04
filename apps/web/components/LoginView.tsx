@@ -21,8 +21,8 @@ export function LoginView({
   subtitle = 'Sign in to view season leaderboard',
   buttonLabel = 'Sign In',
   infoMessage = null,
-  initialEmail = SEEDED_USERS.clubAdmin.email,
-  initialPassword = SEEDED_USERS.clubAdmin.password,
+  initialEmail = SEEDED_USERS?.clubAdmin?.email ?? '',
+  initialPassword = SEEDED_USERS?.clubAdmin?.password ?? '',
 }: Props) {
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState(initialPassword);
