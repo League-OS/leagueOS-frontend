@@ -18,6 +18,7 @@ import {
 } from '../components/LeaderboardView';
 import { LoginView } from '../components/LoginView';
 import type { AuthState } from '../components/types';
+import { formatSequentialFinalizeBlockedError } from '../components/lib/apiErrorMessages';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const ADMIN_STORAGE_AUTH = 'leagueos.admin.auth';
@@ -575,7 +576,11 @@ export default function Page() {
         `Session finalized. Games finalized: ${result.games_finalized}, Elo ledger rows: ${result.ledger_rows_written}.`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to finalize session.');
+      if (e instanceof ApiError && e.code === 'SEQUENTIAL_FINALIZE_BLOCKED') {
+        setError(formatSequentialFinalizeBlockedError(e));
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to finalize session.');
+      }
     }
   }
 
