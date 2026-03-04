@@ -188,6 +188,7 @@ export function LeaderboardView(props: Props) {
   const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [leaderboardPlayerPreview, setLeaderboardPlayerPreview] = useState<{ row: LeaderboardEntry; rank: number } | null>(null);
+  const [homeResetSignal, setHomeResetSignal] = useState(0);
   const profileDisplayName = profile?.display_name || profile?.full_name || 'LeagueOS User';
   const profileInitials = profileDisplayName
     .split(' ')
@@ -276,6 +277,7 @@ export function LeaderboardView(props: Props) {
     <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>
       {tab === 'home' ? (
         <HomeScreen
+          resetSignal={homeResetSignal}
           profile={profile}
           avatarPreview={avatarPreview}
           avatarGradient={selectedAvatar.gradient}
@@ -750,7 +752,15 @@ export function LeaderboardView(props: Props) {
       ) : null}
 
       <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', maxWidth: 1100, margin: '0 auto', zIndex: 90 }}>
-        <TabButton active={tab === 'home'} onClick={() => setTab('home')} icon="⌂" label="Home" />
+        <TabButton
+          active={tab === 'home'}
+          onClick={() => {
+            setTab('home');
+            setHomeResetSignal((prev) => prev + 1);
+          }}
+          icon="⌂"
+          label="Home"
+        />
         <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon="🏆" label="Leaderboard" />
         <TabButton active={tab === 'profile'} onClick={() => setTab('profile')} icon="◉" label="Profile" />
       </nav>
@@ -859,6 +869,7 @@ export function LeaderboardView(props: Props) {
 }
 
 function HomeScreen({
+  resetSignal,
   profile,
   avatarPreview,
   avatarGradient,
@@ -890,6 +901,7 @@ function HomeScreen({
   onGoProfile,
   onLogout,
 }: {
+  resetSignal: number;
   profile: Profile | null;
   avatarPreview: string | null;
   avatarGradient: string;
@@ -934,6 +946,13 @@ function HomeScreen({
   const [activeUpcoming, setActiveUpcoming] = useState<UpcomingRow | null>(null);
   const rawHomePlayerName = profile?.display_name || profile?.full_name || profile?.email || 'player_one';
   const homePlayerName = rawHomePlayerName.slice(0, 12);
+
+  useEffect(() => {
+    setHomeMode('main');
+    setActiveGame(null);
+    setActiveUpcoming(null);
+  }, [resetSignal]);
+
   return (
     <section>
       <header style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '18px 16px 14px', position: 'relative' }}>
