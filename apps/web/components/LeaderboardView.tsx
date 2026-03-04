@@ -1162,13 +1162,25 @@ function HomeScreen({
             title="All Games"
             action="← Back"
             onActionClick={() => setHomeMode('main')}
-            columns={['Date', 'Partner', 'Result', 'Game Score']}
+            columns={['Date', 'Partner', 'Result', 'Status', 'Game Score']}
             rows={allGames.map((g) => ({
               id: g.id,
               cells: [
                 g.date,
                 g.partner,
                 <span key={`${g.id}-result`} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>,
+                <span
+                  key={`${g.id}-status-indicator`}
+                  title={g.status === 'FINALIZED' ? 'Finalized' : 'Created'}
+                  aria-label={g.status === 'FINALIZED' ? 'Finalized' : 'Created'}
+                  style={{
+                    display: 'inline-block',
+                    width: 12,
+                    height: 12,
+                    background: g.status === 'FINALIZED' ? '#22c55e' : '#f59e0b',
+                    borderRadius: g.status === 'FINALIZED' ? 2 : '50%',
+                  }}
+                />,
                 `${g.scoreA}-${g.scoreB}`,
               ],
               onClick: () => {
