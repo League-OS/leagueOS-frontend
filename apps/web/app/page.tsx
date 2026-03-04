@@ -318,6 +318,8 @@ export default function Page() {
         return {
           id: game.id,
           sessionId: game.session_id,
+          status: game.status ?? 'CREATED',
+          createdBy: game.created_by_label ?? 'Unknown',
           date: formatMonthDay(session?.session_date ?? game.start_time),
           season: season?.name ?? `Season ${session?.season_id ?? '-'}`,
           partner,

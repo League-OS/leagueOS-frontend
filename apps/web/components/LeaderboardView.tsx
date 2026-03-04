@@ -11,6 +11,8 @@ type HomeMode = 'main' | 'addGame' | 'allGames' | 'gameDetail' | 'allUpcoming' |
 export type HomeGameRow = {
   id: number;
   sessionId: number;
+  status: 'CREATED' | 'FINALIZED';
+  createdBy: string;
   date: string;
   season: string;
   partner: string;
@@ -1179,6 +1181,8 @@ function HomeScreen({
           <DetailCard title="Game Detail" onBack={() => setHomeMode('allGames')}>
             <DetailGrid rows={[
               ['Date', activeGame.date],
+              ['Status', activeGame.status],
+              ['Created By', activeGame.createdBy || 'Unknown'],
               ['Season', activeGame.season],
               ['Court', activeGame.courtName],
               ['Start Time', new Date(activeGame.startTime).toLocaleString()],
