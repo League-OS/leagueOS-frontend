@@ -1256,7 +1256,12 @@ function HomeTableCard({
   columns: string[];
   rows: Array<{ id: number; cells: (string | JSX.Element)[]; onClick: () => void }>;
 }) {
-  const colTemplate = columns.length === 4 ? '90px 1fr 1fr 90px' : '90px 1fr 1fr';
+  const colTemplate =
+    columns.length === 5
+      ? '80px 1fr 80px 70px 90px'
+      : columns.length === 4
+        ? '90px 1fr 1fr 90px'
+        : '90px 1fr 1fr';
 
   return (
     <div style={{ marginTop: 16, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', overflow: 'hidden' }}>
