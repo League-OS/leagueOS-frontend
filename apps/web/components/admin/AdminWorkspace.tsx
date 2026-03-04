@@ -1731,6 +1731,17 @@ function UsersPanel(props: {
                   if (!selectedUserId) return;
                   try {
                     setDetailError(null);
+                    const wantsPasswordUpdate = Boolean(newPassword || confirmPassword);
+                    if (wantsPasswordUpdate) {
+                      if (newPassword.length < 8) {
+                        setDetailError('Password must be at least 8 characters.');
+                        return;
+                      }
+                      if (newPassword !== confirmPassword) {
+                        setDetailError('New password and confirm password must match.');
+                        return;
+                      }
+                    }
                     await onSaveClubUser(selectedUserId, {
                       full_name: detailName.trim(),
                       email: detailEmail.trim(),
@@ -1742,6 +1753,15 @@ function UsersPanel(props: {
                       elo_initial_mixed: Number(detailEloMixed) || 0,
                       is_active: detailActive,
                     });
+
+                    if (wantsPasswordUpdate) {
+                      await onResetClubUserPassword(selectedUserId, newPassword, confirmPassword);
+                      setPasswordResetNotice({ email: detailEmail.trim(), password: newPassword });
+                    }
+
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowUserDetailModal(false);
                   } catch (e) {
                     setDetailError(getMessage(e, 'Failed to save user.'));
                   }
