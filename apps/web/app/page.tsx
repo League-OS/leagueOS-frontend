@@ -299,6 +299,7 @@ export default function Page() {
       const sourceGames = effectivePlayerId
         ? games.filter((game) => (participantsByGame.get(game.id) ?? []).some((p) => p.player_id === effectivePlayerId))
         : games;
+      const finalizedSourceGames = sourceGames.filter((game) => (game.status ?? 'CREATED') === 'FINALIZED');
       const courtNameById = new Map<number, string>((courtsRes.status === 'fulfilled' ? courtsRes.value : []).map((court) => [court.id, court.name]));
 
       const mapGameRow = (game: (typeof games)[number], playerIdForView: number | null): HomeGameRow => {
@@ -386,7 +387,7 @@ export default function Page() {
       let pointsAgainst = 0;
       let wins = 0;
 
-      for (const game of sourceGames) {
+      for (const game of finalizedSourceGames) {
         const session = sessionById.get(game.session_id);
         const season = session ? seasonById.get(session.season_id) : undefined;
         if (season?.format === 'SINGLES') singles += 1;
@@ -405,7 +406,7 @@ export default function Page() {
         if (computed.outcome === 'W') wins += 1;
       }
 
-      const totalGames = sourceGames.length;
+      const totalGames = finalizedSourceGames.length;
       const winPct = totalGames ? Number(((wins / totalGames) * 100).toFixed(1)) : 0;
       setProfileStats({ singles, doubles, mixed, pointsFor, pointsAgainst, winPct });
 
