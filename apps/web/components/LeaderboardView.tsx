@@ -1258,7 +1258,7 @@ function HomeTableCard({
 }) {
   const colTemplate =
     columns.length === 5
-      ? '80px 1fr 80px 70px 90px'
+      ? '68px minmax(96px, 1.1fr) 56px 52px 66px'
       : columns.length === 4
         ? '90px 1fr 1fr 90px'
         : '90px 1fr 1fr';
@@ -1269,16 +1269,37 @@ function HomeTableCard({
         <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
         <button onClick={onActionClick} style={{ border: 0, background: 'transparent', color: '#0d9488', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{action}</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '10px 16px', background: '#f9fafb', color: '#4b5563', fontWeight: 700 }}>
-        {columns.map((c) => (
-          <div key={c}>{c}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '10px 16px', background: '#f9fafb', color: '#4b5563', fontWeight: 700, alignItems: 'center' }}>
+        {columns.map((c, idx) => (
+          <div
+            key={c}
+            style={{
+              whiteSpace: idx === 4 ? 'normal' : 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              textAlign: idx === 2 || idx === 3 || idx === 4 ? 'center' : 'left',
+            }}
+          >
+            {c}
+          </div>
         ))}
       </div>
       {!rows.length ? <div style={{ padding: 14, color: '#6b7280' }}>No data available.</div> : null}
       {rows.map((r) => (
-        <button key={`${title}-${r.id}`} onClick={r.onClick} style={{ width: '100%', border: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '12px 16px', textAlign: 'left', cursor: 'pointer' }}>
+        <button key={`${title}-${r.id}`} onClick={r.onClick} style={{ width: '100%', border: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '12px 16px', textAlign: 'left', cursor: 'pointer', alignItems: 'center' }}>
           {r.cells.map((cell, idx) => (
-            <div key={`${r.id}-${idx}`} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell}</div>
+            <div
+              key={`${r.id}-${idx}`}
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
+                textAlign: idx === 2 || idx === 3 || idx === 4 ? 'center' : 'left',
+              }}
+            >
+              {cell}
+            </div>
           ))}
         </button>
       ))}
