@@ -1018,17 +1018,17 @@ function HomeScreen({
           </>
         ) : null}
 
-        {canManageRecords ? (
+        {canManageRecords && homeMode !== 'addGame' ? (
           <div
             style={{
               position: 'fixed',
               right: 'max(24px, calc((100vw - 1100px) / 2 + 24px))',
-              bottom: 100,
+              bottom: 'calc(70px + env(safe-area-inset-bottom, 0px) + 8px)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 6,
-              zIndex: 50,
+              zIndex: 95,
             }}
             onMouseEnter={() => setTooltipVisible(true)}
             onMouseLeave={() => setTooltipVisible(false)}
