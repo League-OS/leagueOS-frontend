@@ -787,6 +787,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               await client.resetClubUserPassword(auth.token, selectedClubId, userId, newPassword, confirmPassword);
               setSuccess('Password changed.');
             }}
+            onDeleteClubUser={async (userId) => {
+              if (!auth) throw new Error('Not authenticated');
+              await client.deleteClubUser(auth.token, selectedClubId, userId);
+              setSuccess('User removed from club.');
+              await refresh();
+            }}
           />
         ) : null}
         {page === 'players' ? (
@@ -1387,6 +1393,7 @@ function UsersPanel(props: {
     },
   ) => Promise<void>;
   onResetClubUserPassword: (userId: number, newPassword: string, confirmPassword: string) => Promise<void>;
+  onDeleteClubUser: (userId: number) => Promise<void>;
 }) {
   const {
     canManage,
@@ -1412,6 +1419,7 @@ function UsersPanel(props: {
     onLoadClubUser,
     onSaveClubUser,
     onResetClubUserPassword,
+    onDeleteClubUser,
   } = props;
 
   const selectedClub = clubs.find((c) => c.id === selectedClubId);
@@ -1432,6 +1440,21 @@ function UsersPanel(props: {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordResetNotice, setPasswordResetNotice] = useState<null | { email: string; password: string }>(null);
+  const actionIconBtn: React.CSSProperties = {
+    ...outlineBtn,
+    minWidth: 34,
+    padding: '8px 10px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 16,
+    lineHeight: 1,
+  };
+  const deleteIconBtn: React.CSSProperties = {
+    ...actionIconBtn,
+    color: '#b91c1c',
+    borderColor: '#fca5a5',
+  };
 
   async function openDetail(userId: number) {
     try {
@@ -1502,9 +1525,22 @@ function UsersPanel(props: {
                   clubMembership?.role || '-',
                   u.is_active ? 'Enabled' : 'Disabled',
                   canManage ? (
-                    <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
-                      {u.is_active ? 'Disable' : 'Enable'}
-                    </button>
+                    <div key={`actions-${u.id}`} style={{ display: 'flex', gap: 8 }}>
+                      <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
+                        {u.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        key={`delete-${u.id}`}
+                        style={deleteIconBtn}
+                        title={`Remove ${u.email} from club`}
+                        aria-label={`Remove ${u.email} from club`}
+                        onClick={() => {
+                          if (window.confirm(`Remove ${u.email} from this club?`)) void onDeleteClubUser(u.id);
+                        }}
+                      >
+                        🗑
+                      </button>
+                    </div>
                   ) : '-',
                 ];
               })}
@@ -1516,7 +1552,7 @@ function UsersPanel(props: {
         ) : (
           <>
             <AdminTable
-              columns={['User Name', 'Email', 'Role in Club', 'Status']}
+              columns={['User Name', 'Email', 'Role in Club', 'Status', 'Action']}
               rows={clubUsers.map((u) => [
                 <button
                   key={`name-${u.id}`}
@@ -1528,6 +1564,17 @@ function UsersPanel(props: {
                 u.email,
                 u.role_in_club,
                 u.is_active ? 'Enabled' : 'Disabled',
+                <button
+                  key={`delete-${u.id}`}
+                  style={deleteIconBtn}
+                  title={`Remove ${u.email} from club`}
+                  aria-label={`Remove ${u.email} from club`}
+                  onClick={() => {
+                    if (window.confirm(`Remove ${u.email} from this club?`)) void onDeleteClubUser(u.id);
+                  }}
+                >
+                  🗑
+                </button>,
               ])}
             />
             {!clubUsers.length ? <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>No users in this club.</div> : null}

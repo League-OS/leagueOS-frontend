@@ -332,6 +332,18 @@ export class LeagueOsApiClient {
     });
   }
 
+  async deleteClubUser(
+    token: string,
+    clubId: number,
+    userId: number,
+  ): Promise<{ ok: boolean; user_id: number; club_id: number }> {
+    return this.request<{ ok: boolean; user_id: number; club_id: number }>(`/club-users/${userId}`, {
+      method: 'DELETE',
+      token,
+      query: { club_id: clubId },
+    });
+  }
+
   async deleteClub(token: string, clubId: number): Promise<{ ok: boolean; club_id: number }> {
     return this.request<{ ok: boolean; club_id: number }>(`/clubs/${clubId}`, {
       method: 'DELETE',
