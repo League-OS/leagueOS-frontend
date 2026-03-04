@@ -1162,13 +1162,25 @@ function HomeScreen({
             title="All Games"
             action="← Back"
             onActionClick={() => setHomeMode('main')}
-            columns={['Date', 'Partner', 'Result', 'Game Score']}
+            columns={['Date', 'Partner', 'Result', 'Status', 'Game Score']}
             rows={allGames.map((g) => ({
               id: g.id,
               cells: [
                 g.date,
                 g.partner,
                 <span key={`${g.id}-result`} style={{ color: g.outcome === 'W' ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{g.score}</span>,
+                <span
+                  key={`${g.id}-status-indicator`}
+                  title={g.status === 'FINALIZED' ? 'Finalized' : 'Created'}
+                  aria-label={g.status === 'FINALIZED' ? 'Finalized' : 'Created'}
+                  style={{
+                    display: 'inline-block',
+                    width: 12,
+                    height: 12,
+                    background: g.status === 'FINALIZED' ? '#22c55e' : '#f59e0b',
+                    borderRadius: g.status === 'FINALIZED' ? 2 : '50%',
+                  }}
+                />,
                 `${g.scoreA}-${g.scoreB}`,
               ],
               onClick: () => {
@@ -1244,7 +1256,12 @@ function HomeTableCard({
   columns: string[];
   rows: Array<{ id: number; cells: (string | JSX.Element)[]; onClick: () => void }>;
 }) {
-  const colTemplate = columns.length === 4 ? '90px 1fr 1fr 90px' : '90px 1fr 1fr';
+  const colTemplate =
+    columns.length === 5
+      ? '68px minmax(96px, 1.1fr) 56px 52px 66px'
+      : columns.length === 4
+        ? '90px 1fr 1fr 90px'
+        : '90px 1fr 1fr';
 
   return (
     <div style={{ marginTop: 16, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -1252,16 +1269,37 @@ function HomeTableCard({
         <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
         <button onClick={onActionClick} style={{ border: 0, background: 'transparent', color: '#0d9488', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{action}</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '10px 16px', background: '#f9fafb', color: '#4b5563', fontWeight: 700 }}>
-        {columns.map((c) => (
-          <div key={c}>{c}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '10px 16px', background: '#f9fafb', color: '#4b5563', fontWeight: 700, alignItems: 'center' }}>
+        {columns.map((c, idx) => (
+          <div
+            key={c}
+            style={{
+              whiteSpace: idx === 4 ? 'normal' : 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              textAlign: idx === 2 || idx === 3 || idx === 4 ? 'center' : 'left',
+            }}
+          >
+            {c}
+          </div>
         ))}
       </div>
       {!rows.length ? <div style={{ padding: 14, color: '#6b7280' }}>No data available.</div> : null}
       {rows.map((r) => (
-        <button key={`${title}-${r.id}`} onClick={r.onClick} style={{ width: '100%', border: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '12px 16px', textAlign: 'left', cursor: 'pointer' }}>
+        <button key={`${title}-${r.id}`} onClick={r.onClick} style={{ width: '100%', border: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: colTemplate, gap: 10, padding: '12px 16px', textAlign: 'left', cursor: 'pointer', alignItems: 'center' }}>
           {r.cells.map((cell, idx) => (
-            <div key={`${r.id}-${idx}`} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cell}</div>
+            <div
+              key={`${r.id}-${idx}`}
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
+                textAlign: idx === 2 || idx === 3 || idx === 4 ? 'center' : 'left',
+              }}
+            >
+              {cell}
+            </div>
           ))}
         </button>
       ))}
