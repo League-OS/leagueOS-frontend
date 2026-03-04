@@ -27,6 +27,7 @@ import {
 import type { AdminNavKey } from './AdminShellParts';
 import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
+import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const STORAGE_AUTH = 'leagueos.admin.auth';
@@ -53,7 +54,12 @@ type AddMatchPayload = {
 };
 
 function getMessage(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) return e.message;
+  if (e instanceof ApiError) {
+    if (e.code === 'SEQUENTIAL_FINALIZE_BLOCKED') {
+      return formatSequentialFinalizeBlockedError(e);
+    }
+    return e.message;
+  }
   if (typeof e === 'object' && e !== null && 'issues' in e) {
     const issues = (e as { issues?: Array<{ message?: string }> }).issues;
     if (Array.isArray(issues) && issues.length) return issues[0]?.message || fallback;
@@ -1086,9 +1092,13 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
             onFinalize={async () => {
               if (!auth || !selectedSession) return;
-              await client.finalizeSession(auth.token, selectedClubId, selectedSession.id);
-              setSuccess('Session finalized.');
-              await refresh();
+              try {
+                await client.finalizeSession(auth.token, selectedClubId, selectedSession.id);
+                setSuccess('Session finalized.');
+                await refresh();
+              } catch (e) {
+                setError(getMessage(e, 'Failed to finalize session.'));
+              }
             }}
             onRevert={async () => {
               if (!auth || !selectedSession) return;
