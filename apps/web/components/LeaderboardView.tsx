@@ -410,7 +410,7 @@ export function LeaderboardView(props: Props) {
                   <div style={{ textAlign: 'center' }}>Delta</div>
                   <div style={{ textAlign: 'center' }}>Played</div>
                   <div style={{ textAlign: 'center' }}>Won</div>
-                  <div style={{ textAlign: 'right' }}>Global ELO</div>
+                  <div style={{ textAlign: 'left' }}>ELO</div>
                 </div>
 
                 {!leaderboard.length ? (
@@ -420,7 +420,7 @@ export function LeaderboardView(props: Props) {
                     <div key={row.player_id} style={leaderboardRow}>
                       <div style={{ textAlign: 'center' }}>{rankBadge(i + 1)}</div>
                       <button
-                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
+                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
                         onClick={() => {
                           setLeaderboardPlayerPreview({ row, rank: i + 1 });
                         }}
@@ -446,15 +446,15 @@ export function LeaderboardView(props: Props) {
                             <>
                               <span
                                 style={{
-                                  width: 24,
-                                  height: 24,
+                                  width: 20,
+                                  height: 20,
                                   borderRadius: '50%',
                                   overflow: 'hidden',
                                   display: 'grid',
                                   placeItems: 'center',
                                   background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
                                   color: '#fff',
-                                  fontSize: 10,
+                                  fontSize: 9,
                                   fontWeight: 800,
                                   lineHeight: 1,
                                   border: '1px solid rgba(255,255,255,0.75)',
@@ -468,7 +468,7 @@ export function LeaderboardView(props: Props) {
                                   initials
                                 )}
                               </span>
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
+                              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
                             </>
                           );
                         })()}
@@ -479,7 +479,7 @@ export function LeaderboardView(props: Props) {
                       </div>
                       <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
                       <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
-                      <div style={{ textAlign: 'right', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
+                      <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
                     </div>
                   ))
                 )}
@@ -571,7 +571,7 @@ export function LeaderboardView(props: Props) {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
-              <StatLine title="Global ELO" value={String(leaderboardPlayerPreview.row.global_elo_score ?? 1000)} />
+              <StatLine title="ELO" value={String(leaderboardPlayerPreview.row.global_elo_score ?? 1000)} />
               <StatLine
                 title="Delta"
                 value={`${leaderboardPlayerPreview.row.season_elo_delta >= 0 ? '+' : ''}${leaderboardPlayerPreview.row.season_elo_delta}`}
@@ -1805,9 +1805,9 @@ function rankBadge(rank: number) {
 
 const leaderboardHeaderRow: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '40px minmax(0, 1fr) 64px 64px 64px 88px',
-  gap: 6,
-  padding: '12px 10px',
+  gridTemplateColumns: '28px minmax(96px, 1fr) 46px 50px 40px 4ch',
+  gap: 4,
+  padding: '12px 8px',
   fontSize: 12,
   fontWeight: 700,
   color: 'var(--muted)',
@@ -1817,9 +1817,9 @@ const leaderboardHeaderRow: React.CSSProperties = {
 
 const leaderboardRow: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '40px minmax(0, 1fr) 64px 64px 64px 88px',
-  gap: 6,
-  padding: '12px 10px',
+  gridTemplateColumns: '28px minmax(96px, 1fr) 46px 50px 40px 4ch',
+  gap: 4,
+  padding: '12px 8px',
   borderBottom: '1px solid var(--border)',
   alignItems: 'center',
 };
@@ -1830,6 +1830,7 @@ const linkBtn: React.CSSProperties = {
   color: '#0f172a',
   cursor: 'pointer',
   padding: 0,
+  minWidth: 0,
 };
 
 const menuItemBtn: React.CSSProperties = {
