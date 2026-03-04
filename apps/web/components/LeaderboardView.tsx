@@ -279,6 +279,8 @@ export function LeaderboardView(props: Props) {
           avatarGradient={selectedAvatar.gradient}
           avatarEmoji={selectedAvatar.emoji}
           profileInitials={profileInitials}
+          profileTierTag={`${profileTier.emoji} ${profileTier.label}`}
+          profileFormatTag={`${topFormatEmoji} ${topFormat}`}
           clubs={clubs}
           recordClubId={recordClubId}
           selectedSession={recordSession}
@@ -860,6 +862,8 @@ function HomeScreen({
   avatarGradient,
   avatarEmoji,
   profileInitials,
+  profileTierTag,
+  profileFormatTag,
   clubs,
   recordClubId,
   selectedSession,
@@ -889,6 +893,8 @@ function HomeScreen({
   avatarGradient: string;
   avatarEmoji: string;
   profileInitials: string;
+  profileTierTag: string;
+  profileFormatTag: string;
   clubs: Club[];
   recordClubId: number;
   selectedSession: Session | null;
@@ -924,6 +930,8 @@ function HomeScreen({
   const [homeMode, setHomeMode] = useState<HomeMode>('main');
   const [activeGame, setActiveGame] = useState<HomeGameRow | null>(null);
   const [activeUpcoming, setActiveUpcoming] = useState<UpcomingRow | null>(null);
+  const rawHomePlayerName = profile?.display_name || profile?.full_name || profile?.email || 'player_one';
+  const homePlayerName = rawHomePlayerName.slice(0, 12);
   return (
     <section>
       <header style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '18px 16px 14px', position: 'relative' }}>
@@ -942,7 +950,40 @@ function HomeScreen({
                 }}
               />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{homePlayerName}</span>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    background: '#e6f7f6',
+                    border: '1px solid #b7ebe6',
+                    borderRadius: 999,
+                    padding: '1px 6px',
+                    fontSize: 9,
+                    color: '#0f766e',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {profileTierTag}
+                </span>
+                <span
+                  style={{
+                    background: '#e6f7f6',
+                    border: '1px solid #b7ebe6',
+                    borderRadius: 999,
+                    padding: '1px 6px',
+                    fontSize: 9,
+                    color: '#0f766e',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {profileFormatTag}
+                </span>
+              </div>
+            </div>
             <button
               onClick={onGoProfile}
               style={{
@@ -971,7 +1012,6 @@ function HomeScreen({
                 </div>
               ) : null}
             </button>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>{profile?.display_name || profile?.email || 'player_one'}</span>
           </div>
         </div>
       </header>
