@@ -841,6 +841,32 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setSuccess('Player created.');
               await refresh();
             }}
+            onUpsertExisting={async (playerId) => {
+              if (!auth || !newPlayerName.trim()) return;
+              await client.updatePlayer(auth.token, selectedClubId, playerId, {
+                display_name: newPlayerName.trim(),
+                email: newPlayerEmail.trim() || null,
+                phone: newPlayerPhone.trim() || null,
+                elo_initial_singles: Number(newPlayerEloSingles || '1000'),
+                elo_initial_doubles: Number(newPlayerEloDoubles || '1000'),
+                elo_initial_mixed: Number(newPlayerEloMixed || '1000'),
+                player_type: newPlayerType,
+                sex: newPlayerSex,
+                is_active: true,
+              });
+              setNewPlayerName('');
+              setNewPlayerEmail('');
+              setNewPlayerPhone('');
+              setNewPlayerAddress('');
+              setNewPlayerSex('M');
+              setNewPlayerEloSingles('1000');
+              setNewPlayerEloDoubles('1000');
+              setNewPlayerEloMixed('1000');
+              setShowAddPlayerModal(false);
+              setLastPlayerInvite(null);
+              setSuccess('Player updated.');
+              await refresh();
+            }}
             onInviteFromPlayer={async (p) => {
               if (!auth) return;
               const invite = await client.inviteUserFromPlayer(auth.token, selectedClubId, p.id);
@@ -1691,6 +1717,7 @@ function PlayersPanel(props: {
   lastPlayerInvite: null | { email: string; temporary_password?: string | null; invite_link: string; status: string };
   setLastPlayerInvite: (v: null | { email: string; temporary_password?: string | null; invite_link: string; status: string }) => void;
   onCreate: () => Promise<void>;
+  onUpsertExisting: (playerId: number) => Promise<void>;
   onInviteFromPlayer: (p: Player) => Promise<void>;
   onToggle: (p: Player) => Promise<void>;
   onDelete: (p: Player) => Promise<void>;
@@ -1721,10 +1748,35 @@ function PlayersPanel(props: {
     lastPlayerInvite,
     setLastPlayerInvite,
     onCreate,
+    onUpsertExisting,
     onInviteFromPlayer,
     onToggle,
     onDelete,
   } = props;
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const emailValue = newPlayerEmail.trim();
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const hasInvalidEmail = emailValue.length > 0 && !emailPattern.test(emailValue);
+
+  const closeOnboardingModal = () => {
+    setEditingPlayer(null);
+    setShowAddPlayerModal(false);
+  };
+
+  const openOnboardingForExistingPlayer = (p: Player) => {
+    setNewPlayerName(p.display_name || '');
+    setNewPlayerEmail(p.email || '');
+    setNewPlayerPhone(p.phone || '');
+    setNewPlayerAddress('');
+    setNewPlayerSex((p.sex === 'F' ? 'F' : 'M'));
+    setNewPlayerType((p.player_type as 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1') || 'ROSTER');
+    setNewPlayerEloSingles(String(p.elo_initial_singles ?? 1000));
+    setNewPlayerEloDoubles(String(p.elo_initial_doubles ?? 1000));
+    setNewPlayerEloMixed(String(p.elo_initial_mixed ?? 1000));
+    setEditingPlayer(p);
+    setShowAddPlayerModal(true);
+  };
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title="Player Onboarding" action={<button style={primaryBtn} onClick={() => setShowAddPlayerModal(true)}>Add Player</button>}>
@@ -1733,7 +1785,9 @@ function PlayersPanel(props: {
       {showAddPlayerModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: 'min(860px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>
-            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add Player</div>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>
+              {editingPlayer ? `Update Player: ${editingPlayer.display_name}` : 'Add Player'}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Player Name</label>
@@ -1741,7 +1795,15 @@ function PlayersPanel(props: {
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Email</label>
-                <input value={newPlayerEmail} onChange={(e) => setNewPlayerEmail(e.target.value)} placeholder="email@example.com" style={field} />
+                <input
+                  value={newPlayerEmail}
+                  onChange={(e) => setNewPlayerEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  style={{ ...field, borderColor: hasInvalidEmail ? '#dc2626' : field.borderColor }}
+                />
+                {hasInvalidEmail ? (
+                  <div style={{ fontSize: 12, color: '#dc2626' }}>Please enter a valid email address.</div>
+                ) : null}
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Phone Number</label>
@@ -1780,8 +1842,14 @@ function PlayersPanel(props: {
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button style={outlineBtn} onClick={() => setShowAddPlayerModal(false)}>Cancel</button>
-              <button style={primaryBtn} onClick={() => void onCreate()} disabled={!newPlayerName.trim()}>Save</button>
+              <button style={outlineBtn} onClick={closeOnboardingModal}>Cancel</button>
+              <button
+                style={primaryBtn}
+                onClick={() => void (editingPlayer ? onUpsertExisting(editingPlayer.id) : onCreate())}
+                disabled={!newPlayerName.trim() || hasInvalidEmail}
+              >
+                {editingPlayer ? 'Update' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
@@ -1820,8 +1888,14 @@ function PlayersPanel(props: {
             <div key={`actions-${p.id}`} style={{ display: 'flex', gap: 8 }}>
               <button
                 style={outlineBtn}
-                disabled={!p.email || clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase())}
-                onClick={() => void onInviteFromPlayer(p)}
+                disabled={clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase())}
+                onClick={() => {
+                  if (!p.email) {
+                    openOnboardingForExistingPlayer(p);
+                    return;
+                  }
+                  void onInviteFromPlayer(p);
+                }}
               >
                 {!p.email ? 'Email Required' : clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase()) ? 'User Linked' : 'Create/Link User'}
               </button>
