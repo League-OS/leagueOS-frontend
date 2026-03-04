@@ -412,7 +412,7 @@ export function LeaderboardView(props: Props) {
                 </div>
 
                 {!leaderboard.length ? (
-                  <div style={{ minWidth: 700, padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
+                  <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
                 ) : (
                   leaderboard.map((row, i) => (
                     <div key={row.player_id} style={leaderboardRow}>
@@ -1765,10 +1765,9 @@ function rankBadge(rank: number) {
 
 const leaderboardHeaderRow: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '70px minmax(180px, 1fr) 120px 120px 120px 120px',
-  minWidth: 700,
-  gap: 10,
-  padding: '12px 14px',
+  gridTemplateColumns: '40px minmax(0, 1fr) 64px 64px 64px 88px',
+  gap: 6,
+  padding: '12px 10px',
   fontSize: 12,
   fontWeight: 700,
   color: 'var(--muted)',
@@ -1778,10 +1777,9 @@ const leaderboardHeaderRow: React.CSSProperties = {
 
 const leaderboardRow: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '70px minmax(180px, 1fr) 120px 120px 120px 120px',
-  minWidth: 700,
-  gap: 10,
-  padding: '12px 14px',
+  gridTemplateColumns: '40px minmax(0, 1fr) 64px 64px 64px 88px',
+  gap: 6,
+  padding: '12px 10px',
   borderBottom: '1px solid var(--border)',
   alignItems: 'center',
 };
