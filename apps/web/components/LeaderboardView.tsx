@@ -1501,7 +1501,9 @@ function AddGameScreen({
         <button onClick={onBack} style={outlineBtn}>← Back</button>
       </div>
 
-      {recordContextError ? <p style={{ marginTop: 6, color: 'var(--bad)', fontSize: 14 }}>{recordContextError}</p> : null}
+      {recordContextError && !(recordContextError.toLowerCase().includes('no open session') && !canOpenSession && !session) ? (
+        <p style={{ marginTop: 6, color: 'var(--bad)', fontSize: 14 }}>{recordContextError}</p>
+      ) : null}
       {canOpenSession && recordSeasonId && !session ? (
         <div style={{ marginTop: 8, border: '1px solid #99f6e4', background: '#f0fdfa', borderRadius: 12, padding: 10 }}>
           <div style={{ fontSize: 13, color: '#0f766e', marginBottom: 8, fontWeight: 600 }}>No OPEN session for this season</div>
