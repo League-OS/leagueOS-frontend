@@ -893,9 +893,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
             onDelete={async (p) => {
               if (!auth) return;
-              await client.deletePlayer(auth.token, selectedClubId, p.id);
-              setSuccess('Player deleted.');
-              await refresh();
+              try {
+                await client.deletePlayer(auth.token, selectedClubId, p.id);
+                setSuccess('Player deleted.');
+                setError(null);
+                await refresh();
+              } catch (e) {
+                if (e instanceof ApiError && e.code === 'PLAYER_IN_USE') {
+                  setError('Cannot delete this player because they are already used in match/rating history. Deactivate the player instead, or remove related records first.');
+                  return;
+                }
+                setError(getMessage(e, 'Failed to delete player.'));
+              }
             }}
           />
         ) : null}
