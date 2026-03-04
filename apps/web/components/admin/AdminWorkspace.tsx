@@ -1777,6 +1777,18 @@ function PlayersPanel(props: {
     setShowAddPlayerModal(true);
   };
 
+  const iconActionBtn: React.CSSProperties = {
+    ...outlineBtn,
+    width: 40,
+    minWidth: 40,
+    padding: '8px 0',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 16,
+    lineHeight: 1,
+  };
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title="Player Onboarding" action={<button style={primaryBtn} onClick={() => setShowAddPlayerModal(true)}>Add Player</button>}>
@@ -1899,8 +1911,23 @@ function PlayersPanel(props: {
               >
                 {!p.email ? 'Email Required' : clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase()) ? 'User Linked' : 'Create/Link User'}
               </button>
+              <button
+                style={iconActionBtn}
+                title={`Edit ${p.display_name}`}
+                aria-label={`Edit ${p.display_name}`}
+                onClick={() => openOnboardingForExistingPlayer(p)}
+              >
+                ✎
+              </button>
               <button style={outlineBtn} onClick={() => void onToggle(p)}>{p.is_active ? 'Deactivate' : 'Activate'}</button>
-              <button style={outlineBtn} onClick={() => { if (window.confirm(`Delete ${p.display_name}?`)) void onDelete(p); }}>Delete</button>
+              <button
+                style={iconActionBtn}
+                title={`Delete ${p.display_name}`}
+                aria-label={`Delete ${p.display_name}`}
+                onClick={() => { if (window.confirm(`Delete ${p.display_name}?`)) void onDelete(p); }}
+              >
+                🗑
+              </button>
             </div>,
           ])}
         />
