@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { SEEDED_USERS } from '@leagueos/config';
 
 type Props = {
   onLogin: (args: { email: string; password: string }) => Promise<void>;
@@ -10,8 +9,6 @@ type Props = {
   subtitle?: string;
   buttonLabel?: string;
   infoMessage?: string | null;
-  initialEmail?: string;
-  initialPassword?: string;
 };
 
 export function LoginView({
@@ -21,11 +18,9 @@ export function LoginView({
   subtitle = 'Sign in to view season leaderboard',
   buttonLabel = 'Sign In',
   infoMessage = null,
-  initialEmail = SEEDED_USERS?.clubAdmin?.email ?? '',
-  initialPassword = SEEDED_USERS?.clubAdmin?.password ?? '',
 }: Props) {
-  const [email, setEmail] = useState(initialEmail);
-  const [password, setPassword] = useState(initialPassword);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -64,6 +59,7 @@ export function LoginView({
             e.preventDefault();
             await onLogin({ email, password });
           }}
+          autoComplete="off"
           style={{ display: 'grid', gap: 12 }}
         >
           <label style={{ display: 'grid', gap: 6 }}>
@@ -74,6 +70,7 @@ export function LoginView({
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@example.com"
+              autoComplete="off"
               style={inputStyle}
             />
           </label>
@@ -87,6 +84,7 @@ export function LoginView({
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="Enter your password"
+                autoComplete="new-password"
                 style={{ ...inputStyle, paddingRight: 64 }}
               />
               <button
