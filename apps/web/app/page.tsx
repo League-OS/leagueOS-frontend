@@ -66,6 +66,16 @@ function formatMonthDay(dateish: string): string {
   return value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function latestSeasonByCreatedAt(seasons: Season[]): Season | null {
+  if (!seasons.length) return null;
+  return [...seasons].sort((a, b) => {
+    const createdA = Date.parse(a.created_at);
+    const createdB = Date.parse(b.created_at);
+    if (!Number.isNaN(createdA) && !Number.isNaN(createdB) && createdA !== createdB) return createdB - createdA;
+    return b.id - a.id;
+  })[0] ?? null;
+}
+
 function findUserPlayerId(profile: Profile | null, players: Player[]): number | null {
   if (!profile) return null;
   const profileEmail = profile.email?.toLowerCase();
@@ -218,8 +228,10 @@ export default function Page() {
 
       const seasonList = seasonsRes.value;
       const seasonById = new Map<number, Season>(seasonList.map((season) => [season.id, season]));
+      const activeSeasons = seasonList.filter((season) => season.is_active);
+      const latestActiveSeason = latestSeasonByCreatedAt(activeSeasons);
 
-      const seasonToLoad = seasonId ?? seasonList[0]?.id;
+      const seasonToLoad = seasonId ?? latestActiveSeason?.id ?? null;
       if (!seasonToLoad) {
         setSelectedSeasonId(null);
         setSelectedSession(null);
@@ -267,7 +279,7 @@ export default function Page() {
         setRecordSession(null);
         setRecordContextError('No open seasons available for this club.');
       } else {
-        const initialRecordSeasonId = openRecordSeasons[0].id;
+        const initialRecordSeasonId = latestSeasonByCreatedAt(openRecordSeasons)?.id ?? openRecordSeasons[0].id;
         setRecordSeasonId(initialRecordSeasonId);
         const picked = selectSingleOpenSession(nextSessionsBySeason[initialRecordSeasonId] ?? []);
         setRecordSession(picked.session);
@@ -746,7 +758,7 @@ export default function Page() {
         return;
       }
 
-      const nextSeasonId = openSeasons[0].id;
+      const nextSeasonId = latestSeasonByCreatedAt(openSeasons)?.id ?? openSeasons[0].id;
       setRecordSeasonId(nextSeasonId);
       const sessions = await client.sessions(auth.token, clubId, nextSeasonId);
       setSessionsBySeason((prev) => ({ ...prev, [nextSeasonId]: sessions ?? [] }));
