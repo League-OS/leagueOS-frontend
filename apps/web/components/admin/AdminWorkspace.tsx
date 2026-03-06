@@ -944,6 +944,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
           <SeasonsPanel
             seasons={seasons}
             sessions={sessions}
+            games={games}
             players={players}
             newSeasonName={newSeasonName}
             setNewSeasonName={setNewSeasonName}
@@ -967,6 +968,20 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth) return;
               await client.updateSeason(auth.token, selectedClubId, s.id, { is_active: !s.is_active });
               setSuccess('Season updated.');
+              await refresh();
+            }}
+            onDelete={async (s) => {
+              if (!auth) return;
+              const seasonSessions = sessions.filter((x) => x.season_id === s.id);
+              const seasonSessionIds = new Set(seasonSessions.map((x) => x.id));
+              const seasonGames = games.filter((g) => seasonSessionIds.has(g.session_id));
+              if (seasonSessions.length > 0 || seasonGames.length > 0) {
+                setError('Season can only be deleted when it has no sessions and no games.');
+                return;
+              }
+              await client.deleteSeason(auth.token, selectedClubId, s.id);
+              setError(null);
+              setSuccess('Season deleted.');
               await refresh();
             }}
           />
@@ -2060,6 +2075,7 @@ function CourtsPanel(props: {
 function SeasonsPanel(props: {
   seasons: Season[];
   sessions: Session[];
+  games: Game[];
   players: Player[];
   newSeasonName: string;
   setNewSeasonName: (v: string) => void;
@@ -2067,9 +2083,10 @@ function SeasonsPanel(props: {
   setNewSeasonFormat: (v: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES') => void;
   onCreate: () => Promise<void>;
   onToggle: (s: Season) => Promise<void>;
+  onDelete: (s: Season) => Promise<void>;
 }) {
   const {
-    seasons, sessions, players, newSeasonName, setNewSeasonName, newSeasonFormat, setNewSeasonFormat, onCreate, onToggle,
+    seasons, sessions, games, players, newSeasonName, setNewSeasonName, newSeasonFormat, setNewSeasonFormat, onCreate, onToggle, onDelete,
   } = props;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -2086,9 +2103,12 @@ function SeasonsPanel(props: {
       </AdminCard>
       <AdminCard title="Seasons">
         <AdminTable
-          columns={['Season Name', 'Start Date', 'End Date', '# Players', 'Status', '# Sessions', 'Actions']}
+          columns={['Season Name', 'Start Date', 'End Date', '# Players', 'Status', '# Sessions', '# Games', 'Actions']}
           rows={seasons.map((s) => {
             const seasonSessions = sessions.filter((x) => x.season_id === s.id).sort((a, b) => a.session_date.localeCompare(b.session_date));
+            const seasonSessionIds = new Set(seasonSessions.map((x) => x.id));
+            const seasonGamesCount = games.filter((g) => seasonSessionIds.has(g.session_id)).length;
+            const canDeleteSeason = seasonSessions.length === 0 && seasonGamesCount === 0;
             const startDate = seasonSessions[0]?.session_date ?? '-';
             const endDate = seasonSessions[seasonSessions.length - 1]?.session_date ?? '-';
             return [
@@ -2098,7 +2118,18 @@ function SeasonsPanel(props: {
               players.length,
               s.is_active ? 'Active' : 'Closed',
               seasonSessions.length,
-              <button key="toggle" style={outlineBtn} onClick={() => void onToggle(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>,
+              seasonGamesCount,
+              <div key="actions" style={{ display: 'flex', gap: 8 }}>
+                <button style={outlineBtn} onClick={() => void onToggle(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>
+                <button
+                  style={outlineBtn}
+                  onClick={() => { if (window.confirm(`Delete ${s.name}?`)) void onDelete(s); }}
+                  disabled={!canDeleteSeason}
+                  title={canDeleteSeason ? 'Delete season' : 'Can delete only when season has no sessions and no games'}
+                >
+                  Delete
+                </button>
+              </div>,
             ];
           })}
         />
