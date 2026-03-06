@@ -69,7 +69,7 @@ export function LoginView({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@example.com"
+              placeholder="Enter your email"
               autoComplete="off"
               style={inputStyle}
             />
