@@ -26,14 +26,10 @@ if [[ ! -d "$html_dir" ]]; then
   exit 1
 fi
 
-zip_file="$OUT_ROOT/${latest_run}-html-report.zip"
-(
-  cd "$run_dir"
-  rm -f "$zip_file"
-  zip -r "$zip_file" html-report >/dev/null
-)
+html_file="$OUT_ROOT/${latest_run}-report.html"
+cp "$html_dir/index.html" "$html_file"
 
-echo "Packaged report: $zip_file"
+echo "Packaged report: $html_file"
 if [[ -f "$summary_file" ]]; then
   echo "---- summary ----"
   cat "$summary_file"
@@ -41,4 +37,4 @@ if [[ -f "$summary_file" ]]; then
 fi
 
 echo "Suggested PR note:"
-echo "- E2E HTML report zip: artifacts/pr-reports/${latest_run}-html-report.zip"
+echo "- E2E HTML report: artifacts/pr-reports/${latest_run}-report.html"
