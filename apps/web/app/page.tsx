@@ -858,6 +858,20 @@ export default function Page() {
     await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, playerId);
   }
 
+  async function handleToggleLeaderboardVisibility(visible: boolean) {
+    if (!auth) return;
+    try {
+      setError(null);
+      const updated = await client.updateProfile(auth.token, { show_on_leaderboard: visible });
+      setProfile(updated);
+      setSuccessMessage(visible ? 'Your leaderboard visibility is now ON.' : 'Your leaderboard visibility is now OFF.');
+      await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, selectedProfilePlayerId);
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to update leaderboard visibility.';
+      setError(msg);
+    }
+  }
+
   if (hydratingAuth) {
     return (
       <main
@@ -932,6 +946,7 @@ export default function Page() {
       canOpenSession={Boolean(isClubAdmin)}
       onOpenSession={handleOpenRecordSession}
       onProfilePlayerChange={handleProfilePlayerChange}
+      onToggleLeaderboardVisibility={handleToggleLeaderboardVisibility}
       onLogout={() => {
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem(PLAYER_STORAGE_AUTH);

@@ -124,7 +124,7 @@ test('ui leaderboard contains top player from api', async ({ page, request }) =>
 
   await page.goto('/');
   await page.getByLabel('Email').fill(UI_EMAIL);
-  await page.getByLabel('Password').fill(UI_PASSWORD);
+  await page.getByPlaceholder('Enter your password').fill(UI_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
 
   await page.getByRole('button', { name: 'Leaderboard' }).click();

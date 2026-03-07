@@ -7,7 +7,7 @@ const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
 async function login(page: Parameters<typeof test>[0]['page']) {
   await page.goto('/');
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
-  await page.getByLabel('Password').fill(ADMIN_PASSWORD);
+  await page.getByPlaceholder('Enter your password').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.locator('button').filter({ hasText: '+' }).first()).toBeVisible();
 }
@@ -30,7 +30,7 @@ async function selectFirstCourt(page: Parameters<typeof test>[0]['page']) {
 test('rejects invalid login', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Email').fill('fvma-clubAdmin@leagueos.local');
-  await page.getByLabel('Password').fill('wrong-password');
+  await page.getByPlaceholder('Enter your password').fill('wrong-password');
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByText(/invalid/i)).toBeVisible();
 });

@@ -56,6 +56,7 @@ export const sessionSchema = z.object({
 });
 
 export const leaderboardEntrySchema = z.object({
+  rank: z.number().optional(),
   player_id: z.number(),
   display_name: z.string(),
   season_elo_delta: z.number(),
@@ -74,6 +75,7 @@ export const profileSchema = z.object({
   role: z.string(),
   club_role: z.string().nullable().optional(),
   club_id: z.number().optional(),
+  show_on_leaderboard: z.boolean().optional().default(true),
 });
 
 export const clubSchema = z.object({
@@ -111,6 +113,7 @@ export const clubUserSchema = z.object({
   elo_initial_singles: z.number().nullable().optional(),
   elo_initial_doubles: z.number().nullable().optional(),
   elo_initial_mixed: z.number().nullable().optional(),
+  show_on_leaderboard: z.boolean().optional().default(true),
 });
 
 export const playerSchema = z.object({
@@ -125,6 +128,7 @@ export const playerSchema = z.object({
   player_type: z.string().optional(),
   sex: z.string().optional(),
   is_active: z.boolean(),
+  show_on_leaderboard: z.boolean().optional().default(true),
   created_at: z.string(),
 });
 

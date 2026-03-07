@@ -113,6 +113,7 @@ type Props = {
   }) => Promise<void>;
   onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
   onProfilePlayerChange: (playerId: number) => Promise<void>;
+  onToggleLeaderboardVisibility: (visible: boolean) => Promise<void>;
   onLogout: () => void;
 };
 
@@ -170,6 +171,7 @@ export function LeaderboardView(props: Props) {
     onCreateSeason,
     onOpenSession,
     onProfilePlayerChange,
+    onToggleLeaderboardVisibility,
     onLogout,
   } = props;
 
@@ -420,13 +422,15 @@ export function LeaderboardView(props: Props) {
                 {!leaderboard.length ? (
                   <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
                 ) : (
-                  leaderboard.map((row, i) => (
+                  leaderboard.map((row, i) => {
+                    const rowRank = row.rank ?? (i + 1);
+                    return (
                     <div key={row.player_id} style={leaderboardRow}>
-                      <div style={{ textAlign: 'center' }}>{rankBadge(i + 1)}</div>
+                      <div style={{ textAlign: 'center' }}>{rankBadge(rowRank)}</div>
                       <button
                         style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
                         onClick={() => {
-                          setLeaderboardPlayerPreview({ row, rank: i + 1 });
+                          setLeaderboardPlayerPreview({ row, rank: rowRank });
                         }}
                       >
                         {(() => {
@@ -485,7 +489,8 @@ export function LeaderboardView(props: Props) {
                       <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
                       <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
             </div>
@@ -660,6 +665,20 @@ export function LeaderboardView(props: Props) {
                   </select>
                 </div>
               ) : null}
+              <div style={{ marginTop: 12, width: 'min(420px, 100%)', background: 'rgba(255,255,255,0.92)', borderRadius: 12, padding: '10px 12px', color: '#0f172a' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Show my name on leaderboards"
+                    checked={profile?.show_on_leaderboard ?? true}
+                    onChange={(e) => void onToggleLeaderboardVisibility(e.target.checked)}
+                  />
+                  Show my name on leaderboards
+                </label>
+                <div style={{ fontSize: 12, marginTop: 6, color: '#334155' }}>
+                  Turn this off to hide your name from leaderboard results. Your games and ELO still count.
+                </div>
+              </div>
             </div>
           </header>
 

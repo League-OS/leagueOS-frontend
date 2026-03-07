@@ -175,6 +175,22 @@ export class LeagueOsApiClient {
     return data.map((d) => clubSchema.parse(d));
   }
 
+  async updateProfile(
+    token: string,
+    payload: Partial<{
+      full_name: string;
+      display_name: string;
+      show_on_leaderboard: boolean;
+    }>,
+  ): Promise<Profile> {
+    const data = await this.request<unknown>('/profile', {
+      method: 'PUT',
+      token,
+      body: payload,
+    });
+    return profileSchema.parse(data);
+  }
+
   async clubs(token: string): Promise<Club[]> {
     const data = await this.request<unknown[]>('/clubs', {
       token,
@@ -286,6 +302,7 @@ export class LeagueOsApiClient {
       elo_initial_doubles: number;
       elo_initial_mixed: number;
       is_active: boolean;
+      show_on_leaderboard?: boolean;
     },
   ): Promise<ClubUser> {
     const data = await this.request<unknown>(`/club-users/${userId}`, {
@@ -373,6 +390,7 @@ export class LeagueOsApiClient {
       player_type?: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
       sex?: 'M' | 'F' | 'X' | 'U';
       is_active?: boolean;
+      show_on_leaderboard?: boolean;
     },
   ): Promise<Player> {
     const data = await this.request<unknown>('/players', {
@@ -399,6 +417,7 @@ export class LeagueOsApiClient {
       player_type: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
       sex: 'M' | 'F' | 'X' | 'U';
       is_active: boolean;
+      show_on_leaderboard: boolean;
     }>,
   ): Promise<Player> {
     const data = await this.request<unknown>(`/players/${playerId}`, {
