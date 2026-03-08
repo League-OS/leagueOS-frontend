@@ -531,9 +531,12 @@ export default function Page() {
       const scoped = res.club_id === initialClubId ? res : await client.switchClub(res.token, initialClubId);
       const nextAuth = { token: scoped.token, clubId: initialClubId };
       const me = await client.profile(nextAuth.token);
-      const effectiveRole = String(me.club_role ?? me.role ?? '').toUpperCase();
+      const loginRole = String(res.role || '').toUpperCase();
+      const effectiveRole = String(
+        loginRole === 'GLOBAL_ADMIN' ? 'GLOBAL_ADMIN' : (me.role === 'GLOBAL_ADMIN' ? me.role : (me.club_role ?? me.role ?? '')),
+      ).toUpperCase();
 
-      if (effectiveRole === 'CLUB_ADMIN') {
+      if (effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'GLOBAL_ADMIN') {
         if (typeof window !== 'undefined') {
           window.localStorage.setItem(ADMIN_STORAGE_AUTH, JSON.stringify(nextAuth));
           window.localStorage.setItem(ADMIN_STORAGE_PROFILE, JSON.stringify(me));
@@ -860,14 +863,17 @@ export default function Page() {
 
   async function handleToggleLeaderboardVisibility(visible: boolean) {
     if (!auth) return;
+    const previousProfile = profile;
     try {
       setError(null);
+      setProfile((current) => (current ? { ...current, show_on_leaderboard: visible } : current));
       const updated = await client.updateProfile(auth.token, { show_on_leaderboard: visible });
       setProfile(updated);
-      setSuccessMessage(visible ? 'Your leaderboard visibility is now ON.' : 'Your leaderboard visibility is now OFF.');
+      setSuccessMessage(visible ? 'Your name will appear on leaderboards.' : 'Your name is now hidden from leaderboards.');
       await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, selectedProfilePlayerId);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to update leaderboard visibility.';
+      setProfile(previousProfile);
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to update leaderboard privacy preference.';
       setError(msg);
     }
   }
