@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
-import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import { DEFAULT_CLUB_ID, FEATURE_FLAGS } from '@leagueos/config';
+import type { Club, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import {
   combineSessionDateAndTimeToIso,
   listOpenSeasons,
@@ -140,6 +140,8 @@ export default function Page() {
   const [recordContextError, setRecordContextError] = useState<string | null>(null);
   const [sessionsBySeason, setSessionsBySeason] = useState<Record<number, Session[]>>({});
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [teamLeaderboard, setTeamLeaderboard] = useState<TeamLeaderboardEntry[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [profileStats, setProfileStats] = useState<ProfileStatSummary>({
@@ -161,6 +163,11 @@ export default function Page() {
   const [hydratingAuth, setHydratingAuth] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const enableTeamRanking = useMemo(
+    () => featureFlags.some((flag) => flag.key === FEATURE_FLAGS.TEAM_RANKING && flag.enabled),
+    [featureFlags],
+  );
 
   async function loadDashboard(token: string, clubId: number, seasonId?: number, profilePlayerId?: number | null) {
     setLoading(true);
@@ -240,6 +247,7 @@ export default function Page() {
         setRecordContextError('No open seasons available for this club.');
         setSessionsBySeason({});
         setLeaderboard([]);
+        setTeamLeaderboard([]);
         setRecentGames([]);
         setAllGames([]);
         setRecordExistingGames([]);
@@ -258,9 +266,18 @@ export default function Page() {
       }
 
       setSelectedSeasonId(seasonToLoad);
-      const data = await client.seasonLeaderboard(token, clubId, seasonToLoad);
+      const nextFeatureFlags = await client.featureFlags(token).catch(() => [] as FeatureFlag[]);
+      setFeatureFlags(nextFeatureFlags);
+      const isTeamRankingEnabled = nextFeatureFlags.some(
+        (flag) => flag.key === FEATURE_FLAGS.TEAM_RANKING && flag.enabled,
+      );
+      const [data, teamData] = await Promise.all([
+        client.seasonLeaderboard(token, clubId, seasonToLoad),
+        isTeamRankingEnabled ? client.seasonTeamLeaderboard(token, clubId, seasonToLoad) : Promise.resolve([]),
+      ]);
       setSelectedSession(data.session);
       setLeaderboard(data.leaderboard);
+      setTeamLeaderboard(teamData);
 
       const seasonSessionsEntries = await Promise.all(
         seasonList.map(async (season) => [season.id, await client.sessions(token, clubId, season.id)] as const),
@@ -918,7 +935,9 @@ export default function Page() {
       recordClubId={recordClubId}
       recordSession={recordSession}
       recordSeasonId={recordSeasonId}
-      leaderboard={leaderboard}
+        leaderboard={leaderboard}
+        teamLeaderboard={teamLeaderboard}
+        enableTeamRanking={enableTeamRanking}
       loading={loading}
       error={error}
       successMessage={successMessage}

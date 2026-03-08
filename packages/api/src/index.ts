@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from '@leagueos/config';
 import {
+  featureFlagSchema,
   authResponseSchema,
   adminUserSchema,
   clubUserSchema,
@@ -8,12 +9,14 @@ import {
   gameSchema,
   gameParticipantSchema,
   leaderboardEntrySchema,
+  teamLeaderboardEntrySchema,
   loginRequestSchema,
   profileSchema,
   playerSchema,
   seasonSchema,
   sessionSchema,
   type AuthResponse,
+  type FeatureFlag,
   type AdminUser,
   type ClubUser,
   type Club,
@@ -21,6 +24,7 @@ import {
   type Game,
   type GameParticipant,
   type LeaderboardEntry,
+  type TeamLeaderboardEntry,
   type LoginRequest,
   type Profile,
   type Player,
@@ -189,6 +193,22 @@ export class LeagueOsApiClient {
       body: payload,
     });
     return profileSchema.parse(data);
+  }
+
+  async featureFlags(token: string): Promise<FeatureFlag[]> {
+    const data = await this.request<unknown[]>('/config/feature-flags', {
+      token,
+    });
+    return data.map((d) => featureFlagSchema.parse(d));
+  }
+
+  async updateFeatureFlag(token: string, key: string, enabled: boolean): Promise<FeatureFlag> {
+    const data = await this.request<unknown>(`/config/feature-flags/${encodeURIComponent(key)}`, {
+      method: 'PATCH',
+      token,
+      body: { enabled },
+    });
+    return featureFlagSchema.parse(data);
   }
 
   async clubs(token: string): Promise<Club[]> {
@@ -744,6 +764,15 @@ export class LeagueOsApiClient {
       query: { club_id: clubId },
       body: { participants },
     });
+  }
+
+  async seasonTeamLeaderboard(token: string, clubId: number, seasonId: number): Promise<TeamLeaderboardEntry[]> {
+    const data = await this.request<unknown[]>('/leaderboards/teams', {
+      token,
+      clubId,
+      query: { club_id: clubId, season_id: seasonId },
+    });
+    return data.map((d) => teamLeaderboardEntrySchema.parse(d));
   }
 
   async seasonLeaderboard(token: string, clubId: number, seasonId: number): Promise<{ session: Session | null; leaderboard: LeaderboardEntry[] }> {
