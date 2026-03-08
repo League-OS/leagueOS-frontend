@@ -1,9 +1,21 @@
 import { z } from 'zod';
 
+// ---------------------------------------------------------------------------
+// Role enums — shared across auth, profile, and admin schemas
+// ---------------------------------------------------------------------------
+
+export const globalRoleSchema = z.enum(['GLOBAL_ADMIN', 'CLUB_ADMIN', 'RECORDER', 'USER']);
+export const clubRoleSchema = z.enum(['CLUB_ADMIN', 'RECORDER', 'USER']);
+
+export type GlobalRole = z.infer<typeof globalRoleSchema>;
+export type ClubRole = z.infer<typeof clubRoleSchema>;
+
+// ---------------------------------------------------------------------------
+
 export const authResponseSchema = z.object({
   token: z.string(),
   expires_at: z.string(),
-  role: z.string(),
+  role: globalRoleSchema,
   club_id: z.number().nullable().optional(),
 });
 
@@ -81,6 +93,17 @@ export const teamLeaderboardEntrySchema = z.object({
   current_elo: z.number(),
 });
 
+export const playerEloHistoryEntrySchema = z.object({
+  season_id: z.number(),
+  season_name: z.string(),
+  club_id: z.number(),
+  format: z.enum(['SINGLES', 'DOUBLES', 'MIXED_DOUBLES']),
+  season_elo_delta: z.number(),
+  global_elo_score: z.number(),
+});
+
+export type PlayerEloHistoryEntry = z.infer<typeof playerEloHistoryEntrySchema>;
+
 export const featureFlagSchema = z.object({
   key: z.string(),
   name: z.string(),
@@ -96,8 +119,8 @@ export const profileSchema = z.object({
   email: z.string(),
   full_name: z.string().nullable().optional(),
   display_name: z.string().nullable().optional(),
-  role: z.string(),
-  club_role: z.string().nullable().optional(),
+  role: globalRoleSchema,
+  club_role: clubRoleSchema.nullable().optional(),
   club_id: z.number().optional(),
   show_on_leaderboard: z.boolean().optional().default(true),
 });
@@ -114,13 +137,13 @@ export const adminUserSchema = z.object({
   email: z.string(),
   full_name: z.string().nullable().optional(),
   display_name: z.string().nullable().optional(),
-  global_role: z.string().nullable().optional(),
+  global_role: globalRoleSchema.nullable().optional(),
   is_active: z.boolean(),
   created_at: z.string(),
   memberships: z.array(z.object({
     club_id: z.number(),
     club_name: z.string(),
-    role: z.string(),
+    role: clubRoleSchema,
     is_active: z.boolean(),
   })).optional().default([]),
 });
@@ -130,7 +153,7 @@ export const clubUserSchema = z.object({
   email: z.string(),
   full_name: z.string(),
   is_active: z.boolean(),
-  role_in_club: z.string(),
+  role_in_club: clubRoleSchema,
   phone: z.string().nullable().optional(),
   sex: z.string().nullable().optional(),
   player_type: z.string().nullable().optional(),
@@ -164,6 +187,14 @@ export const courtSchema = z.object({
   created_at: z.string(),
 });
 
+export const gameParticipantSchema = z.object({
+  game_id: z.number(),
+  player_id: z.number(),
+  display_name: z.string(),
+  side: z.enum(['A', 'B']),
+  created_at: z.string(),
+});
+
 export const gameSchema = z.object({
   id: z.number(),
   session_id: z.number(),
@@ -175,14 +206,8 @@ export const gameSchema = z.object({
   score_a: z.number(),
   score_b: z.number(),
   created_at: z.string(),
-});
-
-export const gameParticipantSchema = z.object({
-  game_id: z.number(),
-  player_id: z.number(),
-  display_name: z.string(),
-  side: z.enum(['A', 'B']),
-  created_at: z.string(),
+  /** Populated only when GET /games is called with include_participants=true. */
+  participants: z.array(gameParticipantSchema).optional(),
 });
 
 export const loginRequestSchema = z.object({
