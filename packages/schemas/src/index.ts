@@ -67,6 +67,30 @@ export const leaderboardEntrySchema = z.object({
   updated_at: z.string(),
 });
 
+export const teamLeaderboardEntrySchema = z.object({
+  rank: z.number(),
+  pair_key: z.string(),
+  player_a_id: z.number(),
+  player_b_id: z.number(),
+  player_a_display_name: z.string(),
+  player_b_display_name: z.string(),
+  season_elo_delta: z.number(),
+  matches_played: z.number(),
+  matches_won: z.number(),
+  total_points: z.number(),
+  current_elo: z.number(),
+});
+
+export const featureFlagSchema = z.object({
+  key: z.string(),
+  name: z.string(),
+  description: z.string(),
+  enabled: z.boolean(),
+  updated_at: z.string().nullable().optional(),
+  updated_by_user_id: z.number().nullable().optional(),
+  updated_by_email: z.string().nullable().optional(),
+});
+
 export const profileSchema = z.object({
   id: z.number(),
   email: z.string(),
@@ -170,6 +194,8 @@ export type AuthResponse = z.infer<typeof authResponseSchema>;
 export type Season = z.infer<typeof seasonSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type LeaderboardEntry = z.infer<typeof leaderboardEntrySchema>;
+export type TeamLeaderboardEntry = z.infer<typeof teamLeaderboardEntrySchema>;
+export type FeatureFlag = z.infer<typeof featureFlagSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Club = z.infer<typeof clubSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;

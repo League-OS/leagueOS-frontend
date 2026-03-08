@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@leagueos/api';
-import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import { floorToFiveMinuteIncrement, validateAddGameInput } from './addGameLogic';
 
 type TabKey = 'home' | 'leaderboard' | 'profile';
+type LeaderboardMode = 'player' | 'team';
 type HomeMode = 'main' | 'addGame' | 'allGames' | 'gameDetail' | 'allUpcoming' | 'upcomingDetail';
 
 export type HomeGameRow = {
@@ -67,6 +68,8 @@ type Props = {
   recordSession: Session | null;
   recordSeasonId: number | null;
   leaderboard: LeaderboardEntry[];
+  teamLeaderboard: TeamLeaderboardEntry[];
+  enableTeamRanking: boolean;
   recordSeasons: Season[];
   players: Player[];
   courts: Court[];
@@ -138,6 +141,8 @@ export function LeaderboardView(props: Props) {
     recordSession,
     recordSeasonId,
     leaderboard,
+    teamLeaderboard,
+    enableTeamRanking,
     recordSeasons,
     players,
     courts,
@@ -176,6 +181,7 @@ export function LeaderboardView(props: Props) {
   } = props;
 
   const [tab, setTab] = useState<TabKey>('home');
+  const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('player');
   const tabStorageGlobalKey = 'leagueos.player.selectedTab';
   const tabStorageProfileKey = profile?.email ? `leagueos.player.selectedTab.${profile.email.toLowerCase()}` : null;
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -219,6 +225,12 @@ export function LeaderboardView(props: Props) {
   const avatarStorageKey = profile?.email ? `leagueos.profile.avatar.${profile.email.toLowerCase()}` : null;
   const showOnLeaderboard = profile?.show_on_leaderboard ?? true;
   const hideFromLeaderboard = !showOnLeaderboard;
+
+  useEffect(() => {
+    if (!enableTeamRanking && leaderboardMode !== 'player') {
+      setLeaderboardMode('player');
+    }
+  }, [enableTeamRanking, leaderboardMode]);
 
   useEffect(() => {
     if (!avatarStorageKey || typeof window === 'undefined') return;
@@ -428,88 +440,145 @@ export function LeaderboardView(props: Props) {
             {error ? <div style={{ color: 'var(--bad)', marginBottom: 8 }}>{error}</div> : null}
 
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: 8, padding: '14px 16px 0' }}>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardMode('player')}
+                  style={leaderboardMode === 'player' ? primaryBtn : outlineBtn}
+                >
+                  Player Ranking
+                </button>
+                {enableTeamRanking ? (
+                  <button
+                    type="button"
+                    onClick={() => setLeaderboardMode('team')}
+                    style={leaderboardMode === 'team' ? primaryBtn : outlineBtn}
+                  >
+                    Team Ranking
+                  </button>
+                ) : null}
+              </div>
               <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <div style={leaderboardHeaderRow}>
-                  <div style={{ textAlign: 'center' }}>#</div>
-                  <div>Player</div>
-                  <div style={{ textAlign: 'center' }}>Delta</div>
-                  <div style={{ textAlign: 'center' }}>Played</div>
-                  <div style={{ textAlign: 'center' }}>Won</div>
-                  <div style={{ textAlign: 'left' }}>ELO</div>
-                </div>
-
-                {!leaderboard.length ? (
-                  <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
-                ) : (
-                  leaderboard.map((row, i) => {
-                    const rowRank = row.rank ?? (i + 1);
-                    return (
-                    <div key={row.player_id} style={leaderboardRow}>
-                      <div style={{ textAlign: 'center' }}>{rankBadge(rowRank)}</div>
-                      <button
-                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
-                        onClick={() => {
-                          setLeaderboardPlayerPreview({ row, rank: rowRank });
-                        }}
-                      >
-                        {(() => {
-                          const rowName = (row.display_name || '').trim();
-                          const rowNameLower = rowName.toLowerCase();
-                          const currentNames = [
-                            profileDisplayName,
-                            profile?.display_name || '',
-                            profile?.full_name || '',
-                          ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
-                          const isCurrentProfileRow = currentNames.includes(rowNameLower);
-                          const initials = rowName
-                            .split(' ')
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .map((part) => part[0]?.toUpperCase() || '')
-                            .join('') || 'P';
-                          const hash = rowNameLower.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-                          const fallbackBg = `hsl(${hash % 360} 62% 38%)`;
-                          return (
-                            <>
-                              <span
-                                style={{
-                                  width: 20,
-                                  height: 20,
-                                  borderRadius: '50%',
-                                  overflow: 'hidden',
-                                  display: 'grid',
-                                  placeItems: 'center',
-                                  background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
-                                  color: '#fff',
-                                  fontSize: 9,
-                                  fontWeight: 800,
-                                  lineHeight: 1,
-                                  border: '1px solid rgba(255,255,255,0.75)',
-                                  boxShadow: '0 0 0 1px rgba(148,163,184,.35)',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {isCurrentProfileRow && avatarPreview ? (
-                                  <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  initials
-                                )}
-                              </span>
-                              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
-                            </>
-                          );
-                        })()}
-                      </button>
-                      <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
-                        {row.season_elo_delta >= 0 ? '+' : ''}
-                        {row.season_elo_delta}
-                      </div>
-                      <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
-                      <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
-                      <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
+                {leaderboardMode === 'player' ? (
+                  <>
+                    <div style={leaderboardHeaderRow}>
+                      <div style={{ textAlign: 'center' }}>#</div>
+                      <div>Player</div>
+                      <div style={{ textAlign: 'center' }}>Delta</div>
+                      <div style={{ textAlign: 'center' }}>Played</div>
+                      <div style={{ textAlign: 'center' }}>Won</div>
+                      <div style={{ textAlign: 'left' }}>ELO</div>
                     </div>
-                  );
-                  })
+
+                    {!leaderboard.length ? (
+                      <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
+                    ) : (
+                      leaderboard.map((row, i) => {
+                        const rowRank = row.rank ?? (i + 1);
+                        return (
+                        <div key={row.player_id} style={leaderboardRow}>
+                          <div style={{ textAlign: 'center' }}>{rankBadge(rowRank)}</div>
+                          <button
+                            style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+                            onClick={() => {
+                              setLeaderboardPlayerPreview({ row, rank: rowRank });
+                            }}
+                          >
+                            {(() => {
+                              const rowName = (row.display_name || '').trim();
+                              const rowNameLower = rowName.toLowerCase();
+                              const currentNames = [
+                                profileDisplayName,
+                                profile?.display_name || '',
+                                profile?.full_name || '',
+                              ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+                              const isCurrentProfileRow = currentNames.includes(rowNameLower);
+                              const initials = rowName
+                                .split(' ')
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((part) => part[0]?.toUpperCase() || '')
+                                .join('') || 'P';
+                              const hash = rowNameLower.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+                              const fallbackBg = `hsl(${hash % 360} 62% 38%)`;
+                              return (
+                                <>
+                                  <span
+                                    style={{
+                                      width: 20,
+                                      height: 20,
+                                      borderRadius: '50%',
+                                      overflow: 'hidden',
+                                      display: 'grid',
+                                      placeItems: 'center',
+                                      background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
+                                      color: '#fff',
+                                      fontSize: 9,
+                                      fontWeight: 800,
+                                      lineHeight: 1,
+                                      border: '1px solid rgba(255,255,255,0.75)',
+                                      boxShadow: '0 0 0 1px rgba(148,163,184,.35)',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {isCurrentProfileRow && avatarPreview ? (
+                                      <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                      initials
+                                    )}
+                                  </span>
+                                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
+                                </>
+                              );
+                            })()}
+                          </button>
+                          <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
+                            {row.season_elo_delta >= 0 ? '+' : ''}
+                            {row.season_elo_delta}
+                          </div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
+                          <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
+                        </div>
+                      );
+                      })
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div style={leaderboardHeaderRow}>
+                      <div style={{ textAlign: 'center' }}>#</div>
+                      <div>Team</div>
+                      <div style={{ textAlign: 'center' }}>Delta</div>
+                      <div style={{ textAlign: 'center' }}>Played</div>
+                      <div style={{ textAlign: 'center' }}>Won</div>
+                      <div style={{ textAlign: 'left' }}>ELO</div>
+                    </div>
+                    {!teamLeaderboard.length ? (
+                      <div style={{ padding: 22, color: 'var(--muted)' }}>No team ranking data for this club and season yet.</div>
+                    ) : (
+                      teamLeaderboard.map((row) => (
+                        <div key={row.pair_key} style={leaderboardRow}>
+                          <div style={{ textAlign: 'center' }}>{rankBadge(row.rank)}</div>
+                          <div style={{ fontWeight: 600, minWidth: 0, lineHeight: 1.25, color: 'var(--text)' }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {row.player_a_display_name}
+                            </div>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              / {row.player_b_display_name}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
+                            {row.season_elo_delta >= 0 ? '+' : ''}
+                            {row.season_elo_delta}
+                          </div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_played}</div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
+                          <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.current_elo}</div>
+                        </div>
+                      ))
+                    )}
+                  </>
                 )}
               </div>
             </div>

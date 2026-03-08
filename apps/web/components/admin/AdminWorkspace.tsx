@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { AdminUser, Club, ClubUser, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import type { AdminUser, Club, ClubUser, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { LoginView } from '../LoginView';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
@@ -194,6 +194,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [lastPlayerInvite, setLastPlayerInvite] = useState<null | { email: string; temporary_password?: string | null; invite_link: string; status: string }>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [clubUsers, setClubUsers] = useState<ClubUser[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -224,10 +225,10 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const role = toAdminEffectiveRole(profile?.role, profile?.club_role);
   const allowed = canAccessAdmin(role);
   const isGlobalAdmin = role === 'GLOBAL_ADMIN';
-  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs', 'users']);
+  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs', 'config', 'users']);
   const pageAllowedForRole = !isGlobalAdmin || globalAdminAllowedPages.has(page);
   const visibleNavItems: AdminNavKey[] = isGlobalAdmin
-    ? ['dashboard', 'clubs', 'users']
+    ? ['dashboard', 'clubs', 'config', 'users']
     : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
@@ -315,8 +316,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       }
 
       if (me.role === 'GLOBAL_ADMIN') {
-        const usersList = await client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]);
+        const [usersList, featureFlagList] = await Promise.all([
+          client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]),
+          client.featureFlags(effectiveToken).catch(() => [] as FeatureFlag[]),
+        ]);
         setAdminUsers(usersList);
+        setFeatureFlags(featureFlagList);
         setClubUsers([]);
         setPlayers([]);
         setCourts([]);
@@ -348,6 +353,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setGames(clubGames);
       setAdminUsers([]);
       setClubUsers(clubUsersList);
+      setFeatureFlags([]);
       setNewSessionSeasonId((prev) => prev ?? clubSeasons[0]?.id ?? null);
 
       const needParticipants = page === 'sessions' || page === 'sessionDetail' || page === 'seasonDetail';
@@ -401,6 +407,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setGames([]);
       setAdminUsers([]);
       setClubUsers([]);
+      setFeatureFlags([]);
       setParticipantsByGame({});
       setSeasonLeaderboardRows([]);
       setSeasonLeaderboardSession(null);
@@ -492,6 +499,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setGames([]);
     setAdminUsers([]);
     setClubUsers([]);
+    setFeatureFlags([]);
     setParticipantsByGame({});
     setError(null);
     setSuccess(null);
@@ -721,6 +729,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth) return;
               await client.deleteClub(auth.token, clubId);
               setSuccess('Club deleted.');
+              await refresh();
+            }}
+          />
+        ) : null}
+        {page === 'config' ? (
+          <ConfigPanel
+            featureFlags={featureFlags}
+            loading={loading}
+            onToggle={async (flag, enabled) => {
+              if (!auth) return;
+              await client.updateFeatureFlag(auth.token, flag.key, enabled);
+              setSuccess(`Updated ${flag.name}.`);
               await refresh();
             }}
           />
@@ -3196,5 +3216,53 @@ function Info({ label, value }: { label: string; value: string }) {
       <div style={{ color: '#64748b', fontSize: 12 }}>{label}</div>
       <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>{value}</div>
     </div>
+  );
+}
+
+function ConfigPanel({
+  featureFlags,
+  loading,
+  onToggle,
+}: {
+  featureFlags: FeatureFlag[];
+  loading: boolean;
+  onToggle: (flag: FeatureFlag, enabled: boolean) => Promise<void>;
+}) {
+  const rows = featureFlags.map((flag) => ([
+    <div key={`${flag.key}-meta`} style={{ display: 'grid', gap: 4 }}>
+      <div style={{ color: '#0f172a', fontWeight: 700 }}>{flag.name}</div>
+      <div style={{ color: '#64748b', fontSize: 13 }}>{flag.key}</div>
+    </div>,
+    <span key={`${flag.key}-desc`} style={{ color: '#475569' }}>{flag.description || '-'}</span>,
+    <span key={`${flag.key}-status`} style={{ fontWeight: 700, color: flag.enabled ? '#047857' : '#64748b' }}>
+      {flag.enabled ? 'Enabled' : 'Disabled'}
+    </span>,
+    <button
+      key={`${flag.key}-toggle`}
+      style={flag.enabled ? outlineBtn : primaryBtn}
+      disabled={loading}
+      onClick={() => void onToggle(flag, !flag.enabled)}
+    >
+      {flag.enabled ? 'Disable' : 'Enable'}
+    </button>,
+  ]));
+
+  return (
+    <AdminCard title="Feature Flags">
+      <p style={{ margin: '0 0 12px', color: '#475569' }}>
+        Centralized runtime feature switches. These values are stored in the API database and used by both the UI and backend.
+      </p>
+      {featureFlags.length ? (
+        <AdminTable
+          columns={['Feature', 'Description', 'Status', 'Action']}
+          rows={rows}
+        />
+      ) : (
+        <AdminEmptyState
+          title="No feature flags found"
+          description="Seed or migrate feature flags in the API to manage them here."
+        />
+      )}
+    </AdminCard>
   );
 }

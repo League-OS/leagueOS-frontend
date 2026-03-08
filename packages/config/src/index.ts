@@ -1,4 +1,9 @@
 export const DEFAULT_CLUB_ID = 1;
+export const FEATURE_FLAGS = {
+  TEAM_RANKING: 'team_ranking',
+} as const;
+
+export type FeatureFlagKey = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
 
 export const SEEDED_USERS = {
   globalAdmin: { email: 'GlobalAdmin@leagueos.local', password: 'GlobalAdmin@123' },
