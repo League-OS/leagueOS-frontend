@@ -341,7 +341,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         client.courts(token, activeClubId),
         client.seasons(token, activeClubId),
         client.sessions(token, activeClubId),
-        client.games(token, activeClubId).catch(() => [] as Game[]),
+        client.games(token, activeClubId, undefined, undefined, undefined, true).catch(() => [] as Game[]),
         client.clubUsers(token, activeClubId).catch(() => [] as ClubUser[]),
       ]);
       const clubPlayers = mergeAdminPlayers(activePlayers, inactivePlayers);
@@ -356,21 +356,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setFeatureFlags([]);
       setNewSessionSeasonId((prev) => prev ?? clubSeasons[0]?.id ?? null);
 
-      const needParticipants = page === 'sessions' || page === 'sessionDetail' || page === 'seasonDetail';
-      if (needParticipants && clubGames.length) {
-        const rows = await Promise.allSettled(
-          clubGames.map(async (g) => [g.id, await client.gameParticipants(token, activeClubId, g.id)] as const),
-        );
-        const next: Record<number, GameParticipant[]> = {};
-        for (const row of rows) {
-          if (row.status === 'fulfilled') next[row.value[0]] = row.value[1];
-        }
-        setParticipantsByGame(next);
-      } else {
-        setParticipantsByGame({});
-    setSeasonLeaderboardRows([]);
-    setSeasonLeaderboardSession(null);
+      // Build participantsByGame from embedded participants (no extra per-game round-trips)
+      const participantsMap: Record<number, GameParticipant[]> = {};
+      for (const g of clubGames) {
+        if (g.participants) participantsMap[g.id] = g.participants;
       }
+      setParticipantsByGame(participantsMap);
 
       if (page === 'seasonDetail' && seasonId) {
         try {
@@ -1046,6 +1037,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             newSessionLocation={newSessionLocation}
             setNewSessionLocation={setNewSessionLocation}
             loading={loading}
+            onRenameSeason={async (newName) => {
+              if (!auth || !selectedSeason) return;
+              await client.updateSeason(auth.token, selectedClubId, selectedSeason.id, { name: newName });
+              setSuccess('Season renamed.');
+              await refresh();
+            }}
+            onRenameSession={async (sessionId, newName) => {
+              if (!auth) return;
+              await client.updateSession(auth.token, selectedClubId, sessionId, { location: newName });
+              setSuccess('Session renamed.');
+              await refresh();
+            }}
           />
         ) : null}
         {page === 'sessions' ? (
@@ -1083,6 +1086,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth) return;
               await client.deleteSession(auth.token, selectedClubId, sessionId);
               setSuccess('Session deleted.');
+              await refresh();
+            }}
+            onRenameSession={async (sessionId, newName) => {
+              if (!auth) return;
+              await client.updateSession(auth.token, selectedClubId, sessionId, { location: newName });
+              setSuccess('Session renamed.');
               await refresh();
             }}
           />
@@ -2195,6 +2204,8 @@ function SeasonDetailPanel(props: {
   loading: boolean;
   leaderboardRows: LeaderboardEntry[];
   leaderboardSession: Session | null;
+  onRenameSeason: (newName: string) => Promise<void>;
+  onRenameSession: (sessionId: number, newName: string) => Promise<void>;
 }) {
   const {
     season,
@@ -2214,9 +2225,15 @@ function SeasonDetailPanel(props: {
     loading,
     leaderboardRows,
     leaderboardSession,
+    onRenameSeason,
+    onRenameSession,
   } = props;
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
   const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
+  const [renamingSeasonName, setRenamingSeasonName] = useState(false);
+  const [renameSeasonNameValue, setRenameSeasonNameValue] = useState('');
+  const [renamingSessionId, setRenamingSessionId] = useState<number | null>(null);
+  const [renameSessionValue, setRenameSessionValue] = useState('');
   const openCreateSessionModal = () => {
     const defaults = defaultSessionTimes();
     setNewSessionDate(defaults.date);
@@ -2227,11 +2244,48 @@ function SeasonDetailPanel(props: {
   if (!season) return <AdminEmptyState title="Season not found" description="Select a valid season from the Seasons page." />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <AdminCard title={`Season Info: ${season.name}`}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
-          <Info label="Format" value={season.format} />
-          <Info label="Timezone" value={season.timezone} />
-          <Info label="Status" value={season.is_active ? 'Active' : 'Closed'} />
+      <AdminCard title="Season Info">
+        <div style={{ display: 'grid', gap: 10 }}>
+          {renamingSeasonName ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                autoFocus
+                value={renameSeasonNameValue}
+                onChange={(e) => setRenameSeasonNameValue(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && renameSeasonNameValue.trim()) {
+                    await onRenameSeason(renameSeasonNameValue.trim());
+                    setRenamingSeasonName(false);
+                  }
+                  if (e.key === 'Escape') setRenamingSeasonName(false);
+                }}
+                style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', border: '1.5px solid #0d9488', borderRadius: 6, padding: '4px 8px', minWidth: 220 }}
+              />
+              <button
+                style={{ ...primaryBtn, padding: '4px 14px', fontSize: 13 }}
+                onClick={async () => {
+                  if (!renameSeasonNameValue.trim()) return;
+                  await onRenameSeason(renameSeasonNameValue.trim());
+                  setRenamingSeasonName(false);
+                }}
+              >Save</button>
+              <button style={{ ...outlineBtn, padding: '4px 10px', fontSize: 13 }} onClick={() => setRenamingSeasonName(false)}>Cancel</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{season.name}</span>
+              <button
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: '#64748b', fontSize: 13, borderRadius: 4 }}
+                title="Rename season"
+                onClick={() => { setRenameSeasonNameValue(season.name); setRenamingSeasonName(true); }}
+              >✏ Rename</button>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
+            <Info label="Format" value={season.format} />
+            <Info label="Timezone" value={season.timezone} />
+            <Info label="Status" value={season.is_active ? 'Active' : 'Closed'} />
+          </div>
         </div>
       </AdminCard>
 
@@ -2239,7 +2293,34 @@ function SeasonDetailPanel(props: {
         <AdminTable
           columns={['Session Name', 'Session Date', 'Start Time', 'Status', 'Matches', 'Players']}
           rows={sessions.map((s) => [
-            <Link key={`sess-link-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
+            renamingSessionId === s.id ? (
+              <span key={`sess-rename-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  value={renameSessionValue}
+                  onChange={(e) => setRenameSessionValue(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && renameSessionValue.trim()) {
+                      await onRenameSession(s.id, renameSessionValue.trim());
+                      setRenamingSessionId(null);
+                    }
+                    if (e.key === 'Escape') setRenamingSessionId(null);
+                  }}
+                  style={{ fontSize: 13, border: '1.5px solid #0d9488', borderRadius: 5, padding: '2px 7px', minWidth: 130 }}
+                />
+                <button style={{ ...primaryBtn, padding: '2px 10px', fontSize: 12 }} onClick={async () => {
+                  if (!renameSessionValue.trim()) return;
+                  await onRenameSession(s.id, renameSessionValue.trim());
+                  setRenamingSessionId(null);
+                }}>✓</button>
+                <button style={{ ...outlineBtn, padding: '2px 8px', fontSize: 12 }} onClick={() => setRenamingSessionId(null)}>✗</button>
+              </span>
+            ) : (
+              <span key={`sess-link-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Link href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, padding: '1px 4px' }} title="Rename" onClick={() => { setRenameSessionValue(s.location || ''); setRenamingSessionId(s.id); }}>✏</button>
+              </span>
+            ),
             fmtDate(s.session_date),
             s.start_time_local,
             s.status,
@@ -2356,6 +2437,7 @@ function SessionsPanel(props: {
   setNewSessionName: (v: string) => void;
   onCreate: () => Promise<void>;
   onDeleteSession: (sessionId: number) => Promise<void>;
+  onRenameSession: (sessionId: number, newName: string) => Promise<void>;
 }) {
   const {
     sessions,
@@ -2376,7 +2458,10 @@ function SessionsPanel(props: {
     setNewSessionName,
     onCreate,
     onDeleteSession,
+    onRenameSession,
   } = props;
+  const [renamingSessionId, setRenamingSessionId] = useState<number | null>(null);
+  const [renameSessionValue, setRenameSessionValue] = useState('');
   const seasonById = new Map(seasons.map((s) => [s.id, s]));
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
   const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
@@ -2503,7 +2588,34 @@ function SessionsPanel(props: {
               const sessionGames = games.filter((g) => g.session_id === s.id);
               const playerCount = countUniquePlayersInSessionGames(sessionGames, participantsByGame);
               return [
-                <Link key={`sd-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
+                renamingSessionId === s.id ? (
+                  <span key={`sess-rename-sp-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      value={renameSessionValue}
+                      onChange={(e) => setRenameSessionValue(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && renameSessionValue.trim()) {
+                          await onRenameSession(s.id, renameSessionValue.trim());
+                          setRenamingSessionId(null);
+                        }
+                        if (e.key === 'Escape') setRenamingSessionId(null);
+                      }}
+                      style={{ fontSize: 13, border: '1.5px solid #0d9488', borderRadius: 5, padding: '2px 7px', minWidth: 130 }}
+                    />
+                    <button style={{ ...primaryBtn, padding: '2px 10px', fontSize: 12 }} onClick={async () => {
+                      if (!renameSessionValue.trim()) return;
+                      await onRenameSession(s.id, renameSessionValue.trim());
+                      setRenamingSessionId(null);
+                    }}>✓</button>
+                    <button style={{ ...outlineBtn, padding: '2px 8px', fontSize: 12 }} onClick={() => setRenamingSessionId(null)}>✗</button>
+                  </span>
+                ) : (
+                  <span key={`sd-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Link href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, padding: '1px 4px' }} title="Rename" onClick={() => { setRenameSessionValue(s.location || ''); setRenamingSessionId(s.id); }}>✏</button>
+                  </span>
+                ),
                 fmtDate(s.session_date),
                 s.start_time_local || '-',
                 s.status,
