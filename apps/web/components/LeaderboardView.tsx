@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@leagueos/api';
 import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import { floorToFiveMinuteIncrement, validateAddGameInput } from './addGameLogic';
@@ -113,6 +113,7 @@ type Props = {
   }) => Promise<void>;
   onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
   onProfilePlayerChange: (playerId: number) => Promise<void>;
+  onToggleLeaderboardVisibility: (visible: boolean) => Promise<void>;
   onLogout: () => void;
 };
 
@@ -170,6 +171,7 @@ export function LeaderboardView(props: Props) {
     onCreateSeason,
     onOpenSession,
     onProfilePlayerChange,
+    onToggleLeaderboardVisibility,
     onLogout,
   } = props;
 
@@ -189,6 +191,9 @@ export function LeaderboardView(props: Props) {
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [leaderboardPlayerPreview, setLeaderboardPlayerPreview] = useState<{ row: LeaderboardEntry; rank: number } | null>(null);
   const [homeResetSignal, setHomeResetSignal] = useState(0);
+  const [profileFocusSection, setProfileFocusSection] = useState<'preferences' | null>(null);
+  const [preferencesExpanded, setPreferencesExpanded] = useState(false);
+  const preferencesSectionRef = useRef<HTMLDivElement | null>(null);
   const profileDisplayName = profile?.display_name || profile?.full_name || 'LeagueOS User';
   const profileInitials = profileDisplayName
     .split(' ')
@@ -212,6 +217,8 @@ export function LeaderboardView(props: Props) {
         : { label: 'In Training', emoji: '🎯' };
   const selectedAvatar = PROFILE_AVATAR_OPTIONS.find((option) => option.id === selectedAvatarId) ?? PROFILE_AVATAR_OPTIONS[0];
   const avatarStorageKey = profile?.email ? `leagueos.profile.avatar.${profile.email.toLowerCase()}` : null;
+  const showOnLeaderboard = profile?.show_on_leaderboard ?? true;
+  const hideFromLeaderboard = !showOnLeaderboard;
 
   useEffect(() => {
     if (!avatarStorageKey || typeof window === 'undefined') return;
@@ -273,6 +280,15 @@ export function LeaderboardView(props: Props) {
     }
   }, [tab, tabStorageGlobalKey, tabStorageProfileKey]);
 
+  useEffect(() => {
+    if (tab !== 'profile' || profileFocusSection !== 'preferences') return;
+    setPreferencesExpanded(true);
+    const timer = window.setTimeout(() => {
+      preferencesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [tab, profileFocusSection]);
+
   return (
     <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>
       {tab === 'home' ? (
@@ -308,6 +324,11 @@ export function LeaderboardView(props: Props) {
           onGoLeaderboard={() => setTab('leaderboard')}
           onGoProfile={() => {
             setTab('profile');
+            setProfileFocusSection(null);
+          }}
+          onGoPreferences={() => {
+            setTab('profile');
+            setProfileFocusSection('preferences');
           }}
           onLogout={onLogout}
         />
@@ -420,13 +441,15 @@ export function LeaderboardView(props: Props) {
                 {!leaderboard.length ? (
                   <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
                 ) : (
-                  leaderboard.map((row, i) => (
+                  leaderboard.map((row, i) => {
+                    const rowRank = row.rank ?? (i + 1);
+                    return (
                     <div key={row.player_id} style={leaderboardRow}>
-                      <div style={{ textAlign: 'center' }}>{rankBadge(i + 1)}</div>
+                      <div style={{ textAlign: 'center' }}>{rankBadge(rowRank)}</div>
                       <button
                         style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
                         onClick={() => {
-                          setLeaderboardPlayerPreview({ row, rank: i + 1 });
+                          setLeaderboardPlayerPreview({ row, rank: rowRank });
                         }}
                       >
                         {(() => {
@@ -485,7 +508,8 @@ export function LeaderboardView(props: Props) {
                       <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
                       <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
             </div>
@@ -747,6 +771,108 @@ export function LeaderboardView(props: Props) {
                 </div>
               ))}
             </div>
+
+            <div ref={preferencesSectionRef} style={{ marginTop: 16, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.04)', overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setPreferencesExpanded((prev) => !prev)}
+                style={{
+                  width: '100%',
+                  border: 0,
+                  background: 'transparent',
+                  padding: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: '#0f172a',
+                }}
+                aria-expanded={preferencesExpanded}
+                aria-controls="user-preferences-panel"
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: '#f1f5f9',
+                      border: '1px solid var(--border)',
+                      fontSize: 16,
+                      flexShrink: 0,
+                    }}
+                  >
+                    ⚙️
+                  </span>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: 18 }}>User Preferences</h2>
+                    <div style={{ marginTop: 8, color: '#64748b', fontSize: 13, lineHeight: 1.5 }}>
+                      Personal settings for how your account behaves in the app.
+                    </div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 20, color: '#64748b', flexShrink: 0 }}>
+                  {preferencesExpanded ? '⌃' : '⌄'}
+                </span>
+              </button>
+              {preferencesExpanded ? (
+                <div id="user-preferences-panel" style={{ padding: '0 16px 16px' }}>
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    <div style={{ width: 'min(520px, 100%)', background: '#f8fafc', borderRadius: 12, border: '1px solid var(--border)', padding: '12px 14px', color: '#0f172a' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#64748b', marginBottom: 8 }}>
+                        Leaderboard Privacy
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Hide my name on leaderboard"
+                        aria-pressed={hideFromLeaderboard}
+                        onClick={() => void onToggleLeaderboardVisibility(hideFromLeaderboard)}
+                        style={{
+                          width: '100%',
+                          border: 0,
+                          background: 'transparent',
+                          padding: 0,
+                          margin: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          color: '#0f172a',
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            border: `2px solid ${hideFromLeaderboard ? '#0f766e' : '#94a3b8'}`,
+                            background: hideFromLeaderboard ? '#0f766e' : '#fff',
+                            display: 'grid',
+                            placeItems: 'center',
+                            color: '#fff',
+                            fontSize: 15,
+                            fontWeight: 800,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {hideFromLeaderboard ? '✓' : ''}
+                        </span>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>Hide my name on leaderboard</span>
+                      </button>
+                      <div style={{ fontSize: 12, marginTop: 6, color: '#334155', lineHeight: 1.5 }}>
+                        Turn this on to hide your name from leaderboard results. Your games and ELO still count in standings and calculations.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </section>
         </section>
       ) : null}
@@ -899,6 +1025,7 @@ function HomeScreen({
   onGoHome,
   onGoLeaderboard,
   onGoProfile,
+  onGoPreferences,
   onLogout,
 }: {
   resetSignal: number;
@@ -938,6 +1065,7 @@ function HomeScreen({
   onGoHome: () => void;
   onGoLeaderboard: () => void;
   onGoProfile: () => void;
+  onGoPreferences: () => void;
   onLogout: () => void;
 }) {
   const [tooltipVisible, setTooltipVisible] = useState(false);
@@ -973,7 +1101,23 @@ function HomeScreen({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{homePlayerName}</span>
+              <button
+                onClick={onGoPreferences}
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  border: 0,
+                  background: 'transparent',
+                  padding: 0,
+                  margin: 0,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                }}
+                title="Open user preferences"
+                aria-label="Open user preferences"
+              >
+                {homePlayerName}
+              </button>
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <span
                   style={{

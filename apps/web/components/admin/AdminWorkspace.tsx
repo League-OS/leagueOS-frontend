@@ -208,6 +208,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newPlayerEloSingles, setNewPlayerEloSingles] = useState('1000');
   const [newPlayerEloDoubles, setNewPlayerEloDoubles] = useState('1000');
   const [newPlayerEloMixed, setNewPlayerEloMixed] = useState('1000');
+  const [newPlayerShowOnLeaderboard, setNewPlayerShowOnLeaderboard] = useState(true);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [newPlayerType, setNewPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
   const [newCourtName, setNewCourtName] = useState('');
@@ -821,6 +822,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewPlayerEloDoubles={setNewPlayerEloDoubles}
             newPlayerEloMixed={newPlayerEloMixed}
             setNewPlayerEloMixed={setNewPlayerEloMixed}
+            newPlayerShowOnLeaderboard={newPlayerShowOnLeaderboard}
+            setNewPlayerShowOnLeaderboard={setNewPlayerShowOnLeaderboard}
             showAddPlayerModal={showAddPlayerModal}
             setShowAddPlayerModal={setShowAddPlayerModal}
             newPlayerType={newPlayerType}
@@ -839,6 +842,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 player_type: newPlayerType,
                 sex: newPlayerSex,
                 is_active: true,
+                show_on_leaderboard: newPlayerShowOnLeaderboard,
               });
               setNewPlayerName('');
               setNewPlayerEmail('');
@@ -848,6 +852,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setNewPlayerEloSingles('1000');
               setNewPlayerEloDoubles('1000');
               setNewPlayerEloMixed('1000');
+              setNewPlayerShowOnLeaderboard(true);
               setShowAddPlayerModal(false);
               setLastPlayerInvite(null);
               setSuccess('Player created.');
@@ -865,6 +870,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 player_type: newPlayerType,
                 sex: newPlayerSex,
                 is_active: true,
+                show_on_leaderboard: newPlayerShowOnLeaderboard,
               });
               setNewPlayerName('');
               setNewPlayerEmail('');
@@ -874,6 +880,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setNewPlayerEloSingles('1000');
               setNewPlayerEloDoubles('1000');
               setNewPlayerEloMixed('1000');
+              setNewPlayerShowOnLeaderboard(true);
               setShowAddPlayerModal(false);
               setLastPlayerInvite(null);
               setSuccess('Player updated.');
@@ -1811,6 +1818,8 @@ function PlayersPanel(props: {
   setNewPlayerEloDoubles: (v: string) => void;
   newPlayerEloMixed: string;
   setNewPlayerEloMixed: (v: string) => void;
+  newPlayerShowOnLeaderboard: boolean;
+  setNewPlayerShowOnLeaderboard: (v: boolean) => void;
   showAddPlayerModal: boolean;
   setShowAddPlayerModal: (v: boolean) => void;
   newPlayerType: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
@@ -1842,6 +1851,8 @@ function PlayersPanel(props: {
     setNewPlayerEloDoubles,
     newPlayerEloMixed,
     setNewPlayerEloMixed,
+    newPlayerShowOnLeaderboard,
+    setNewPlayerShowOnLeaderboard,
     showAddPlayerModal,
     setShowAddPlayerModal,
     newPlayerType,
@@ -1874,6 +1885,7 @@ function PlayersPanel(props: {
     setNewPlayerEloSingles(String(p.elo_initial_singles ?? 1000));
     setNewPlayerEloDoubles(String(p.elo_initial_doubles ?? 1000));
     setNewPlayerEloMixed(String(p.elo_initial_mixed ?? 1000));
+    setNewPlayerShowOnLeaderboard(p.show_on_leaderboard ?? true);
     setEditingPlayer(p);
     setShowAddPlayerModal(true);
   };
@@ -1952,6 +1964,13 @@ function PlayersPanel(props: {
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Initial ELO Mixed Doubles</label>
                 <input type="number" min={0} value={newPlayerEloMixed} onChange={(e) => setNewPlayerEloMixed(e.target.value)} style={field} />
+              </div>
+              <div style={{ display: 'grid', gap: 6, alignContent: 'end' }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Visible on leaderboard</label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#334155' }}>
+                  <input type="checkbox" checked={newPlayerShowOnLeaderboard} onChange={(e) => setNewPlayerShowOnLeaderboard(e.target.checked)} />
+                  Visible on leaderboard
+                </label>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

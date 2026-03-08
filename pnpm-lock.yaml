@@ -17,9 +17,6 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@babel/runtime':
-        specifier: ^7.28.4
-        version: 7.28.6
       '@leagueos/api':
         specifier: workspace:*
         version: link:../../packages/api

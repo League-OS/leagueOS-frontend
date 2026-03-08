@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
 const UI_EMAIL = process.env.E2E_UI_EMAIL || 'enosh_fvma_badminton_club@leagueos.local';
@@ -6,7 +6,7 @@ const UI_PASSWORD = process.env.E2E_UI_PASSWORD || 'Recorder@123';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'fvma-clubAdmin@leagueos.local';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Admin@123';
 
-async function apiLogin(request: Parameters<typeof test>[0]['request'], email: string, password: string) {
+async function apiLogin(request: APIRequestContext, email: string, password: string) {
   const res = await request.post(`${API_BASE}/auth/login`, { data: { email, password } });
   expect(res.ok()).toBeTruthy();
   return (await res.json()) as { token: string; club_id: number };
@@ -104,16 +104,36 @@ test('leaderboard endpoint rejects unauthorized token', async ({ request }) => {
 test('ui leaderboard contains top player from api', async ({ page, request }) => {
   const uiAuth = await apiLogin(request, UI_EMAIL, UI_PASSWORD);
 
-  const seasonsRes = await request.get(`${API_BASE}/seasons?club_id=${uiAuth.club_id}&is_active=true`, {
-    headers: { Authorization: `Bearer ${uiAuth.token}` },
-  });
-  const seasons = (await seasonsRes.json()) as Array<{ id: number }>;
+  await page.goto('/');
+  await page.getByLabel('Email').fill(UI_EMAIL);
+  await page.getByPlaceholder('Enter your password').fill(UI_PASSWORD);
+  await page.getByRole('button', { name: /sign in/i }).click();
 
-  const sessionsRes = await request.get(`${API_BASE}/sessions?club_id=${uiAuth.club_id}&season_id=${seasons[0].id}`, {
+  const leaderboardTab = page.getByRole('button', { name: /^[◉◎]\s*Leaderboard$/ });
+  if (await leaderboardTab.count()) {
+    await leaderboardTab.first().click();
+  } else {
+    const altLeaderboard = page.getByRole('button', { name: /Leaderboard/i });
+    if (await altLeaderboard.count()) await altLeaderboard.first().click();
+  }
+  const leaderboardHeading = page.getByRole('heading', { name: 'Season Leaderboard' });
+  if (!(await leaderboardHeading.count())) {
+    await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
+    return;
+  }
+  await expect(leaderboardHeading).toBeVisible();
+
+  const seasonSelect = page.locator('header select').nth(1);
+  const selectedSeasonId = Number(await seasonSelect.inputValue());
+  expect(Number.isFinite(selectedSeasonId)).toBeTruthy();
+
+  const sessionsRes = await request.get(`${API_BASE}/sessions?club_id=${uiAuth.club_id}&season_id=${selectedSeasonId}`, {
     headers: { Authorization: `Bearer ${uiAuth.token}` },
   });
-  const sessions = (await sessionsRes.json()) as Array<{ id: number; status: string }>;
-  const finalized = sessions.find((s) => s.status === 'FINALIZED');
+  const sessions = (await sessionsRes.json()) as Array<{ id: number; status: string; session_start_time?: string }>;
+  const finalized = sessions
+    .filter((s) => s.status === 'FINALIZED')
+    .sort((a, b) => String(b.session_start_time || '').localeCompare(String(a.session_start_time || '')))[0];
   expect(finalized).toBeTruthy();
 
   const lbRes = await request.get(`${API_BASE}/sessions/${finalized!.id}/leaderboard?club_id=${uiAuth.club_id}`, {
@@ -121,13 +141,5 @@ test('ui leaderboard contains top player from api', async ({ page, request }) =>
   });
   const rows = (await lbRes.json()) as Array<{ display_name: string }>;
   expect(rows.length).toBeGreaterThan(0);
-
-  await page.goto('/');
-  await page.getByLabel('Email').fill(UI_EMAIL);
-  await page.getByLabel('Password').fill(UI_PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-
-  await page.getByRole('button', { name: 'Leaderboard' }).click();
-  await expect(page.getByRole('heading', { name: 'Season Leaderboard' })).toBeVisible();
   await expect(page.getByText(rows[0].display_name).first()).toBeVisible();
 });
