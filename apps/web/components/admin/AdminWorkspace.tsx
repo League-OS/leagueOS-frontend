@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
-import { DEFAULT_CLUB_ID } from '@leagueos/config';
+import { DEFAULT_API_BASE_URL, DEFAULT_CLUB_ID } from '@leagueos/config';
 import type { AdminUser, Club, ClubUser, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { LoginView } from '../LoginView';
@@ -29,7 +29,7 @@ import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 const STORAGE_AUTH = 'leagueos.admin.auth';
 const STORAGE_CTX = 'leagueos.admin.ctx';
 const STORAGE_PROFILE = 'leagueos.admin.profile';

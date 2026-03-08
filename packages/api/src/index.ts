@@ -9,6 +9,7 @@ import {
   gameSchema,
   gameParticipantSchema,
   leaderboardEntrySchema,
+  playerEloHistoryEntrySchema,
   teamLeaderboardEntrySchema,
   loginRequestSchema,
   profileSchema,
@@ -24,6 +25,7 @@ import {
   type Game,
   type GameParticipant,
   type LeaderboardEntry,
+  type PlayerEloHistoryEntry,
   type TeamLeaderboardEntry,
   type LoginRequest,
   type Profile,
@@ -388,11 +390,17 @@ export class LeagueOsApiClient {
     });
   }
 
-  async players(token: string, clubId: number, isActive = true): Promise<Player[]> {
+  async players(
+    token: string,
+    clubId: number,
+    isActive = true,
+    limit?: number,
+    offset?: number,
+  ): Promise<Player[]> {
     const data = await this.request<unknown[]>('/players', {
       token,
       clubId,
-      query: { club_id: clubId, is_active: isActive },
+      query: { club_id: clubId, is_active: isActive, limit, offset },
     });
     return data.map((d) => playerSchema.parse(d));
   }
@@ -561,11 +569,17 @@ export class LeagueOsApiClient {
     });
   }
 
-  async sessions(token: string, clubId: number, seasonId?: number): Promise<Session[]> {
+  async sessions(
+    token: string,
+    clubId: number,
+    seasonId?: number,
+    limit?: number,
+    offset?: number,
+  ): Promise<Session[]> {
     const data = await this.request<unknown[]>('/sessions', {
       token,
       clubId,
-      query: { club_id: clubId, season_id: seasonId },
+      query: { club_id: clubId, season_id: seasonId, limit, offset },
     });
     return data.map((d) => sessionSchema.parse(d));
   }
@@ -724,11 +738,24 @@ export class LeagueOsApiClient {
     return gameSchema.parse(data);
   }
 
-  async games(token: string, clubId: number, sessionId?: number): Promise<Game[]> {
+  async games(
+    token: string,
+    clubId: number,
+    sessionId?: number,
+    limit?: number,
+    offset?: number,
+    includeParticipants = false,
+  ): Promise<Game[]> {
     const data = await this.request<unknown[]>('/games', {
       token,
       clubId,
-      query: { club_id: clubId, session_id: sessionId },
+      query: {
+        club_id: clubId,
+        session_id: sessionId,
+        limit,
+        offset,
+        include_participants: includeParticipants || undefined,
+      },
     });
     return data.map((d) => gameSchema.parse(d));
   }
@@ -773,6 +800,24 @@ export class LeagueOsApiClient {
       query: { club_id: clubId, season_id: seasonId },
     });
     return data.map((d) => teamLeaderboardEntrySchema.parse(d));
+  }
+
+  /**
+   * Return a player's season-by-season Elo history in a single request.
+   * Pass `playerId` when viewing another player's profile; omit to resolve
+   * the caller's own linked player record server-side.
+   */
+  async playerEloHistory(
+    token: string,
+    clubId: number,
+    playerId?: number,
+  ): Promise<PlayerEloHistoryEntry[]> {
+    const data = await this.request<unknown[]>('/leaderboards/player-history', {
+      token,
+      clubId,
+      query: { club_id: clubId, player_id: playerId },
+    });
+    return data.map((d) => playerEloHistoryEntrySchema.parse(d));
   }
 
   async seasonLeaderboard(token: string, clubId: number, seasonId: number): Promise<{ session: Session | null; leaderboard: LeaderboardEntry[] }> {
