@@ -3079,17 +3079,7 @@ function SessionDetailPanel(props: {
               </div>
             </div>
             {editMatchError ? <div style={adminAlertError}>{editMatchError}</div> : null}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                style={outlineBtn}
-                disabled={editMatchBusy}
-                onClick={() => {
-                  setEditGameTarget(null);
-                  setEditMatchError(null);
-                }}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <button
                 style={primaryBtn}
                 disabled={editMatchBusy}
@@ -3139,6 +3129,16 @@ function SessionDetailPanel(props: {
                 }}
               >
                 {editMatchBusy ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                style={outlineBtn}
+                disabled={editMatchBusy}
+                onClick={() => {
+                  setEditGameTarget(null);
+                  setEditMatchError(null);
+                }}
+              >
+                Cancel
               </button>
             </div>
           </div>
