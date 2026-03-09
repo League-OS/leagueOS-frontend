@@ -1999,6 +1999,11 @@ function AddGameScreen({
             fontWeight: 600,
             lineHeight: 1.2,
             fontSize: 13,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            display: 'block',
           }
         : {
             border: '1px solid #bfdaf6',
@@ -2009,13 +2014,18 @@ function AddGameScreen({
             fontWeight: 600,
             lineHeight: 1.2,
             fontSize: 13,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            display: 'block',
           };
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         {names.map((name, index) => (
-          <div key={`${name}-${index}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={chipStyle}>{name}</span>
-            {index < names.length - 1 ? <span style={{ color: '#64748b', fontWeight: 700 }}>/</span> : null}
+          <div key={`${name}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+            <span style={chipStyle} title={name}>{name}</span>
+            {index < names.length - 1 ? <span style={{ color: '#64748b', fontWeight: 700, flexShrink: 0 }}>/</span> : null}
           </div>
         ))}
       </div>
@@ -2032,7 +2042,7 @@ function AddGameScreen({
         padding: 16,
         display: 'flex',
         flexDirection: 'column',
-        minHeight: step === 2 ? 760 : undefined,
+        minHeight: step === 2 ? 560 : undefined,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -2304,22 +2314,23 @@ function AddGameScreen({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8 }}>
+              <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, color: '#334155' }}>Team A</div>
                 {renderNameBubbles(teamANames, 'neutral')}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <button type="button" onClick={() => setScoreA((prev) => Math.max(0, prev - 1))} style={outlineBtn}>-</button>
                   <div
                     style={{
                       ...modalInput,
-                      width: 88,
+                      flex: 1,
                       textAlign: 'center',
                       background: '#fff',
                       fontWeight: 900,
-                      fontSize: 40,
+                      fontSize: 36,
                       lineHeight: 1.05,
                       color: '#0f172a',
-                      padding: '8px 10px',
+                      padding: '8px 4px',
+                      minWidth: 0,
                     }}
                   >
                     {scoreA}
@@ -2327,22 +2338,23 @@ function AddGameScreen({
                   <button type="button" onClick={() => setScoreA((prev) => Math.min(30, prev + 1))} style={outlineBtn}>+</button>
                 </div>
               </div>
-              <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8 }}>
+              <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, color: '#7f1d1d' }}>Team B</div>
                 {renderNameBubbles(teamBNames, 'red')}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <button type="button" onClick={() => setScoreB((prev) => Math.max(0, prev - 1))} style={outlineBtn}>-</button>
                   <div
                     style={{
                       ...modalInput,
-                      width: 88,
+                      flex: 1,
                       textAlign: 'center',
                       background: '#fff',
                       fontWeight: 900,
-                      fontSize: 40,
+                      fontSize: 36,
                       lineHeight: 1.05,
                       color: '#0f172a',
-                      padding: '8px 10px',
+                      padding: '8px 4px',
+                      minWidth: 0,
                     }}
                   >
                     {scoreB}
@@ -2367,7 +2379,7 @@ function AddGameScreen({
               </div>
             ) : null}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, overflow: 'hidden' }}>
               {['21-20', '21-19', '21-18', '21-17', '21-16', '22-20', '23-21', '24-22', '25-23', '30-29'].map((chip) => (
                 <button
                   key={chip}
