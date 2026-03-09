@@ -1682,18 +1682,26 @@ function AddGameScreen({
   const playerById = new Map(activePlayers.map((player) => [player.id, player]));
 
   const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const sessionStartDate = session ? new Date(session.session_start_time) : null;
+  const sessionEndDate = session?.session_end_time ? new Date(session.session_end_time) : null;
+
+  // Use session-day midnight as the reference point so midnight crossover works:
+  // e.g. session starts 8 PM (1200 min), current time 12:30 AM = 1470 min since session-day midnight
+  const sessionDay = sessionStartDate
+    ? new Date(sessionStartDate.getFullYear(), sessionStartDate.getMonth(), sessionStartDate.getDate(), 0, 0, 0, 0)
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+  const nowMinutes = Math.floor((now.getTime() - sessionDay.getTime()) / 60000);
   // Cap at 5 min before now, floored to 5-min boundary — prevents future slots
   const nowCapMinutes = Math.max(0, nowMinutes - 5 - ((nowMinutes - 5) % 5));
 
-  const sessionStartDate = session ? new Date(session.session_start_time) : null;
   const sessionStartLocalMinutes = sessionStartDate
-    ? sessionStartDate.getHours() * 60 + sessionStartDate.getMinutes()
+    ? Math.floor((sessionStartDate.getTime() - sessionDay.getTime()) / 60000)
     : Math.max(0, nowCapMinutes - 120);
 
-  const sessionEndDate = session?.session_end_time ? new Date(session.session_end_time) : null;
   const sessionEndLocalMinutes = sessionEndDate
-    ? sessionEndDate.getHours() * 60 + sessionEndDate.getMinutes()
+    ? Math.floor((sessionEndDate.getTime() - sessionDay.getTime()) / 60000)
     : sessionStartLocalMinutes + 120; // default 2h session if no end time set
 
   // Selectable slots: from session start → session end, capped at now
@@ -1716,8 +1724,10 @@ function AddGameScreen({
   };
 
   const toHHmm = (totalMinutes: number): string => {
-    const hh = Math.floor(totalMinutes / 60);
-    const mm = totalMinutes % 60;
+    // Normalize to 0-1439 so slot keys remain valid HH:mm even across midnight
+    const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+    const hh = Math.floor(normalized / 60);
+    const mm = normalized % 60;
     return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   };
 
@@ -2324,9 +2334,14 @@ function AddGameScreen({
                             setError('Custom time must be on a 5-minute boundary.');
                             return;
                           }
-                          const minutes = parseHHmm(normalized);
-                          if (minutes === null || minutes > latestAllowedMinutes) {
-                            setError('Custom time must be in the past (at least 5 minutes earlier than now).');
+                          const rawMinutes = parseHHmm(normalized);
+                          // Midnight crossover: if session started in the evening and user types
+                          // an early-AM time (e.g. "00:30"), treat it as next-day (add 1440)
+                          const minutes = rawMinutes !== null && sessionStartLocalMinutes > 720 && rawMinutes < sessionStartLocalMinutes - 360
+                            ? rawMinutes + 1440
+                            : rawMinutes;
+                          if (minutes === null || minutes > latestAllowedMinutes || minutes < windowStartMinutes) {
+                            setError('Custom time must be within the session window and in the past.');
                             return;
                           }
                           if (occupiedSlotSet.has(normalized)) {
