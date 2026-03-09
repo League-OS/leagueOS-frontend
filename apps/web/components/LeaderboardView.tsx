@@ -2035,7 +2035,7 @@ function AddGameScreen({
             maxWidth: '100%',
           };
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, minWidth: 0, overflow: 'hidden' }}>
         {names.map((name) => (
           <span key={name} style={chipStyle} title={name}>{name}</span>
         ))}
