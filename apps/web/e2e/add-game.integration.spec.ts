@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'enosh_fvma_badminton_club@leagueos.local';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Recorder@123';
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
 
-async function login(page: Parameters<typeof test>[0]['page']) {
+async function login(page: Page) {
   await page.goto('/');
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
   await page.getByPlaceholder('Enter your password').fill(ADMIN_PASSWORD);
@@ -12,7 +12,7 @@ async function login(page: Parameters<typeof test>[0]['page']) {
   await expect(page.locator('button').filter({ hasText: '+' }).first()).toBeVisible();
 }
 
-async function openAddGame(page: Parameters<typeof test>[0]['page']) {
+async function openAddGame(page: Page) {
   await page.locator('button').filter({ hasText: '+' }).first().click();
   await expect(page.getByRole('heading', { name: 'Add Game' })).toBeVisible();
 
@@ -23,7 +23,7 @@ async function openAddGame(page: Parameters<typeof test>[0]['page']) {
   }
 }
 
-async function selectFirstCourt(page: Parameters<typeof test>[0]['page']) {
+async function selectFirstCourt(page: Page) {
   await page.getByLabel('Court').selectOption({ index: 1 });
 }
 
