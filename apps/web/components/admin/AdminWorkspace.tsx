@@ -85,6 +85,17 @@ function fmtDateTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
+function fmtLocalTimeLabel(value?: string | null) {
+  if (!value) return '-';
+  const [hhStr, mmStr] = value.split(':');
+  const hh = Number(hhStr);
+  const mm = Number(mmStr);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
+  const suffix = hh >= 12 ? 'PM' : 'AM';
+  const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
+}
+
 function toLocalDateInputValue(value?: string | null): string {
   if (!value) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -1213,6 +1224,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               } catch (e) {
                 setError(getMessage(e, `Failed to update status to ${nextStatus}.`));
               }
+            }}
+            onUpdateSchedule={async (sessionDate, startTimeHHmm) => {
+              if (!auth || !selectedSession) return;
+              const sessionStartIso = combineSessionDateAndTimeToIso(sessionDate, `${startTimeHHmm}:00`);
+              if (!sessionStartIso) {
+                throw new Error('Invalid session start date/time.');
+              }
+              await client.updateSession(auth.token, selectedClubId, selectedSession.id, {
+                session_start_time: sessionStartIso,
+              });
+              setSuccess('Session date/time updated.');
+              await refresh();
             }}
           />
         ) : null}
@@ -2672,8 +2695,25 @@ function SessionDetailPanel(props: {
   onDeleteMatch: (gameId: number) => Promise<void>;
   onEditMatch: (gameId: number, payload: AddMatchPayload) => Promise<void>;
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
+  onUpdateSchedule: (sessionDate: string, startTimeHHmm: string) => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onDeleteMatch, onEditMatch, onStatusChange } = props;
+  const {
+    session,
+    season,
+    sessionMatches,
+    participantsByGame,
+    players,
+    courts,
+    onAddMatch,
+    onClose,
+    onOpen,
+    onFinalize,
+    onRevert,
+    onDeleteMatch,
+    onEditMatch,
+    onStatusChange,
+    onUpdateSchedule,
+  } = props;
   type MatchSortKey = 'serial' | 'player1' | 'player2' | 'player3' | 'player4' | 'court' | 'startTime' | 'scoreA' | 'scoreB' | 'status';
   const [statusSaving, setStatusSaving] = useState(false);
   const [showAddMatchModal, setShowAddMatchModal] = useState(false);
@@ -2729,6 +2769,19 @@ function SessionDetailPanel(props: {
     const hour12 = hh % 12 === 0 ? 12 : hh % 12;
     return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
   };
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleDate, setScheduleDate] = useState(() => session?.session_date ?? '');
+  const [scheduleTime, setScheduleTime] = useState(() => (session?.start_time_local ? session.start_time_local.slice(0, 5) : '19:00'));
+
+  useEffect(() => {
+    if (!session) return;
+    setEditingSchedule(false);
+    setScheduleError(null);
+    setScheduleDate(session.session_date);
+    setScheduleTime(session.start_time_local ? session.start_time_local.slice(0, 5) : '19:00');
+  }, [session?.id, session?.session_date, session?.start_time_local]);
   const isSoftDuplicate = (payload: AddMatchPayload): boolean => {
     if (!session) return false;
     const targetSessionId = session.id;
@@ -2911,7 +2964,95 @@ function SessionDetailPanel(props: {
         </div>
       }>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gap: 10 }}>
-          <Info label="Session Date" value={fmtDate(session.session_date)} />
+          <div style={{ gridColumn: 'span 2', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
+            <div style={{ color: '#64748b', fontSize: 12 }}>Session Date &amp; Time</div>
+            {session.status !== 'UPCOMING' ? (
+              <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>
+                {fmtDate(session.session_date)} · {fmtLocalTimeLabel(session.start_time_local)}
+              </div>
+            ) : !editingSchedule ? (
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ color: '#0f172a', fontWeight: 700 }}>
+                  {fmtDate(session.session_date)} · {fmtLocalTimeLabel(session.start_time_local)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleError(null);
+                    setEditingSchedule(true);
+                  }}
+                  title="Edit Date & Time"
+                  aria-label="Edit Date & Time"
+                  style={{ ...outlineBtn, padding: 6, minWidth: 32, minHeight: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 6 }}>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    style={field}
+                  />
+                  <input
+                    type="time"
+                    step={300}
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    style={field}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingSchedule(false);
+                      setScheduleError(null);
+                      setScheduleDate(session.session_date);
+                      setScheduleTime(session.start_time_local ? session.start_time_local.slice(0, 5) : '19:00');
+                    }}
+                    style={{ ...outlineBtn, padding: '6px 10px', fontSize: 12 }}
+                    disabled={scheduleSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!scheduleDate) {
+                        setScheduleError('Select a session date.');
+                        return;
+                      }
+                      if (!scheduleTime) {
+                        setScheduleError('Select a start time.');
+                        return;
+                      }
+                      setScheduleError(null);
+                      setScheduleSaving(true);
+                      try {
+                        await onUpdateSchedule(scheduleDate, scheduleTime);
+                        setEditingSchedule(false);
+                      } catch (e) {
+                        setScheduleError(getMessage(e, 'Failed to update session date/time.'));
+                      } finally {
+                        setScheduleSaving(false);
+                      }
+                    }}
+                    style={{ ...primaryBtn, padding: '6px 10px', fontSize: 12 }}
+                    disabled={scheduleSaving}
+                  >
+                    {scheduleSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+                {scheduleError ? <div style={{ fontSize: 11, color: 'var(--bad)' }}>{scheduleError}</div> : null}
+              </div>
+            )}
+          </div>
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
             <div style={{ color: '#64748b', fontSize: 12 }}>Status</div>
             {session.status === 'FINALIZED' ? (
@@ -2958,7 +3099,6 @@ function SessionDetailPanel(props: {
             )}
           </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
-          <Info label="Start Time" value={session.start_time_local || '-'} />
           <Info label="Opened" value={fmtDateTime(session.opened_at)} />
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>
