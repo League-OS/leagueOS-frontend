@@ -1689,11 +1689,16 @@ function AddGameScreen({
   const sessionStartDate = session ? new Date(session.session_start_time) : null;
   const sessionStartLocalMinutes = sessionStartDate
     ? sessionStartDate.getHours() * 60 + sessionStartDate.getMinutes()
-    : nowCapMinutes;
+    : Math.max(0, nowCapMinutes - 120);
 
-  // Window: 30 min before session start → session start + 2h30min, capped at now
-  const windowStartMinutes = Math.max(0, sessionStartLocalMinutes - 30);
-  const latestAllowedMinutes = Math.min(sessionStartLocalMinutes + 150, nowCapMinutes);
+  const sessionEndDate = session?.session_end_time ? new Date(session.session_end_time) : null;
+  const sessionEndLocalMinutes = sessionEndDate
+    ? sessionEndDate.getHours() * 60 + sessionEndDate.getMinutes()
+    : sessionStartLocalMinutes + 120; // default 2h session if no end time set
+
+  // Selectable slots: from session start → session end, capped at now
+  const windowStartMinutes = sessionStartLocalMinutes;
+  const latestAllowedMinutes = Math.min(sessionEndLocalMinutes, nowCapMinutes);
 
   const formatTimeLabel = (value: string) => {
     const [hh, mm] = value.split(':').map(Number);
@@ -2236,7 +2241,9 @@ function AddGameScreen({
               {timeExpanded ? (
                 <div style={{ padding: 10, display: 'grid', gap: 8 }}>
                   <div style={{ color: '#64748b', fontSize: 12 }}>
-                    {`Session range: ${formatTimeLabel(toHHmm(windowStartMinutes))} to ${formatTimeLabel(toHHmm(latestAllowedMinutes))}`}
+                    {session
+                      ? `Session: ${formatTimeLabel(toHHmm(sessionStartLocalMinutes))} → ${formatTimeLabel(toHHmm(sessionEndLocalMinutes))}${latestAllowedMinutes < sessionEndLocalMinutes ? ` (slots up to ${formatTimeLabel(toHHmm(latestAllowedMinutes))} available now)` : ''}`
+                      : `Available: ${formatTimeLabel(toHHmm(windowStartMinutes))} to ${formatTimeLabel(toHHmm(latestAllowedMinutes))}`}
                   </div>
                   {!courtId ? (
                     <div style={{ color: '#64748b', fontSize: 13 }}>Select a court first.</div>
