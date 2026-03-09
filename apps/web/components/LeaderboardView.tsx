@@ -1314,7 +1314,7 @@ function HomeScreen({
           </>
         ) : null}
 
-        {canManageRecords && homeMode !== 'addGame' ? (
+        {canManageRecords && (homeMode === 'main' || homeMode === 'allGames' || homeMode === 'allUpcoming') ? (
           <div
             style={{
               position: 'fixed',
