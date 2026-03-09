@@ -4,10 +4,12 @@ import * as SecureStore from 'expo-secure-store';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
   ScrollView,
+  StatusBar as RNStatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -93,7 +95,12 @@ export default function App() {
       const seasonList = seasonsRes.value;
       setSeasons(seasonList);
 
-      const seasonToLoad = seasonId ?? selectedSeasonId ?? seasonList[0]?.id;
+      // Prefer: explicit arg → previous selection → active season → most recent season
+      const seasonToLoad =
+        seasonId ??
+        selectedSeasonId ??
+        seasonList.find((s) => s.is_active)?.id ??
+        seasonList[seasonList.length - 1]?.id;
       if (!seasonToLoad) {
         setSelectedSeasonId(null);
         setSelectedSession(null);
@@ -192,6 +199,8 @@ export default function App() {
     );
   }
 
+  const statusBarHeight = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) : 0;
+
   // ── Login ──
   if (!auth) {
     return (
@@ -235,16 +244,23 @@ export default function App() {
 
   // ── Main App ──
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
+    <View style={{ flex: 1, backgroundColor: BG }}>
+      <StatusBar style="light" backgroundColor={TEAL} translucent={false} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>LeagueOS</Text>
-          <Text style={styles.headerSub} numberOfLines={1}>
-            {selectedSeason?.name ?? 'No season'}
-          </Text>
+      {/* Header — includes status bar inset on Android */}
+      <View style={[styles.header, { paddingTop: statusBarHeight + 12 }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>LeagueOS</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'nowrap' }}>
+            <Text style={[styles.headerSub, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">
+              {selectedSeason?.name ?? 'No season'}
+            </Text>
+            {selectedSeason?.is_active ? (
+              <View style={styles.activePill}>
+                <Text style={styles.activePillText}>ACTIVE</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
         <Pressable style={styles.seasonBtn} onPress={() => setSeasonModal(true)}>
           <Text style={styles.seasonBtnText}>▼ Season</Text>
@@ -327,16 +343,21 @@ export default function App() {
                     void loadDashboard(auth.token, auth.clubId, s.id);
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.modalItemText,
-                      s.id === selectedSeasonId && styles.modalItemTextActive,
-                    ]}
-                  >
-                    {s.name}
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.modalItemText,
+                        s.id === selectedSeasonId && styles.modalItemTextActive,
+                      ]}
+                    >
+                      {s.name}
+                    </Text>
+                    {s.is_active ? (
+                      <Text style={{ fontSize: 11, color: TEAL, fontWeight: '600', marginTop: 2 }}>Active season</Text>
+                    ) : null}
+                  </View>
                   {s.id === selectedSeasonId ? (
-                    <Text style={{ color: TEAL, fontWeight: '700' }}>✓</Text>
+                    <Text style={{ color: TEAL, fontWeight: '700', fontSize: 18 }}>✓</Text>
                   ) : null}
                 </Pressable>
               ))}
@@ -347,7 +368,7 @@ export default function App() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -370,23 +391,44 @@ function HomeTab({
   refreshing: boolean;
   onRefresh: () => void;
 }) {
+  const sortedSessions = [...sessions].sort((a, b) => b.id - a.id);
   const activeSession =
-    sessions.find((s) => s.status === 'OPEN') ??
-    sessions.sort((a, b) => b.id - a.id)[0] ??
-    null;
+    sessions.find((s) => s.status === 'OPEN') ?? sortedSessions[0] ?? null;
   const topThree = leaderboard.slice(0, 3);
+  const totalMatches = recentGames.length;
+  const totalPlayers = new Set(
+    Object.values(participantsByGame).flat().map((p) => p.player_id),
+  ).size;
 
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ paddingBottom: 90, paddingTop: 4 }}
+      contentContainerStyle={{ paddingBottom: 90, paddingTop: 8 }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />
       }
     >
+      {/* Stats row */}
+      {(totalMatches > 0 || totalPlayers > 0) ? (
+        <View style={[styles.card, { flexDirection: 'row', padding: 0 }]}>
+          <View style={styles.statCell}>
+            <Text style={styles.statNum}>{totalMatches}</Text>
+            <Text style={styles.statLabel}>Matches</Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellBorder]}>
+            <Text style={styles.statNum}>{leaderboard.length}</Text>
+            <Text style={styles.statLabel}>Players</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={styles.statNum}>{sessions.length}</Text>
+            <Text style={styles.statLabel}>Sessions</Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* Active session card */}
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>CURRENT SESSION</Text>
+        <Text style={styles.cardLabel}>LATEST SESSION</Text>
         {activeSession ? (
           <>
             <Text style={styles.cardValue}>
@@ -398,7 +440,7 @@ function HomeTab({
             </View>
           </>
         ) : (
-          <Text style={styles.emptyText}>No active session</Text>
+          <Text style={styles.emptyText}>No sessions yet in this season</Text>
         )}
       </View>
 
@@ -502,35 +544,42 @@ function LeaderboardTab({
 
       <View style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
         <View style={styles.tableHead}>
-          <Text style={styles.th}>#</Text>
+          <Text style={[styles.th, { width: 32 }]}>#</Text>
           <Text style={[styles.th, { flex: 1 }]}>Player</Text>
-          <Text style={styles.th}>Δ ELO</Text>
-          <Text style={styles.th}>W</Text>
-          <Text style={styles.th}>Pts</Text>
+          <Text style={[styles.th, { width: 56, textAlign: 'right' }]}>Δ ELO</Text>
+          <Text style={[styles.th, { width: 40, textAlign: 'right' }]}>W/P</Text>
+          <Text style={[styles.th, { width: 48, textAlign: 'right' }]}>Pts</Text>
         </View>
         {leaderboard.map((row, i) => (
           <View
             key={row.player_id}
             style={[styles.tableRow, i % 2 === 0 ? styles.rowEven : null]}
           >
-            <Text style={styles.td}>{i + 1}</Text>
-            <Text style={[styles.td, { flex: 1 }]} numberOfLines={1}>
-              {row.display_name}
-            </Text>
+            <Text style={[styles.td, { width: 32, color: i < 3 ? TEAL_DARK : '#6b7280', fontWeight: i < 3 ? '800' : '400' }]}>{i + 1}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.td, { width: undefined, fontWeight: '600' }]} numberOfLines={1}>
+                {row.display_name}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#9ca3af' }}>{row.matches_played} matches</Text>
+            </View>
             <Text
-              style={[styles.td, row.season_elo_delta >= 0 ? styles.good : styles.bad]}
+              style={[styles.td, { width: 56, textAlign: 'right' }, row.season_elo_delta >= 0 ? styles.good : styles.bad]}
             >
               {row.season_elo_delta >= 0 ? '+' : ''}
               {row.season_elo_delta}
             </Text>
-            <Text style={styles.td}>{row.matches_won}</Text>
-            <Text style={styles.td}>{row.total_points}</Text>
+            <Text style={[styles.td, { width: 40, textAlign: 'right', color: '#374151' }]}>{row.matches_won}/{row.matches_played}</Text>
+            <Text style={[styles.td, { width: 48, textAlign: 'right', fontWeight: '700', color: '#0f172a' }]}>{row.total_points}</Text>
           </View>
         ))}
         {leaderboard.length === 0 ? (
-          <Text style={[styles.emptyText, { padding: 20, textAlign: 'center' }]}>
-            No leaderboard data yet
-          </Text>
+          <View style={{ padding: 32, alignItems: 'center' }}>
+            <Text style={{ fontSize: 32, marginBottom: 8 }}>🏸</Text>
+            <Text style={{ fontWeight: '700', color: '#374151', marginBottom: 4 }}>No rankings yet</Text>
+            <Text style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>
+              Rankings appear after a session is finalized
+            </Text>
+          </View>
         ) : null}
       </View>
     </ScrollView>
@@ -682,17 +731,24 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   btnDisabled: { opacity: 0.55 },
 
-  // Header
+  // Header — paddingTop is set dynamically via inline style (status bar height + 12)
   header: {
     backgroundColor: TEAL,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingBottom: 14,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 10,
   },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '800' },
   headerSub: { color: '#ccfbf1', fontSize: 13 },
+  activePill: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  activePillText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   seasonBtn: {
     borderWidth: 1,
     borderColor: '#99f6e4',
@@ -732,6 +788,12 @@ const styles = StyleSheet.create({
   tabItem: { flex: 1, alignItems: 'center', paddingTop: 10 },
   tabLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
   tabLabelActive: { color: TEAL, fontWeight: '700' },
+
+  // Stat cells
+  statCell: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  statCellBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f3f4f6' },
+  statNum: { fontSize: 24, fontWeight: '800', color: TEAL_DARK },
+  statLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2, fontWeight: '600', letterSpacing: 0.3 },
 
   // Card
   card: {

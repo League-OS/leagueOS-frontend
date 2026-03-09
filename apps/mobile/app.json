@@ -6,15 +6,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "platforms": ["ios", "android", "web"],
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "android": {
       "package": "club.leagueos.mobile",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0d9488"
       }
     },
     "ios": {
-      "bundleIdentifier": "club.leagueos.mobile"
+      "bundleIdentifier": "club.leagueos.mobile",
+      "icon": "./assets/icon.png"
     }
   }
 }
