@@ -2435,7 +2435,7 @@ function AddGameScreen({
             ) : null}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {['21-20', '21-19', '21-18', '21-17', '21-16', '22-20', '23-21', '24-22', '25-23', '30-29'].map((chip) => (
+              {['21-19', '21-18', '21-17', '21-16', '22-20', '23-21', '24-22', '25-23', '30-29'].map((chip) => (
                 <button
                   key={chip}
                   type="button"
