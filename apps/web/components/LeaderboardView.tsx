@@ -1719,7 +1719,7 @@ function AddGameScreen({
     sessionId: session?.id ?? null,
     startTime,
   });
-  const saveDisabled = busy || (!isEditMode && !session) || Boolean(recordContextError) || !step1Valid || Boolean(scoreGateError);
+  const saveDisabled = busy || !session || Boolean(recordContextError) || !step1Valid || Boolean(scoreGateError);
   const scoreRuleMessage =
     step === 2 && scoreGateError && (
       scoreGateError.includes('Winner') ||
@@ -2309,7 +2309,21 @@ function AddGameScreen({
                 {renderNameBubbles(teamANames, 'neutral')}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button type="button" onClick={() => setScoreA((prev) => Math.max(0, prev - 1))} style={outlineBtn}>-</button>
-                  <div style={{ ...modalInput, width: 72, textAlign: 'center', background: '#fff', fontWeight: 800 }}>{scoreA}</div>
+                  <div
+                    style={{
+                      ...modalInput,
+                      width: 88,
+                      textAlign: 'center',
+                      background: '#fff',
+                      fontWeight: 900,
+                      fontSize: 40,
+                      lineHeight: 1.05,
+                      color: '#0f172a',
+                      padding: '8px 10px',
+                    }}
+                  >
+                    {scoreA}
+                  </div>
                   <button type="button" onClick={() => setScoreA((prev) => Math.min(30, prev + 1))} style={outlineBtn}>+</button>
                 </div>
               </div>
@@ -2318,7 +2332,21 @@ function AddGameScreen({
                 {renderNameBubbles(teamBNames, 'red')}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button type="button" onClick={() => setScoreB((prev) => Math.max(0, prev - 1))} style={outlineBtn}>-</button>
-                  <div style={{ ...modalInput, width: 72, textAlign: 'center', background: '#fff', fontWeight: 800 }}>{scoreB}</div>
+                  <div
+                    style={{
+                      ...modalInput,
+                      width: 88,
+                      textAlign: 'center',
+                      background: '#fff',
+                      fontWeight: 900,
+                      fontSize: 40,
+                      lineHeight: 1.05,
+                      color: '#0f172a',
+                      padding: '8px 10px',
+                    }}
+                  >
+                    {scoreB}
+                  </div>
                   <button type="button" onClick={() => setScoreB((prev) => Math.min(30, prev + 1))} style={outlineBtn}>+</button>
                 </div>
               </div>
@@ -2374,7 +2402,17 @@ function AddGameScreen({
                   return scoreB;
                 });
               }}
-              style={outlineBtn}
+              style={{
+                border: '1px solid #9fd8dd',
+                borderRadius: 999,
+                background: 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                color: '#0f6c75',
+                padding: '10px 18px',
+                fontWeight: 800,
+                fontSize: 16,
+                cursor: 'pointer',
+                alignSelf: 'center',
+              }}
             >
               Flip Sides (A ↔ B)
             </button>
