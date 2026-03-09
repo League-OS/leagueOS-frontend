@@ -1,146 +1,115 @@
 /**
  * Edit Game Workflow – Playwright E2E tests
  *
- * Verifies that opening an existing game in edit mode:
- *  - Pre-fills all Step 1 (players) and Step 2 (court / time / score) values
- *  - Allows changing score and saving
- *  - Returns the user to the game list after a successful edit
+ * Tests the "edit existing game" path: clicking a game row on the Home tab
+ * opens the same AddGame form pre-filled with that game's data.
  *
- * Requires the same environment as add-game-workflow.spec.ts.
- *   E2E_EMAIL, E2E_PASSWORD, E2E_BASE_URL, E2E_API_BASE
+ * Requires:
+ *   - Next.js dev server + API server (same as add-game-workflow.spec.ts)
+ *   - At least one game visible on the Home tab's "Recent Games" list.
+ *   - An OPEN session must exist for editing to be allowed.
+ *
+ * Credentials override:
+ *   E2E_EMAIL  E2E_PASSWORD
  */
 
 import { expect, test, type Page } from '@playwright/test';
 
-const EMAIL    = process.env.E2E_EMAIL    || 'user@clubrally.local';
-const PASSWORD = process.env.E2E_PASSWORD || 'User@1234';
-const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
+// Auth state reused via storageState; no per-test logins
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function loginAs(page: Page, email = EMAIL, password = PASSWORD) {
+async function loginAs(page: Page) {
+  // Auth state is pre-loaded via Playwright storageState (global setup).
   await page.goto('/');
-  await page.getByPlaceholder(/email/i).fill(email);
-  await page.getByPlaceholder(/password/i).fill(password);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page.getByRole('button', { name: /new game/i })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: '+' })).toBeVisible({ timeout: 20_000 });
 }
 
 /**
- * Navigate to the game list on the Home tab and click the first CREATED
- * (editable) game row that appears.
- * Returns the row text so callers can assert on it.
+ * Click the first game row in "Recent Games" (a button that contains a score like "21-17").
+ * Returns the row's text for assertions.
  */
-async function openFirstEditableGame(page: Page): Promise<string | null> {
-  // The Home tab should already be active after login.
-  // Games are in a table/list; look for "Edit" button or clickable rows.
-  // In the current UI the game row is clickable and opens a detail view
-  // with an "Edit" button if the session is not FINALIZED.
+async function openFirstGameRow(page: Page): Promise<string | null> {
+  const gameRow = page.locator('button').filter({ hasText: /\d{1,2}-\d{1,2}/ }).first();
+  const rowText = await gameRow.textContent().catch(() => null);
 
-  // Open "All Games" if available
-  const allGamesBtn = page.getByRole('button', { name: /all games/i });
-  if (await allGamesBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await allGamesBtn.click();
+  if (!rowText) {
+    test.skip(true, 'No game rows found on the Home tab – skipping edit tests');
+    return null;
   }
 
-  // Find a game row (tr or clickable div that contains a score like "21-17")
-  const gameRow = page.locator('tr, [role="row"], button').filter({ hasText: /\d+-\d+/ }).first();
-  const rowText = await gameRow.textContent();
   await gameRow.click();
+  return rowText.trim();
+}
 
-  return rowText?.trim() ?? null;
+/** Check if the Edit Game form is open; if not, skip. */
+async function requireEditFormOpen(page: Page) {
+  const heading = page.getByRole('heading', { name: 'Edit Game', level: 2 });
+  if (!await heading.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    test.skip(true, 'Edit Game form did not open – no editable game available');
+  }
 }
 
 // ---------------------------------------------------------------------------
 // EG-01  Edit mode pre-fills existing game data
 // ---------------------------------------------------------------------------
 
-test('EG-01: opening an existing game pre-fills players, court, time, and score', async ({ page }) => {
+test('EG-01: opening a game row pre-fills players, court, time, and score', async ({ page }) => {
   await loginAs(page);
+  await openFirstGameRow(page);
+  await requireEditFormOpen(page);
 
-  // Open the first available game's detail view
-  await openFirstEditableGame(page);
-
-  // Look for an Edit button in the detail panel
-  const editBtn = page.getByRole('button', { name: /edit/i });
-  if (!await editBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    test.skip(); // No editable game available in this environment
-    return;
-  }
-  await editBtn.click();
-
-  // Should land on "Edit Game" Step 1
-  await expect(page.getByText('Edit Game')).toBeVisible();
+  // Step 1 should be shown with "Edit Game" heading
   await expect(page.getByText('Step 1 of 2')).toBeVisible();
 
-  // All four player slots should NOT say "Select player" (pre-filled)
-  const selectPlaceholders = page.getByRole('button', { name: 'Select player' });
-  await expect(selectPlaceholders).toHaveCount(0);
+  // All 4 player slots should be filled – no "Select player" buttons visible
+  await expect(page.getByRole('button', { name: 'Select player' })).toHaveCount(0);
 
-  // Advance to step 2 (players are pre-filled so the tab should be clickable)
+  // Advance to step 2
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
   // Court should not say "Select court"
-  const courtLabel = page.locator('button').filter({ hasText: /court/i }).first();
-  await expect(courtLabel).not.toHaveText('Select court');
-
-  // Time Slot should not say "Select time"
+  await expect(page.getByText('Select court')).not.toBeVisible();
+  // Time should not say "Select time"
   await expect(page.getByText('Select time')).not.toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// EG-02  Score can be changed and saved
+// EG-02  Changing score and saving in edit mode
 // ---------------------------------------------------------------------------
 
-test('EG-02: editing the score and saving updates the game', async ({ page }) => {
+test('EG-02: editing score via quick-score chip and saving closes the edit form', async ({ page }) => {
   await loginAs(page);
-  await openFirstEditableGame(page);
+  await openFirstGameRow(page);
+  await requireEditFormOpen(page);
 
-  const editBtn = page.getByRole('button', { name: /edit/i });
-  if (!await editBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    test.skip();
-    return;
-  }
-  await editBtn.click();
-
-  // Go straight to step 2
+  // Navigate to step 2
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  // Click a quick-score chip to pick a definite valid score
-  const scoreChip = page.getByRole('button', { name: '21-18' });
-  await scoreChip.click();
+  // Use the 21-18 quick-score chip (guaranteed valid)
+  await page.getByRole('button', { name: '21-18' }).click();
 
-  // Save should be enabled now (court + time already pre-filled)
+  // Save should be enabled (court + time already pre-filled in edit mode)
   const saveBtn = page.getByRole('button', { name: 'Save Game' });
   await expect(saveBtn).toBeEnabled({ timeout: 5_000 });
   await saveBtn.click();
 
-  // After successful save the edit form should close
-  await expect(page.getByText('Edit Game')).not.toBeVisible({ timeout: 15_000 });
+  // Form should disappear after successful save
+  await expect(page.getByRole('heading', { name: 'Edit Game', level: 2 })).not.toBeVisible({ timeout: 20_000 });
 });
 
 // ---------------------------------------------------------------------------
-// EG-03  Back on step 2 returns to step 1 in edit mode
+// EG-03  Back on step 2 returns to step 1 without clearing player data
 // ---------------------------------------------------------------------------
 
-test('EG-03: Back on edit step 2 returns to edit step 1 without clearing players', async ({ page }) => {
+test('EG-03: Back on edit step 2 returns to step 1 and players remain pre-filled', async ({ page }) => {
   await loginAs(page);
-  await openFirstEditableGame(page);
-
-  const editBtn = page.getByRole('button', { name: /edit/i });
-  if (!await editBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    test.skip();
-    return;
-  }
-  await editBtn.click();
-
-  // Capture player names in step 1
-  const allSlotBtns = page.locator('button').filter({ hasNot: page.getByText('Select player') });
-  const step1Text = await page.locator('[data-testid="team-a"], [data-testid="team-b"]').allTextContents().catch(() => []);
+  await openFirstGameRow(page);
+  await requireEditFormOpen(page);
 
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
@@ -148,33 +117,29 @@ test('EG-03: Back on edit step 2 returns to edit step 1 without clearing players
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByText('Step 1 of 2')).toBeVisible();
 
-  // Player slots should still not say "Select player"
+  // Player slots must still be filled (no "Select player" buttons)
   await expect(page.getByRole('button', { name: 'Select player' })).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
-// EG-04  Flip Sides in edit mode works the same as in add mode
+// EG-04  Flip Sides in edit mode swaps A/B scores
 // ---------------------------------------------------------------------------
 
-test('EG-04: Flip Sides in edit mode swaps A/B scores', async ({ page }) => {
+test('EG-04: Flip Sides in edit mode swaps Team A and Team B scores', async ({ page }) => {
   await loginAs(page);
-  await openFirstEditableGame(page);
+  await openFirstGameRow(page);
+  await requireEditFormOpen(page);
 
-  const editBtn = page.getByRole('button', { name: /edit/i });
-  if (!await editBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    test.skip();
-    return;
-  }
-  await editBtn.click();
   await page.getByRole('button', { name: 'Score + Save' }).click();
+  await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  const scores = page.locator('[style*="font-size: 40px"], [style*="fontSize: 40"]');
-  const beforeA = (await scores.first().textContent())?.trim();
+  const scores = page.locator('[style*="fontSize: 40px"], [style*="font-size: 40px"]');
+  const beforeA = (await scores.nth(0).textContent())?.trim();
   const beforeB = (await scores.nth(1).textContent())?.trim();
 
   await page.getByRole('button', { name: /flip sides/i }).click();
 
-  const afterA = (await scores.first().textContent())?.trim();
+  const afterA = (await scores.nth(0).textContent())?.trim();
   const afterB = (await scores.nth(1).textContent())?.trim();
 
   expect(afterA).toBe(beforeB);

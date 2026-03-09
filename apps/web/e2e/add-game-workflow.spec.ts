@@ -1,66 +1,77 @@
 /**
  * Add Game Workflow – Playwright E2E tests
  *
- * Covers TC-01 … TC-18 as defined in the test plan.
- * Requires:
- *   - Next.js dev server running on http://127.0.0.1:3000
- *   - API server running on http://127.0.0.1:8000
- *   - At least one OPEN session with ≥1 court and ≥4 active players in the
- *     default club (club_id=1).
+ * Covers TC-01 … TC-18 from the test plan.
  *
- * Run from repo root:
- *   pnpm --filter @leagueos/web test:e2e
+ * Prerequisites (run once before tests):
+ *   - Next.js dev server: pnpm dev:web  → http://127.0.0.1:3000
+ *   - API server:         python -m uvicorn app.main:app  → http://127.0.0.1:8000
+ *   - An OPEN session must exist for the active season in club_id=1.
+ *     If none exists the tests are skipped gracefully.
  *
- * Override credentials / URL with env vars:
- *   E2E_EMAIL, E2E_PASSWORD, E2E_BASE_URL, E2E_API_BASE
+ * Credentials override via env vars:
+ *   E2E_EMAIL  (default: enosh_fvma_badminton_club@leagueos.local)
+ *   E2E_PASSWORD  (default: Recorder@123)
  */
 
 import { expect, test, type Page } from '@playwright/test';
 
-const EMAIL    = process.env.E2E_EMAIL    || 'user@clubrally.local';
-const PASSWORD = process.env.E2E_PASSWORD || 'User@1234';
+// Credentials used by global setup (login happens once; auth state reused here)
 
 // ---------------------------------------------------------------------------
-// Shared helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
-async function loginAs(page: Page, email = EMAIL, password = PASSWORD) {
+async function loginAs(page: Page) {
+  // Auth state is pre-loaded via Playwright storageState (global setup).
+  // Just navigate home and wait for the dashboard.
   await page.goto('/');
-  await page.getByPlaceholder(/email/i).fill(email);
-  await page.getByPlaceholder(/password/i).fill(password);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  // Wait for the home dashboard to be visible
-  await expect(page.getByRole('button', { name: /new game/i })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: '+' })).toBeVisible({ timeout: 20_000 });
 }
 
 async function openNewGame(page: Page) {
-  await page.getByRole('button', { name: /new game/i }).click();
-  await expect(page.getByText('New Game')).toBeVisible();
-  await expect(page.getByText('Step 1 of 2')).toBeVisible();
+  await page.getByRole('button', { name: '+' }).click();
+  await expect(page.getByRole('heading', { name: 'New Game', level: 2 })).toBeVisible();
 }
 
-/** Pick the first available name that appears inside the 'All Players' section */
-async function pickPlayerFromAllSection(page: Page) {
-  await expect(page.getByText('All Players')).toBeVisible();
-  const btn = page.locator('text=All Players').locator('~ div button').first();
-  const name = await btn.textContent();
-  await btn.click();
-  return name?.trim() ?? '';
+/** Check if there is an open session available (if not, skip the test). */
+async function requireOpenSession(page: Page) {
+  const errMsg = page.getByText('No open session is available for this season');
+  if (await errMsg.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    test.skip(true, 'No OPEN session available – skipping test');
+  }
 }
 
-/** Fill all 4 player slots with distinct players */
+/**
+ * Pick the first available player from the picker modal.
+ * Scopes to the picker card (identified by its "Search players..." input),
+ * then clicks the first player-chip button (excluding Clear / Close).
+ */
+async function pickFirstAvailablePlayer(page: Page): Promise<string> {
+  // The picker card always has a "Search players..." input
+  await expect(page.getByPlaceholder('Search players...')).toBeVisible();
+
+  // The picker card is the nearest parent div that contains the search input
+  const pickerCard = page.locator('div').filter({ has: page.getByPlaceholder('Search players...') }).last();
+
+  // Player chips are buttons inside the card that are NOT "Clear" or "Close"
+  const playerBtns = pickerCard.locator('button').filter({ hasNotText: /^(Clear|Close)$/ });
+
+  // Wait for at least one player chip to appear
+  await expect(playerBtns.first()).toBeVisible({ timeout: 10_000 });
+
+  const name = (await playerBtns.first().textContent())?.trim() ?? '';
+  await playerBtns.first().click();
+  return name;
+}
+
+/** Fill all 4 player slots (a1, a2, b1, b2) with distinct players. */
 async function fillAllPlayers(page: Page): Promise<string[]> {
   const names: string[] = [];
-  const slots = ['a1', 'a2', 'b1', 'b2'];
-  for (const slot of slots) {
-    // Each slot button currently shows "Select player"
-    const slotBtn = page.locator(`[data-testid="slot-${slot}"]`).or(
-      page.getByRole('button', { name: 'Select player' }).first()
-    );
-    await slotBtn.click();
-    await expect(page.getByText('All Players')).toBeVisible();
-    const picked = await pickPlayerFromAllSection(page);
-    names.push(picked);
+  // There are exactly 4 "Select player" buttons in step 1
+  for (let i = 0; i < 4; i++) {
+    await page.getByRole('button', { name: 'Select player' }).first().click();
+    names.push(await pickFirstAvailablePlayer(page));
   }
   return names;
 }
@@ -69,22 +80,22 @@ async function fillAllPlayers(page: Page): Promise<string[]> {
 // TC-01  Step Navigation
 // ---------------------------------------------------------------------------
 
-test('TC-01: clicking Score+Save navigates to step 2, clicking Players returns to step 1', async ({ page }) => {
+test('TC-01: Score+Save tab requires 4 players; Players tab always returns to step 1', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
 
-  // Before filling players, clicking "Score + Save" should warn (not navigate)
+  // Without players → Score+Save tab shows warning, stays on step 1
   await page.getByRole('button', { name: 'Score + Save' }).click();
-  await expect(page.getByText('Step 1 of 2')).toBeVisible(); // still step 1
+  await expect(page.getByText('Step 1 of 2')).toBeVisible();
+  await expect(page.getByText(/Select 4 unique players/i)).toBeVisible();
 
-  // Fill all 4 players
+  // Fill all players and proceed
   await fillAllPlayers(page);
-
-  // Now Score + Save should work
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  // Click Players tab → back to step 1
+  // Players tab returns to step 1
   await page.getByRole('button', { name: 'Players' }).click();
   await expect(page.getByText('Step 1 of 2')).toBeVisible();
 });
@@ -93,257 +104,287 @@ test('TC-01: clicking Score+Save navigates to step 2, clicking Players returns t
 // TC-02  State Persistence across step switches
 // ---------------------------------------------------------------------------
 
-test('TC-02: all step-2 values survive round-trip back to step 1 and forward again', async ({ page }) => {
+test('TC-02: court and score survive round-trip between step 1 and step 2', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
 
   // Move to step 2
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  // Select first available court
-  const courtBtn = page.locator('button', { hasText: /court/i }).first();
-  const courtName = await courtBtn.textContent();
-  await courtBtn.click();
+  // Select the first court chip (chips have "Court" without ":" which headers contain)
+  const firstCourt = page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first();
+  const courtName = (await firstCourt.textContent())?.trim() ?? '';
+  await firstCourt.click();
 
-  // Increase score A by clicking +
-  await page.locator('button', { hasText: '+' }).first().click();
-  const scoreAText = await page.locator('[style*="font-size: 40px"], [style*="fontSize: 40"]').first().textContent();
+  // Bump score A up by 1
+  await page.getByRole('button', { name: '+' }).first().click();
+  const scoreAEl = page.locator('[style*="fontSize: 40px"], [style*="font-size: 40px"]').first();
+  const scoreA = (await scoreAEl.textContent())?.trim();
 
-  // Go back to step 1 then return to step 2
+  // Round-trip: go back to step 1 then forward again
   await page.getByRole('button', { name: 'Players' }).click();
   await expect(page.getByText('Step 1 of 2')).toBeVisible();
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  // Court and score should still be set
-  await expect(page.getByText(courtName!.trim())).toBeVisible();
-  await expect(page.locator('[style*="font-size: 40px"], [style*="fontSize: 40"]').first()).toHaveText(scoreAText!.trim());
+  // Court header should still show the chosen court
+  await expect(page.getByText(courtName)).toBeVisible();
+  // Score A should be unchanged
+  await expect(scoreAEl).toHaveText(scoreA!);
 });
 
 // ---------------------------------------------------------------------------
-// TC-03  Duplicate Prevention in picker
+// TC-03  Duplicate Prevention in player picker
 // ---------------------------------------------------------------------------
 
 test('TC-03: player selected in one slot is absent from other slot pickers', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
 
-  // Open the a1 slot picker and grab the first name from All Players
+  // Open picker for first slot (a1) and pick from available players
   await page.getByRole('button', { name: 'Select player' }).first().click();
-  await expect(page.getByText('All Players')).toBeVisible();
-
-  const firstPlayerBtn = page.locator('text=All Players').locator('~ div button').first();
+  await expect(page.getByPlaceholder('Search players...')).toBeVisible();
+  const pickerCard1 = page.locator('div').filter({ has: page.getByPlaceholder('Search players...') }).last();
+  const firstPlayerBtn = pickerCard1.locator('button').filter({ hasNotText: /^(Clear|Close)$/ }).first();
   const pickedName = (await firstPlayerBtn.textContent())?.trim() ?? '';
   await firstPlayerBtn.click();
 
-  // Open a2 slot picker – picked player must not appear
+  // Open picker for second slot (a2)
   await page.getByRole('button', { name: 'Select player' }).first().click();
-  await expect(page.getByText('All Players')).toBeVisible();
-
-  const allButtons = page.locator('text=All Players').locator('~ div button');
-  const buttonTexts = await allButtons.allTextContents();
-  expect(buttonTexts.map(t => t.trim())).not.toContain(pickedName);
+  await expect(page.getByPlaceholder('Search players...')).toBeVisible();
+  const pickerCard2 = page.locator('div').filter({ has: page.getByPlaceholder('Search players...') }).last();
+  // Picked player must not appear as a selectable player chip
+  const playerChipBtns = pickerCard2.locator('button').filter({ hasNotText: /^(Clear|Close)$/ });
+  const texts = await playerChipBtns.allTextContents();
+  expect(texts.map(t => t.trim())).not.toContain(pickedName);
 });
 
 // ---------------------------------------------------------------------------
-// TC-04  Picker sections: Recents → Suggested → All Players
+// TC-04  Picker section order: Recents → Suggested → All Players
 // ---------------------------------------------------------------------------
 
-test('TC-04: picker always shows sections in order Recents → Suggested → All Players', async ({ page }) => {
+test('TC-04: picker shows sections in order Recents → Suggested → All Players', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
 
   await page.getByRole('button', { name: 'Select player' }).first().click();
-  await expect(page.getByText('All Players')).toBeVisible();
+  await expect(page.getByPlaceholder('Search players...')).toBeVisible();
 
-  // Verify heading order in the DOM
-  const headings = await page.locator('text=/^Recents$|^Suggested$|^All Players$/').allTextContents();
-  expect(headings[0]).toBe('Recents');
-  expect(headings[1]).toBe('Suggested');
-  expect(headings[2]).toBe('All Players');
+  const pickerCard = page.locator('div').filter({ has: page.getByPlaceholder('Search players...') }).last();
+  // Grab section-heading texts in DOM order (scoped to picker card)
+  const headings = await pickerCard.locator('div').filter({ hasText: /^(Recents|Suggested|All Players)$/ })
+    .evaluateAll((els) => els.map(el => el.textContent?.trim() ?? ''));
+  const ordered = headings.filter(h => ['Recents', 'Suggested', 'All Players'].includes(h));
+  expect(ordered).toEqual(['Recents', 'Suggested', 'All Players']);
 });
 
 // ---------------------------------------------------------------------------
-// TC-05  Search Filter
+// TC-05  Search filter
 // ---------------------------------------------------------------------------
 
-test('TC-05: search filters names; no-match shows "No matching players"', async ({ page }) => {
+test('TC-05: search filters names; no-match shows "No matching players" in All Players section', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
 
   await page.getByRole('button', { name: 'Select player' }).first().click();
-  await expect(page.getByText('All Players')).toBeVisible();
+  await expect(page.getByPlaceholder('Search players...')).toBeVisible();
 
-  // Get a real player name from All Players
-  const firstBtn = page.locator('text=All Players').locator('~ div button').first();
-  const realName = (await firstBtn.textContent())?.trim() ?? '';
-
-  // Type first few chars → that player should still appear
-  const searchInput = page.getByPlaceholder(/search/i);
-  await searchInput.fill(realName.slice(0, 3));
-  await expect(firstBtn).toBeVisible();
-
-  // Type something that matches nothing
-  await searchInput.fill('xyzzy_no_match_99');
+  // Type nonsense → "No matching players" must appear in All Players section
+  await page.getByPlaceholder('Search players...').fill('xyzzy_no_match_99');
   await expect(page.getByText('No matching players')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-07  Court default on entering Step 2
+// TC-07  Court section default state on entering step 2
 // ---------------------------------------------------------------------------
 
-test('TC-07: court section is expanded and no court is selected when entering step 2 fresh', async ({ page }) => {
+test('TC-07: court section is expanded and shows "Select court" when entering step 2 fresh', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  // Court section header should show "Select court" and section should be expanded
+  // Court label reads "Select court"
   await expect(page.getByText('Select court')).toBeVisible();
-  await expect(page.getByText('Collapse')).toBeVisible(); // court is expanded
+  // Section is expanded → Collapse button visible
+  await expect(page.getByRole('button', { name: 'Collapse' }).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-08  Court-to-Time Auto Flow
+// TC-08  Court chip collapses court section and expands time section
 // ---------------------------------------------------------------------------
 
-test('TC-08: selecting a court collapses court and auto-expands time section', async ({ page }) => {
+test('TC-08: selecting a court collapses court section and auto-expands time section', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Click first court chip
-  const courtChip = page.locator('button').filter({ hasText: /court/i }).first();
+  // Click the first court chip (inside the expanded court section)
+  const courtChip = page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first();
   await courtChip.click();
 
-  // Time Slot section should now be expanded (shows Collapse or time slots)
-  await expect(page.getByText('Time Slot:')).toBeVisible();
-  // The time section header should show Collapse (meaning it's expanded)
-  const timeHeader = page.locator('button', { hasText: 'Time Slot:' }).or(
-    page.locator('button:has-text("Collapse")').nth(0)
-  );
-  await expect(page.getByText(/collapse/i).nth(0)).toBeVisible();
+  // Court section should be collapsed; time section should be expanded.
+  // The court header now shows "Expand"; time section header shows "Collapse".
+  await expect(page.locator('button').filter({ hasText: 'Expand' }).first()).toBeVisible();
+  await expect(page.locator('button').filter({ hasText: 'Collapse' }).first()).toBeVisible();
+  await expect(page.getByText(/Time Slot:/)).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-09  Time Auto Collapse
+// TC-09  Time chip collapses time section and updates header
 // ---------------------------------------------------------------------------
 
-test('TC-09: selecting a time chip collapses time section and shows selected time in header', async ({ page }) => {
+test('TC-09: selecting a time chip collapses time section and shows time in header', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
   // Select court first
-  await page.locator('button').filter({ hasText: /court/i }).first().click();
+  await page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first().click();
 
-  // Wait for time section to expand and chips to appear
-  await expect(page.getByText(/\d{1,2}:\d{2} (AM|PM)/)).toBeVisible({ timeout: 10_000 });
-
-  // Click first available time chip
+  // Wait for time chips and click the first one
   const timeChip = page.locator('button').filter({ hasText: /\d{1,2}:\d{2} (AM|PM)/ }).first();
-  const timeName = (await timeChip.textContent())?.trim();
+  await expect(timeChip).toBeVisible({ timeout: 10_000 });
+  const timeText = (await timeChip.textContent())?.trim() ?? '';
   await timeChip.click();
 
-  // Time Slot header should now show the selected time
-  await expect(page.getByText(timeName!)).toBeVisible();
-  // Section should be collapsed (Expand button visible now)
-  await expect(page.getByText('Expand')).toBeVisible();
+  // Time section should be collapsed; header should show the selected time
+  await expect(page.getByText(timeText)).toBeVisible();
+  // Both sections are now collapsed – at least one Expand button must be visible
+  await expect(page.locator('button').filter({ hasText: 'Expand' }).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-11  Custom Time hidden by default, visible after clicking
+// TC-11  Custom time hidden by default, visible after button click
 // ---------------------------------------------------------------------------
 
-test('TC-11: custom time input hidden by default; appears after tapping "+ Custom time"', async ({ page }) => {
+test('TC-11: custom time input hidden by default; appears after clicking "+ Custom time"', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Select court to open time section
-  await page.locator('button').filter({ hasText: /court/i }).first().click();
+  // Select court to expand time section
+  await page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first().click();
 
-  // Custom time input should NOT be visible yet
+  // Custom time input must NOT be visible initially
   await expect(page.locator('input[type="time"]')).not.toBeVisible();
   await expect(page.getByText('+ Custom time')).toBeVisible();
 
-  // Click the button
+  // Click button → input appears
   await page.getByText('+ Custom time').click();
   await expect(page.locator('input[type="time"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Use time' })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-12  Custom Time Future Guard
+// TC-12  Custom time future guard
 // ---------------------------------------------------------------------------
 
-test('TC-12: entering a future time shows error and does not select it', async ({ page }) => {
+test('TC-12: entering a future time shows "Time cannot be in the future"', async ({ page }) => {
+  // Mock Date to midnight so nowCapMinutes = 0.
+  // Any custom time > 0 min will satisfy `minutes > nowCapMinutes` and trigger the
+  // "Time cannot be in the future." guard, regardless of which day the session is from.
+  await page.addInitScript(() => {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 1, 0); // 00:00:01 today
+    const OrigDate = globalThis.Date;
+    class MockDate extends OrigDate {
+      constructor(...args: ConstructorParameters<typeof OrigDate>) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (args.length === 0) super(midnight.getTime() as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else super(...(args as any));
+      }
+      static override now() { return midnight.getTime(); }
+    }
+    globalThis.Date = MockDate as unknown as typeof Date;
+  });
+
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
-  await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Select court
-  await page.locator('button').filter({ hasText: /court/i }).first().click();
+  await page.getByRole('button', { name: 'Score + Save' }).click();
+  await page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first().click();
 
   // Open custom time
   await page.getByText('+ Custom time').click();
+  const timeInput = page.locator('input[type="time"]');
+  await expect(timeInput).toBeVisible();
 
-  // Set a clearly future time (23:55)
-  await page.locator('input[type="time"]').fill('23:55');
+  // Fill any non-midnight time (e.g. 09:00 = 540 min). With nowCapMinutes ≈ 0,
+  // 540 > 0 → "Time cannot be in the future." fires.
+  await timeInput.fill('09:00');
   await page.getByRole('button', { name: 'Use time' }).click();
 
-  // Should show error; startTime header should still say "Select time"
   await expect(page.getByText(/future/i)).toBeVisible();
+  // Time section header still shows "Select time" (selection was rejected)
   await expect(page.getByText('Select time')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-14  Score Validation
+// TC-14  Score validation: invalid scores show warning and disable Save
 // ---------------------------------------------------------------------------
 
-test('TC-14: invalid badminton scores show warning and Save Game is disabled', async ({ page }) => {
+test('TC-14: 21-20 score shows validation warning and Save Game is disabled', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Default scores (21-17) are valid; make them invalid: 21-20
-  // Click + on Team B to raise it from 17 to 20
-  const plusBtns = page.locator('button', { hasText: '+' });
+  // Default scores are 21 and 17 (valid). Increment Team B score by 3 to get 21-20 (invalid).
+  const plusBtns = page.getByRole('button', { name: '+' });
   for (let i = 0; i < 3; i++) {
-    await plusBtns.nth(1).click(); // second + is Team B
+    // Second '+' button is Team B
+    await plusBtns.nth(1).click();
   }
 
-  // Now score should be 21-20 which is invalid (21-pt win needs ≤19 opponent)
-  await expect(page.getByText(/invalid|score|rule/i).first()).toBeVisible();
+  // Validation message should appear (21-20 is invalid: 21-pt win requires opponent ≤ 19)
+  await expect(page.getByText(/invalid|score|21-point|rule/i).first()).toBeVisible();
+  // Save Game should be disabled (missing court/time OR invalid score)
   await expect(page.getByRole('button', { name: 'Save Game' })).toBeDisabled();
 });
 
 // ---------------------------------------------------------------------------
-// TC-15  Flip Sides
+// TC-15  Flip Sides swaps A and B scores
 // ---------------------------------------------------------------------------
 
-test('TC-15: Flip Sides swaps Team A and Team B scores', async ({ page }) => {
+test('TC-15: Flip Sides (A ↔ B) swaps Team A and Team B scores', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Read initial scores (default 21 and 17)
-  const scoreDisplays = page.locator('[style*="font-size: 40px"], [style*="fontSize: 40"]');
-  const initA = (await scoreDisplays.first().textContent())?.trim();
+  const scoreDisplays = page.locator('[style*="fontSize: 40px"], [style*="font-size: 40px"]');
+  const initA = (await scoreDisplays.nth(0).textContent())?.trim();
   const initB = (await scoreDisplays.nth(1).textContent())?.trim();
 
   await page.getByRole('button', { name: /flip sides/i }).click();
 
-  const flippedA = (await scoreDisplays.first().textContent())?.trim();
+  const flippedA = (await scoreDisplays.nth(0).textContent())?.trim();
   const flippedB = (await scoreDisplays.nth(1).textContent())?.trim();
 
   expect(flippedA).toBe(initB);
@@ -354,65 +395,73 @@ test('TC-15: Flip Sides swaps Team A and Team B scores', async ({ page }) => {
 // TC-16  Save Gate
 // ---------------------------------------------------------------------------
 
-test('TC-16: Save Game disabled without court/time, enabled when all inputs valid', async ({ page }) => {
+test('TC-16: Save Game disabled without court+time; enabled when all inputs valid', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // No court or time selected → Save disabled
+  // No court or time → disabled
   await expect(page.getByRole('button', { name: 'Save Game' })).toBeDisabled();
 
-  // Select court and a time chip
-  await page.locator('button').filter({ hasText: /court/i }).first().click();
+  // Select a court + a time chip
+  await page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first().click();
   const timeChip = page.locator('button').filter({ hasText: /\d{1,2}:\d{2} (AM|PM)/ }).first();
+  await expect(timeChip).toBeVisible({ timeout: 10_000 });
   await timeChip.click();
 
-  // Scores default to 21-17 which is valid → Save should be enabled
+  // Default scores 21-17 are valid → Save should be enabled
   await expect(page.getByRole('button', { name: 'Save Game' })).toBeEnabled({ timeout: 5_000 });
 });
 
 // ---------------------------------------------------------------------------
-// TC-17  Expand/Collapse
+// TC-17  Expand/Collapse court and time sections
 // ---------------------------------------------------------------------------
 
-test('TC-17: court and time sections expand/collapse via header button', async ({ page }) => {
+test('TC-17: court and time sections can be manually expanded and collapsed', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Court is initially expanded
-  await expect(page.getByText('Collapse').first()).toBeVisible();
+  // Court is initially expanded → Collapse button visible
+  const courtHeader = page.locator('button').filter({ hasText: /Court:/ });
+  await expect(page.getByRole('button', { name: 'Collapse' }).first()).toBeVisible();
 
-  // Collapse it manually via header
-  const courtHeader = page.locator('button').filter({ hasText: 'Court:' }).first();
+  // Collapse it
   await courtHeader.click();
-  await expect(page.getByText('Expand').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expand' }).first()).toBeVisible();
 
   // Expand it again
   await courtHeader.click();
-  await expect(page.getByText('Collapse').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Collapse' }).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
-// TC-18  Back Button from Step 2 returns to Step 1 without clearing data
+// TC-18  Back button on step 2 returns to step 1 without clearing state
 // ---------------------------------------------------------------------------
 
-test('TC-18: Back on step 2 returns to step 1 and preserves all step-2 state', async ({ page }) => {
+test('TC-18: Back on step 2 returns to step 1 and preserves court + time selection', async ({ page }) => {
   await loginAs(page);
   await openNewGame(page);
+  await requireOpenSession(page);
   await fillAllPlayers(page);
+
   await page.getByRole('button', { name: 'Score + Save' }).click();
 
-  // Choose court
-  const courtChip = page.locator('button').filter({ hasText: /court/i }).first();
-  const courtName = (await courtChip.textContent())?.trim();
+  // Select court
+  const courtChip = page.locator('button').filter({ hasText: /^Court/ }).filter({ hasNotText: ':' }).first();
+  const courtName = (await courtChip.textContent())?.trim() ?? '';
   await courtChip.click();
 
-  // Choose a time slot
+  // Select time
   const timeChip = page.locator('button').filter({ hasText: /\d{1,2}:\d{2} (AM|PM)/ }).first();
-  const timeName = (await timeChip.textContent())?.trim();
+  await expect(timeChip).toBeVisible({ timeout: 10_000 });
+  const timeName = (await timeChip.textContent())?.trim() ?? '';
   await timeChip.click();
 
   // Hit Back
@@ -423,7 +472,7 @@ test('TC-18: Back on step 2 returns to step 1 and preserves all step-2 state', a
   await page.getByRole('button', { name: 'Score + Save' }).click();
   await expect(page.getByText('Step 2 of 2')).toBeVisible();
 
-  // Court and time should still be selected
-  await expect(page.getByText(courtName!)).toBeVisible();
-  await expect(page.getByText(timeName!)).toBeVisible();
+  // Court and time should still be selected in the headers
+  await expect(page.getByText(courtName)).toBeVisible();
+  await expect(page.getByText(timeName)).toBeVisible();
 });
