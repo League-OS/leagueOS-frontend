@@ -1683,8 +1683,22 @@ function AddGameScreen({
 
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const latestAllowedMinutes = Math.max(0, nowMinutes - 5 - ((nowMinutes - 5) % 5));
-  const windowStartMinutes = Math.max(0, latestAllowedMinutes - 120);
+  // Cap at 5 min before now, floored to 5-min boundary — prevents future slots
+  const nowCapMinutes = Math.max(0, nowMinutes - 5 - ((nowMinutes - 5) % 5));
+
+  const sessionStartDate = session ? new Date(session.session_start_time) : null;
+  const sessionStartLocalMinutes = sessionStartDate
+    ? sessionStartDate.getHours() * 60 + sessionStartDate.getMinutes()
+    : Math.max(0, nowCapMinutes - 120);
+
+  const sessionEndDate = session?.session_end_time ? new Date(session.session_end_time) : null;
+  const sessionEndLocalMinutes = sessionEndDate
+    ? sessionEndDate.getHours() * 60 + sessionEndDate.getMinutes()
+    : sessionStartLocalMinutes + 120; // default 2h session if no end time set
+
+  // Selectable slots: from session start → session end, capped at now
+  const windowStartMinutes = sessionStartLocalMinutes;
+  const latestAllowedMinutes = Math.min(sessionEndLocalMinutes, nowCapMinutes);
 
   const formatTimeLabel = (value: string) => {
     const [hh, mm] = value.split(':').map(Number);
@@ -2217,7 +2231,9 @@ function AddGameScreen({
               {timeExpanded ? (
                 <div style={{ padding: 10, display: 'grid', gap: 8 }}>
                   <div style={{ color: '#64748b', fontSize: 12 }}>
-                    {`Session range: ${formatTimeLabel(toHHmm(windowStartMinutes))} to ${formatTimeLabel(toHHmm(latestAllowedMinutes))}`}
+                    {session
+                      ? `Session: ${formatTimeLabel(toHHmm(sessionStartLocalMinutes))} → ${formatTimeLabel(toHHmm(sessionEndLocalMinutes))}${latestAllowedMinutes < sessionEndLocalMinutes ? ` (slots up to ${formatTimeLabel(toHHmm(latestAllowedMinutes))} available now)` : ''}`
+                      : `Available: ${formatTimeLabel(toHHmm(windowStartMinutes))} to ${formatTimeLabel(toHHmm(latestAllowedMinutes))}`}
                   </div>
                   {!courtId ? (
                     <div style={{ color: '#64748b', fontSize: 13 }}>Select a court first.</div>
@@ -2251,9 +2267,20 @@ function AddGameScreen({
                   <button
                     type="button"
                     onClick={() => setShowCustomTime((prev) => !prev)}
-                    style={{ ...outlineBtn, justifySelf: 'flex-start' }}
+                    style={{
+                      border: '1px dashed #9fd8dd',
+                      borderRadius: 999,
+                      background: showCustomTime
+                        ? 'linear-gradient(180deg, #e3f8f7 0%, #d1f2ee 100%)'
+                        : 'linear-gradient(180deg, #f0fdfb 0%, #e6f8f8 100%)',
+                      color: '#0f6c75',
+                      padding: '7px 13px',
+                      fontWeight: 700,
+                      fontSize: 14,
+                      cursor: 'pointer',
+                    }}
                   >
-                    {showCustomTime ? 'Hide custom time' : 'Add custom time'}
+                    {showCustomTime ? '✕ Hide custom time' : '+ Custom time'}
                   </button>
                   {showCustomTime ? (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2266,7 +2293,16 @@ function AddGameScreen({
                       />
                       <button
                         type="button"
-                        style={outlineBtn}
+                        style={{
+                          border: '1px solid #9fd8dd',
+                          borderRadius: 999,
+                          background: 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                          color: '#0f6c75',
+                          padding: '7px 13px',
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: 'pointer',
+                        }}
                         onClick={() => {
                           if (!courtId) {
                             setError('Select a court before using custom time.');
