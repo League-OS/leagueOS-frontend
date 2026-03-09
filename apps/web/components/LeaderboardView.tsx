@@ -1683,8 +1683,15 @@ function AddGameScreen({
 
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  // Latest allowed slot = 5 min before now, floored to 5-min boundary
   const latestAllowedMinutes = Math.max(0, nowMinutes - 5 - ((nowMinutes - 5) % 5));
-  const windowStartMinutes = Math.max(0, latestAllowedMinutes - 120);
+  // Window starts at the session's local start time; falls back to 2h window if no session
+  const sessionStartDate = session ? new Date(session.session_start_time) : null;
+  const sessionStartLocalMinutes = sessionStartDate
+    ? sessionStartDate.getHours() * 60 + sessionStartDate.getMinutes()
+    : Math.max(0, latestAllowedMinutes - 120);
+  // Cap so windowStart never exceeds latestAllowed (e.g. if session hasn't started yet)
+  const windowStartMinutes = Math.min(sessionStartLocalMinutes, latestAllowedMinutes);
 
   const formatTimeLabel = (value: string) => {
     const [hh, mm] = value.split(':').map(Number);
