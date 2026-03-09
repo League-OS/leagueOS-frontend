@@ -2472,6 +2472,7 @@ function SessionsPanel(props: {
     setNewSessionDate(defaults.date);
     setNewSessionStartTime(defaults.startTimeHHMMSS);
     setNewSessionEndTime(defaults.endTimeHHMM);
+    setPanelError(null);
     setShowCreateSessionModal(true);
   };
   return (
@@ -2535,11 +2536,24 @@ function SessionsPanel(props: {
               <button
                 style={primaryBtn}
                 onClick={async () => {
+                  if (!newSessionSeasonId) {
+                    setPanelError('Select a season before creating a session.');
+                    return;
+                  }
+                  if (!newSessionName.trim()) {
+                    setPanelError('Enter a session name.');
+                    return;
+                  }
+                  if (!newSessionDate) {
+                    setPanelError('Select a session date.');
+                    return;
+                  }
+                  setPanelError(null);
                   try {
                     await onCreate();
                     setShowCreateSessionModal(false);
-                  } catch {
-                    // parent handler surfaces error banner
+                  } catch (e) {
+                    setPanelError(getMessage(e, 'Failed to create session.'));
                   }
                 }}
                 disabled={!newSessionSeasonId || !newSessionName.trim() || !newSessionDate}
