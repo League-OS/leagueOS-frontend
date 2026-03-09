@@ -2261,9 +2261,20 @@ function AddGameScreen({
                   <button
                     type="button"
                     onClick={() => setShowCustomTime((prev) => !prev)}
-                    style={{ ...outlineBtn, justifySelf: 'flex-start' }}
+                    style={{
+                      border: '1px dashed #9fd8dd',
+                      borderRadius: 999,
+                      background: showCustomTime
+                        ? 'linear-gradient(180deg, #e3f8f7 0%, #d1f2ee 100%)'
+                        : 'linear-gradient(180deg, #f0fdfb 0%, #e6f8f8 100%)',
+                      color: '#0f6c75',
+                      padding: '7px 13px',
+                      fontWeight: 700,
+                      fontSize: 14,
+                      cursor: 'pointer',
+                    }}
                   >
-                    {showCustomTime ? 'Hide custom time' : 'Add custom time'}
+                    {showCustomTime ? '✕ Hide custom time' : '+ Custom time'}
                   </button>
                   {showCustomTime ? (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -2276,7 +2287,16 @@ function AddGameScreen({
                       />
                       <button
                         type="button"
-                        style={outlineBtn}
+                        style={{
+                          border: '1px solid #9fd8dd',
+                          borderRadius: 999,
+                          background: 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                          color: '#0f6c75',
+                          padding: '7px 13px',
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: 'pointer',
+                        }}
                         onClick={() => {
                           if (!courtId) {
                             setError('Select a court before using custom time.');
