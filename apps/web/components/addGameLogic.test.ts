@@ -6,6 +6,7 @@ import {
   listOpenSeasons,
   selectSingleOpenSession,
   validateAddGameInput,
+  validateBadmintonEndScore,
 } from './addGameLogic.ts';
 
 test('listOpenSeasons only returns active seasons', () => {
@@ -92,7 +93,7 @@ test('validateAddGameInput enforces required fields and uniqueness', () => {
     sessionId: 7,
     startTime: '19:00',
   });
-  assert.match(invalidDiff ?? '', /2 points/i);
+  assert.match(invalidDiff ?? '', /22-29|deuce|0-19/i);
 
   const overMax = validateAddGameInput({
     courtId: 3,
@@ -104,4 +105,84 @@ test('validateAddGameInput enforces required fields and uniqueness', () => {
     startTime: '19:00',
   });
   assert.match(overMax ?? '', /Maximum score/i);
+});
+
+test('validateAddGameInput enforces valid badminton end-state score patterns', () => {
+  const validTwentyOne = validateAddGameInput({
+    courtId: 3,
+    scoreA: 21,
+    scoreB: 17,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.equal(validTwentyOne, null);
+
+  const validDeuce = validateAddGameInput({
+    courtId: 3,
+    scoreA: 22,
+    scoreB: 20,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.equal(validDeuce, null);
+
+  const validCap = validateAddGameInput({
+    courtId: 3,
+    scoreA: 30,
+    scoreB: 29,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.equal(validCap, null);
+
+  const invalidImpossible = validateAddGameInput({
+    courtId: 3,
+    scoreA: 22,
+    scoreB: 17,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.match(invalidImpossible ?? '', /22-29|deuce/i);
+
+  const invalidThirty = validateAddGameInput({
+    courtId: 3,
+    scoreA: 30,
+    scoreB: 27,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.match(invalidThirty ?? '', /30-29/i);
+
+  const invalidTwentyOneWithTwenty = validateAddGameInput({
+    courtId: 3,
+    scoreA: 21,
+    scoreB: 20,
+    sideAPlayerIds: [1, 2],
+    sideBPlayerIds: [3, 4],
+    sessionId: 7,
+    startTime: '19:00',
+  });
+  assert.match(invalidTwentyOneWithTwenty ?? '', /0-19/i);
+});
+
+test('validateBadmintonEndScore enforces terminal badminton score rules', () => {
+  assert.equal(validateBadmintonEndScore(21, 0), null);
+  assert.equal(validateBadmintonEndScore(22, 20), null);
+  assert.equal(validateBadmintonEndScore(30, 29), null);
+
+  assert.match(validateBadmintonEndScore(21, 20) ?? '', /0-19/i);
+  assert.match(validateBadmintonEndScore(30, 28) ?? '', /30-29/i);
+  assert.match(validateBadmintonEndScore(20, 18) ?? '', /at least 21/i);
+  assert.match(validateBadmintonEndScore(25, 24) ?? '', /2-point/i);
+  assert.match(validateBadmintonEndScore(19, 19) ?? '', /Draw is not allowed/i);
 });

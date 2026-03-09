@@ -336,6 +336,7 @@ export default function Page() {
         return {
           id: game.id,
           sessionId: game.session_id,
+          sessionStatus: session?.status,
           status: game.status ?? 'CREATED',
           createdBy: game.created_by_label ?? 'Unknown',
           date: formatMonthDay(session?.session_date ?? game.start_time),
@@ -675,6 +676,91 @@ export default function Page() {
     await refresh();
   }
 
+  function toLocalDateOnly(isoLike: string): string | null {
+    const parsed = new Date(isoLike);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  async function handleUpdateGame(gameId: number, payload: {
+    courtId: number | null;
+    startTimeLocal: string;
+    scoreA: number;
+    scoreB: number;
+    sideAPlayerIds: [number, number];
+    sideBPlayerIds: [number, number];
+  }) {
+    if (!auth) return;
+    const effectiveRole = String(profile?.club_role ?? profile?.role ?? '').toUpperCase();
+    const canRecord =
+      effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'RECORDER' || effectiveRole === 'USER';
+    if (!canRecord) {
+      throw new Error('Only club members with recording access can update games.');
+    }
+
+    if (!payload.courtId) {
+      throw new Error('Please select a court.');
+    }
+    if (payload.scoreA === payload.scoreB) {
+      throw new Error('No tied scores allowed.');
+    }
+
+    const allPlayerIds = [...payload.sideAPlayerIds, ...payload.sideBPlayerIds];
+    if (new Set(allPlayerIds).size !== allPlayerIds.length) {
+      throw new Error('Player appears more than once in this game. Choose 4 unique players.');
+    }
+
+    const targetGame = (record.existingGames.find((game) => game.id === gameId) ?? allGames.find((game) => game.id === gameId)) ?? null;
+    if (!targetGame) {
+      throw new Error('Game not found.');
+    }
+    if (targetGame.sessionStatus === 'FINALIZED') {
+      throw new Error('This game belongs to a finalized session and cannot be edited.');
+    }
+
+    const gameDate = toLocalDateOnly(targetGame.startTime);
+    const startTimeIso = gameDate ? combineSessionDateAndTimeToIso(gameDate, payload.startTimeLocal) : null;
+    if (!startTimeIso) {
+      throw new Error('Invalid start time. Please pick a valid time in 5-minute increments.');
+    }
+
+    const [h, m] = payload.startTimeLocal.split(':').map(Number);
+    if (!Number.isInteger(h) || !Number.isInteger(m) || m % 5 !== 0) {
+      throw new Error('Start time must be aligned to 5-minute increments.');
+    }
+
+    const existingGames = await client.games(auth.token, record.clubId);
+    const hasConflict = existingGames.some((game) => {
+      if (game.id === gameId) return false;
+      if (game.session_id !== targetGame.sessionId || game.court_id !== payload.courtId) return false;
+      const start = new Date(game.start_time);
+      if (Number.isNaN(start.getTime())) return false;
+      return start.getHours() === h && start.getMinutes() === m;
+    });
+    if (hasConflict) {
+      throw new Error('A game already exists for this session, court, and start time.');
+    }
+
+    await client.updateGame(auth.token, record.clubId, gameId, {
+      court_id: payload.courtId,
+      start_time: startTimeIso,
+      score_a: payload.scoreA,
+      score_b: payload.scoreB,
+    });
+    await client.upsertGameParticipants(auth.token, record.clubId, gameId, [
+      { player_id: payload.sideAPlayerIds[0], side: 'A' },
+      { player_id: payload.sideAPlayerIds[1], side: 'A' },
+      { player_id: payload.sideBPlayerIds[0], side: 'B' },
+      { player_id: payload.sideBPlayerIds[1], side: 'B' },
+    ]);
+
+    await refresh();
+    setSuccessMessage('Game updated.');
+  }
+
   async function handleRecordSeasonChange(seasonId: number) {
     if (!auth) return;
     try {
@@ -923,6 +1009,7 @@ export default function Page() {
       onFinalizeSession={handleFinalizeSession}
       onRevertSessionFinalize={handleRevertSessionFinalize}
       onRecordGame={handleRecordGame}
+      onUpdateGame={handleUpdateGame}
       onRecordSeasonChange={handleRecordSeasonChange}
       onCreateSeason={handleCreateSeason}
       canOpenSession={Boolean(isClubAdmin)}
