@@ -2365,47 +2365,51 @@ function AddGameScreen({
               <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, color: '#334155' }}>Team A</div>
                 {renderNameBubbles(teamANames, 'neutral')}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button type="button" onClick={() => setScoreA((prev) => Math.max(0, prev - 1))} style={outlineBtn}>-</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button type="button" onClick={() => setScoreA((prev) => Math.max(0, prev - 1))} style={scoreAdjBtn}>−</button>
                   <div
                     style={{
-                      ...modalInput,
-                      width: 88,
+                      flex: 1,
+                      minWidth: 0,
                       textAlign: 'center',
                       background: '#fff',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
                       fontWeight: 900,
                       fontSize: 40,
                       lineHeight: 1.05,
                       color: '#0f172a',
-                      padding: '8px 10px',
+                      padding: '8px 4px',
                     }}
                   >
                     {scoreA}
                   </div>
-                  <button type="button" onClick={() => setScoreA((prev) => Math.min(30, prev + 1))} style={outlineBtn}>+</button>
+                  <button type="button" onClick={() => setScoreA((prev) => Math.min(30, prev + 1))} style={scoreAdjBtn}>+</button>
                 </div>
               </div>
               <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, color: '#7f1d1d' }}>Team B</div>
                 {renderNameBubbles(teamBNames, 'red')}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button type="button" onClick={() => setScoreB((prev) => Math.max(0, prev - 1))} style={outlineBtn}>-</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button type="button" onClick={() => setScoreB((prev) => Math.max(0, prev - 1))} style={scoreAdjBtn}>−</button>
                   <div
                     style={{
-                      ...modalInput,
-                      width: 88,
+                      flex: 1,
+                      minWidth: 0,
                       textAlign: 'center',
                       background: '#fff',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
                       fontWeight: 900,
                       fontSize: 40,
                       lineHeight: 1.05,
                       color: '#0f172a',
-                      padding: '8px 10px',
+                      padding: '8px 4px',
                     }}
                   >
                     {scoreB}
                   </div>
-                  <button type="button" onClick={() => setScoreB((prev) => Math.min(30, prev + 1))} style={outlineBtn}>+</button>
+                  <button type="button" onClick={() => setScoreB((prev) => Math.min(30, prev + 1))} style={scoreAdjBtn}>+</button>
                 </div>
               </div>
             </div>
@@ -2853,6 +2857,22 @@ const outlineBtn: React.CSSProperties = {
   background: '#fff',
   padding: '8px 10px',
   cursor: 'pointer',
+};
+
+const scoreAdjBtn: React.CSSProperties = {
+  flexShrink: 0,
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  border: '1px solid var(--border)',
+  background: '#fff',
+  fontSize: 22,
+  lineHeight: 1,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
 };
 
 const primaryBtn: React.CSSProperties = {
