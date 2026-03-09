@@ -2334,19 +2334,19 @@ function AddGameScreen({
                             setError('Choose a custom time first.');
                             return;
                           }
-                          const normalized = floorToFiveMinuteIncrement(customTime);
-                          if (normalized !== customTime) {
-                            setError('Custom time must be on a 5-minute boundary.');
+                          // Strip optional seconds component ("20:15:00" → "20:15") and floor to 5-min
+                          const normalized = floorToFiveMinuteIncrement(customTime.slice(0, 5));
+                          const rawMinutes = parseHHmm(normalized);
+                          if (rawMinutes === null) {
+                            setError('Invalid time entered.');
                             return;
                           }
-                          const rawMinutes = parseHHmm(normalized);
-                          // Midnight crossover: if session started in the evening and user types
-                          // an early-AM time (e.g. "00:30"), treat it as next-day (add 1440)
-                          const minutes = rawMinutes !== null && sessionStartLocalMinutes > 720 && rawMinutes < sessionStartLocalMinutes - 360
+                          // Midnight crossover: early-AM time after an evening session → add 1440
+                          const minutes = sessionStartLocalMinutes > 720 && rawMinutes < sessionStartLocalMinutes - 360
                             ? rawMinutes + 1440
                             : rawMinutes;
-                          if (minutes === null || minutes > latestAllowedMinutes || minutes < windowStartMinutes) {
-                            setError('Custom time must be within the session window and in the past.');
+                          if (minutes > nowCapMinutes) {
+                            setError('Time cannot be in the future.');
                             return;
                           }
                           if (occupiedSlotSet.has(normalized)) {
