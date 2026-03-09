@@ -5,7 +5,7 @@ import { z } from 'zod';
 // ---------------------------------------------------------------------------
 
 export const globalRoleSchema = z.enum(['GLOBAL_ADMIN', 'CLUB_ADMIN', 'RECORDER', 'USER']);
-export const clubRoleSchema = z.enum(['CLUB_ADMIN', 'RECORDER', 'USER']);
+export const clubRoleSchema = z.enum(['GLOBAL_ADMIN', 'CLUB_ADMIN', 'RECORDER', 'USER']);
 
 export type GlobalRole = z.infer<typeof globalRoleSchema>;
 export type ClubRole = z.infer<typeof clubRoleSchema>;
