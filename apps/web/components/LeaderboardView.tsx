@@ -2013,6 +2013,11 @@ function AddGameScreen({
             fontWeight: 600,
             lineHeight: 1.2,
             fontSize: 13,
+            display: 'block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '100%',
           }
         : {
             border: '1px solid #bfdaf6',
@@ -2023,14 +2028,16 @@ function AddGameScreen({
             fontWeight: 600,
             lineHeight: 1.2,
             fontSize: 13,
+            display: 'block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '100%',
           };
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-        {names.map((name, index) => (
-          <div key={`${name}-${index}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={chipStyle}>{name}</span>
-            {index < names.length - 1 ? <span style={{ color: '#64748b', fontWeight: 700 }}>/</span> : null}
-          </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0, overflow: 'hidden' }}>
+        {names.map((name) => (
+          <span key={name} style={chipStyle} title={name}>{name}</span>
         ))}
       </div>
     );
@@ -2339,8 +2346,8 @@ function AddGameScreen({
               ) : null}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, color: '#334155' }}>Team A</div>
                 {renderNameBubbles(teamANames, 'neutral')}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2363,7 +2370,7 @@ function AddGameScreen({
                   <button type="button" onClick={() => setScoreA((prev) => Math.min(30, prev + 1))} style={outlineBtn}>+</button>
                 </div>
               </div>
-              <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8 }}>
+              <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, color: '#7f1d1d' }}>Team B</div>
                 {renderNameBubbles(teamBNames, 'red')}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
