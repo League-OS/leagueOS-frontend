@@ -2249,7 +2249,7 @@ function AddGameScreen({
                 <div style={{ padding: 10, display: 'grid', gap: 8 }}>
                   <div style={{ color: '#64748b', fontSize: 12 }}>
                     {session
-                      ? `Session: ${formatTimeLabel(toHHmm(sessionStartLocalMinutes))} → ${formatTimeLabel(toHHmm(sessionEndLocalMinutes))}${latestAllowedMinutes < sessionEndLocalMinutes ? ` (slots up to ${formatTimeLabel(toHHmm(latestAllowedMinutes))} available now)` : ''}`
+                      ? `Session: ${formatTimeLabel(toHHmm(sessionStartLocalMinutes))} → ${formatTimeLabel(toHHmm(sessionEndLocalMinutes))}`
                       : `Available: ${formatTimeLabel(toHHmm(windowStartMinutes))} to ${formatTimeLabel(toHHmm(latestAllowedMinutes))}`}
                   </div>
                   {!courtId ? (
@@ -2283,7 +2283,12 @@ function AddGameScreen({
                   )}
                   <button
                     type="button"
-                    onClick={() => setShowCustomTime((prev) => !prev)}
+                    onClick={() => setShowCustomTime((prev) => {
+                      if (!prev && !customTime) {
+                        setCustomTime(toHHmm(sessionStartLocalMinutes));
+                      }
+                      return !prev;
+                    })}
                     style={{
                       border: '1px dashed #9fd8dd',
                       borderRadius: 999,
