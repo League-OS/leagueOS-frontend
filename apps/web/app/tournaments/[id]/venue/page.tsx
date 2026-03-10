@@ -1,5 +1,6 @@
-import { TournamentPublicPage } from '../../../../components/tournaments/TournamentPublicPage';
+import { TournamentVenueDisplayPage } from '../../../../components/tournaments/TournamentVenueDisplayPage';
 
-export default function TournamentVenueDisplayRoute() {
-  return <TournamentPublicPage />;
+export default async function TournamentVenueDisplayRoute({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <TournamentVenueDisplayPage tournamentId={Number(id)} />;
 }
