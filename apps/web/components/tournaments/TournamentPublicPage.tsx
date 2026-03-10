@@ -125,8 +125,51 @@ export function TournamentPublicPage() {
             <option value="">Select tournament</option>
             {rows.map((r) => <option key={r.id} value={r.id}>{r.name} · {r.status}</option>)}
           </select>
-          <pre style={{ overflow: 'auto', background: '#f8fafc', padding: 10, borderRadius: 8, fontSize: 11 }}>{JSON.stringify(standings, null, 2)}</pre>
+
+          {'groups' in (standings || {}) && Array.isArray(standings?.groups)
+            ? standings.groups.map((g: any) => (
+                <div key={g.group} style={{ border: '1px solid #d6e0f1', borderRadius: 10, padding: 8 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Group {g.group}</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr><th style={{ textAlign: 'left' }}>Team</th><th>Pts</th><th>Diff</th></tr>
+                    </thead>
+                    <tbody>
+                      {(g.rows || []).map((r: any) => (
+                        <tr key={r.team_id}>
+                          <td>Team #{r.team_id}</td>
+                          <td style={{ textAlign: 'center' }}>{r.points}</td>
+                          <td style={{ textAlign: 'center' }}>{r.point_diff}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))
+            : Array.isArray(standings?.rows)
+              ? (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr><th style={{ textAlign: 'left' }}>Team</th><th>Pts</th><th>Diff</th></tr></thead>
+                  <tbody>
+                    {standings.rows.map((r: any) => (
+                      <tr key={r.team_id}><td>Team #{r.team_id}</td><td style={{ textAlign: 'center' }}>{r.points}</td><td style={{ textAlign: 'center' }}>{r.point_diff}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+              : <div style={{ fontSize: 12, color: '#64748b' }}>No standings yet.</div>}
+
+          <div style={{ border: '1px solid #d6e0f1', borderRadius: 10, padding: 8 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Knockout Bracket (preview)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 8 }}>Semifinal 1<br />Top Seed vs Seed 4</div>
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 8 }}>Semifinal 2<br />Seed 2 vs Seed 3</div>
+              <div style={{ gridColumn: '1 / span 2', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8 }}>Final<br />Winner SF1 vs Winner SF2</div>
+            </div>
+          </div>
+
           {selected ? <Link href={`/tournaments/${selected}/operator`}>Open operator console</Link> : null}
+          {selected ? <Link href={`/tournaments/${selected}/operator-mobile`}>Open mobile operator</Link> : null}
           {selected ? <Link href={`/tournaments/${selected}/venue`}>Open venue slideshow</Link> : null}
         </div>
       </section>
