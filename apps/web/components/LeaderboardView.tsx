@@ -2,15 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@leagueos/api';
-import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
-import { floorToFiveMinuteIncrement, validateAddGameInput } from './addGameLogic';
+import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
+import { floorToFiveMinuteIncrement, validateAddGameInput, validateBadmintonEndScore } from './addGameLogic';
 
 type TabKey = 'home' | 'leaderboard' | 'profile';
+type LeaderboardMode = 'player' | 'team';
 type HomeMode = 'main' | 'addGame' | 'allGames' | 'gameDetail' | 'allUpcoming' | 'upcomingDetail';
 
 export type HomeGameRow = {
   id: number;
   sessionId: number;
+  sessionStatus?: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'FINALIZED' | 'CANCELLED';
   status: 'CREATED' | 'FINALIZED';
   createdBy: string;
   date: string;
@@ -67,6 +69,8 @@ type Props = {
   recordSession: Session | null;
   recordSeasonId: number | null;
   leaderboard: LeaderboardEntry[];
+  teamLeaderboard: TeamLeaderboardEntry[];
+  enableTeamRanking: boolean;
   recordSeasons: Season[];
   players: Player[];
   courts: Court[];
@@ -96,6 +100,14 @@ type Props = {
   onFinalizeSession: () => Promise<void>;
   onRevertSessionFinalize: () => Promise<void>;
   onRecordGame: (payload: {
+    courtId: number | null;
+    startTimeLocal: string;
+    scoreA: number;
+    scoreB: number;
+    sideAPlayerIds: [number, number];
+    sideBPlayerIds: [number, number];
+  }) => Promise<void>;
+  onUpdateGame: (gameId: number, payload: {
     courtId: number | null;
     startTimeLocal: string;
     scoreA: number;
@@ -138,6 +150,8 @@ export function LeaderboardView(props: Props) {
     recordSession,
     recordSeasonId,
     leaderboard,
+    teamLeaderboard,
+    enableTeamRanking,
     recordSeasons,
     players,
     courts,
@@ -167,6 +181,7 @@ export function LeaderboardView(props: Props) {
     onFinalizeSession,
     onRevertSessionFinalize,
     onRecordGame,
+    onUpdateGame,
     onRecordSeasonChange,
     onCreateSeason,
     onOpenSession,
@@ -176,6 +191,7 @@ export function LeaderboardView(props: Props) {
   } = props;
 
   const [tab, setTab] = useState<TabKey>('home');
+  const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>('player');
   const tabStorageGlobalKey = 'leagueos.player.selectedTab';
   const tabStorageProfileKey = profile?.email ? `leagueos.player.selectedTab.${profile.email.toLowerCase()}` : null;
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -219,6 +235,12 @@ export function LeaderboardView(props: Props) {
   const avatarStorageKey = profile?.email ? `leagueos.profile.avatar.${profile.email.toLowerCase()}` : null;
   const showOnLeaderboard = profile?.show_on_leaderboard ?? true;
   const hideFromLeaderboard = !showOnLeaderboard;
+
+  useEffect(() => {
+    if (!enableTeamRanking && leaderboardMode !== 'player') {
+      setLeaderboardMode('player');
+    }
+  }, [enableTeamRanking, leaderboardMode]);
 
   useEffect(() => {
     if (!avatarStorageKey || typeof window === 'undefined') return;
@@ -316,6 +338,7 @@ export function LeaderboardView(props: Props) {
           allUpcomingSessions={allUpcomingSessions}
           onRecordClubChange={onRecordClubChange}
           onRecordGame={onRecordGame}
+          onUpdateGame={onUpdateGame}
           onRecordSeasonChange={onRecordSeasonChange}
           canOpenSession={canOpenSession}
           onOpenSession={onOpenSession}
@@ -428,88 +451,145 @@ export function LeaderboardView(props: Props) {
             {error ? <div style={{ color: 'var(--bad)', marginBottom: 8 }}>{error}</div> : null}
 
             <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: 8, padding: '14px 16px 0' }}>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardMode('player')}
+                  style={leaderboardMode === 'player' ? primaryBtn : outlineBtn}
+                >
+                  Player Ranking
+                </button>
+                {enableTeamRanking ? (
+                  <button
+                    type="button"
+                    onClick={() => setLeaderboardMode('team')}
+                    style={leaderboardMode === 'team' ? primaryBtn : outlineBtn}
+                  >
+                    Team Ranking
+                  </button>
+                ) : null}
+              </div>
               <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <div style={leaderboardHeaderRow}>
-                  <div style={{ textAlign: 'center' }}>#</div>
-                  <div>Player</div>
-                  <div style={{ textAlign: 'center' }}>Delta</div>
-                  <div style={{ textAlign: 'center' }}>Played</div>
-                  <div style={{ textAlign: 'center' }}>Won</div>
-                  <div style={{ textAlign: 'left' }}>ELO</div>
-                </div>
-
-                {!leaderboard.length ? (
-                  <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
-                ) : (
-                  leaderboard.map((row, i) => {
-                    const rowRank = row.rank ?? (i + 1);
-                    return (
-                    <div key={row.player_id} style={leaderboardRow}>
-                      <div style={{ textAlign: 'center' }}>{rankBadge(rowRank)}</div>
-                      <button
-                        style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
-                        onClick={() => {
-                          setLeaderboardPlayerPreview({ row, rank: rowRank });
-                        }}
-                      >
-                        {(() => {
-                          const rowName = (row.display_name || '').trim();
-                          const rowNameLower = rowName.toLowerCase();
-                          const currentNames = [
-                            profileDisplayName,
-                            profile?.display_name || '',
-                            profile?.full_name || '',
-                          ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
-                          const isCurrentProfileRow = currentNames.includes(rowNameLower);
-                          const initials = rowName
-                            .split(' ')
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .map((part) => part[0]?.toUpperCase() || '')
-                            .join('') || 'P';
-                          const hash = rowNameLower.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-                          const fallbackBg = `hsl(${hash % 360} 62% 38%)`;
-                          return (
-                            <>
-                              <span
-                                style={{
-                                  width: 20,
-                                  height: 20,
-                                  borderRadius: '50%',
-                                  overflow: 'hidden',
-                                  display: 'grid',
-                                  placeItems: 'center',
-                                  background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
-                                  color: '#fff',
-                                  fontSize: 9,
-                                  fontWeight: 800,
-                                  lineHeight: 1,
-                                  border: '1px solid rgba(255,255,255,0.75)',
-                                  boxShadow: '0 0 0 1px rgba(148,163,184,.35)',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {isCurrentProfileRow && avatarPreview ? (
-                                  <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  initials
-                                )}
-                              </span>
-                              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
-                            </>
-                          );
-                        })()}
-                      </button>
-                      <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
-                        {row.season_elo_delta >= 0 ? '+' : ''}
-                        {row.season_elo_delta}
-                      </div>
-                      <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
-                      <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
-                      <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
+                {leaderboardMode === 'player' ? (
+                  <>
+                    <div style={leaderboardHeaderRow}>
+                      <div style={{ textAlign: 'center' }}>#</div>
+                      <div>Player</div>
+                      <div style={{ textAlign: 'center' }}>Delta</div>
+                      <div style={{ textAlign: 'center' }}>Played</div>
+                      <div style={{ textAlign: 'center' }}>Won</div>
+                      <div style={{ textAlign: 'left' }}>ELO</div>
                     </div>
-                  );
-                  })
+
+                    {!leaderboard.length ? (
+                      <div style={{ padding: 22, color: 'var(--muted)' }}>No leaderboard data for this season/session yet.</div>
+                    ) : (
+                      leaderboard.map((row, i) => {
+                        const rowRank = row.rank ?? (i + 1);
+                        return (
+                        <div key={row.player_id} style={leaderboardRow}>
+                          <div style={{ textAlign: 'center' }}>{rankBadge(rowRank)}</div>
+                          <button
+                            style={{ ...linkBtn, textAlign: 'left', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+                            onClick={() => {
+                              setLeaderboardPlayerPreview({ row, rank: rowRank });
+                            }}
+                          >
+                            {(() => {
+                              const rowName = (row.display_name || '').trim();
+                              const rowNameLower = rowName.toLowerCase();
+                              const currentNames = [
+                                profileDisplayName,
+                                profile?.display_name || '',
+                                profile?.full_name || '',
+                              ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+                              const isCurrentProfileRow = currentNames.includes(rowNameLower);
+                              const initials = rowName
+                                .split(' ')
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((part) => part[0]?.toUpperCase() || '')
+                                .join('') || 'P';
+                              const hash = rowNameLower.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+                              const fallbackBg = `hsl(${hash % 360} 62% 38%)`;
+                              return (
+                                <>
+                                  <span
+                                    style={{
+                                      width: 20,
+                                      height: 20,
+                                      borderRadius: '50%',
+                                      overflow: 'hidden',
+                                      display: 'grid',
+                                      placeItems: 'center',
+                                      background: isCurrentProfileRow ? (avatarPreview ? '#e2e8f0' : selectedAvatar.gradient) : fallbackBg,
+                                      color: '#fff',
+                                      fontSize: 9,
+                                      fontWeight: 800,
+                                      lineHeight: 1,
+                                      border: '1px solid rgba(255,255,255,0.75)',
+                                      boxShadow: '0 0 0 1px rgba(148,163,184,.35)',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {isCurrentProfileRow && avatarPreview ? (
+                                      <img src={avatarPreview} alt="Profile avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                      initials
+                                    )}
+                                  </span>
+                                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.display_name}</span>
+                                </>
+                              );
+                            })()}
+                          </button>
+                          <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
+                            {row.season_elo_delta >= 0 ? '+' : ''}
+                            {row.season_elo_delta}
+                          </div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_played ?? 0}</div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
+                          <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.global_elo_score ?? 1000}</div>
+                        </div>
+                      );
+                      })
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div style={leaderboardHeaderRow}>
+                      <div style={{ textAlign: 'center' }}>#</div>
+                      <div>Team</div>
+                      <div style={{ textAlign: 'center' }}>Delta</div>
+                      <div style={{ textAlign: 'center' }}>Played</div>
+                      <div style={{ textAlign: 'center' }}>Won</div>
+                      <div style={{ textAlign: 'left' }}>ELO</div>
+                    </div>
+                    {!teamLeaderboard.length ? (
+                      <div style={{ padding: 22, color: 'var(--muted)' }}>No team ranking data for this club and season yet.</div>
+                    ) : (
+                      teamLeaderboard.map((row) => (
+                        <div key={row.pair_key} style={leaderboardRow}>
+                          <div style={{ textAlign: 'center' }}>{rankBadge(row.rank)}</div>
+                          <div style={{ fontWeight: 600, minWidth: 0, lineHeight: 1.25, color: 'var(--text)' }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {row.player_a_display_name}
+                            </div>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              / {row.player_b_display_name}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'center', color: row.season_elo_delta >= 0 ? 'var(--ok)' : 'var(--bad)' }}>
+                            {row.season_elo_delta >= 0 ? '+' : ''}
+                            {row.season_elo_delta}
+                          </div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_played}</div>
+                          <div style={{ textAlign: 'center' }}>{row.matches_won}</div>
+                          <div style={{ textAlign: 'left', fontWeight: 700 }}>{row.current_elo}</div>
+                        </div>
+                      ))
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1018,6 +1098,7 @@ function HomeScreen({
   allUpcomingSessions,
   onRecordClubChange,
   onRecordGame,
+  onUpdateGame,
   onRecordSeasonChange,
   canOpenSession,
   onOpenSession,
@@ -1058,6 +1139,14 @@ function HomeScreen({
     sideAPlayerIds: [number, number];
     sideBPlayerIds: [number, number];
   }) => Promise<void>;
+  onUpdateGame: (gameId: number, payload: {
+    courtId: number | null;
+    startTimeLocal: string;
+    scoreA: number;
+    scoreB: number;
+    sideAPlayerIds: [number, number];
+    sideBPlayerIds: [number, number];
+  }) => Promise<void>;
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
   canOpenSession: boolean;
   onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
@@ -1072,6 +1161,7 @@ function HomeScreen({
   const [homeMode, setHomeMode] = useState<HomeMode>('main');
   const [activeGame, setActiveGame] = useState<HomeGameRow | null>(null);
   const [activeUpcoming, setActiveUpcoming] = useState<UpcomingRow | null>(null);
+  const [editingGame, setEditingGame] = useState<HomeGameRow | null>(null);
   const rawHomePlayerName = profile?.display_name || profile?.full_name || profile?.email || 'player_one';
   const homePlayerName = rawHomePlayerName.slice(0, 12);
 
@@ -1079,6 +1169,7 @@ function HomeScreen({
     setHomeMode('main');
     setActiveGame(null);
     setActiveUpcoming(null);
+    setEditingGame(null);
   }, [resetSignal]);
 
   return (
@@ -1223,7 +1314,7 @@ function HomeScreen({
           </>
         ) : null}
 
-        {canManageRecords && homeMode !== 'addGame' ? (
+        {canManageRecords && (homeMode === 'main' || homeMode === 'allGames' || homeMode === 'allUpcoming') ? (
           <div
             style={{
               position: 'fixed',
@@ -1293,8 +1384,22 @@ function HomeScreen({
             onRecordSeasonChange={onRecordSeasonChange}
             canOpenSession={canOpenSession}
             onOpenSession={onOpenSession}
-            onBack={() => setHomeMode('main')}
+            editGame={editingGame}
+            onBack={() => {
+              if (editingGame) {
+                setEditingGame(null);
+                setHomeMode('gameDetail');
+                return;
+              }
+              setHomeMode('main');
+            }}
             onSubmit={async (payload) => {
+              if (editingGame) {
+                await onUpdateGame(editingGame.id, payload);
+                setEditingGame(null);
+                setHomeMode('allGames');
+                return;
+              }
               await onRecordGame(payload);
               setHomeMode('main');
             }}
@@ -1367,6 +1472,22 @@ function HomeScreen({
               ['Team A', activeGame.teamA.join(', ')],
               ['Team B', activeGame.teamB.join(', ')],
             ]} />
+            {canManageRecords && activeGame.sessionStatus !== 'FINALIZED' ? (
+              <div style={{ marginTop: 16, borderTop: '1px solid #e2e8f0', paddingTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  style={outlineBtn}
+                  onClick={() => {
+                    setEditingGame(activeGame);
+                    setHomeMode('addGame');
+                  }}
+                  title="Edit game"
+                  aria-label="Edit game"
+                >
+                  ✏️ Edit Game
+                </button>
+              </div>
+            ) : null}
           </DetailCard>
         ) : null}
 
@@ -1490,6 +1611,7 @@ function AddGameScreen({
   onRecordSeasonChange,
   canOpenSession,
   onOpenSession,
+  editGame,
   onBack,
   onSubmit,
 }: {
@@ -1506,6 +1628,7 @@ function AddGameScreen({
   onRecordSeasonChange: (seasonId: number) => Promise<void>;
   canOpenSession: boolean;
   onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
+  editGame: HomeGameRow | null;
   onBack: () => void;
   onSubmit: (payload: {
     courtId: number | null;
@@ -1516,24 +1639,29 @@ function AddGameScreen({
     sideBPlayerIds: [number, number];
   }) => Promise<void>;
 }) {
-  const nowLocal = new Date();
-  const defaultTime = floorToFiveMinuteIncrement(`${String(nowLocal.getHours()).padStart(2, '0')}:${String(nowLocal.getMinutes()).padStart(2, '0')}`);
+  type SlotKey = 'a1' | 'a2' | 'b1' | 'b2';
 
+  const [step, setStep] = useState<1 | 2>(1);
+  const [playersBySlot, setPlayersBySlot] = useState<Record<SlotKey, number>>({
+    a1: 0,
+    a2: 0,
+    b1: 0,
+    b2: 0,
+  });
   const [courtId, setCourtId] = useState<number | null>(null);
-  const [startTime, setStartTime] = useState(defaultTime);
+  const [startTime, setStartTime] = useState('');
   const [scoreA, setScoreA] = useState(21);
   const [scoreB, setScoreB] = useState(17);
-  const [a1, setA1] = useState<number>(players[0]?.id ?? 0);
-  const [a2, setA2] = useState<number>(players[1]?.id ?? 0);
-  const [b1, setB1] = useState<number>(players[2]?.id ?? 0);
-  const [b2, setB2] = useState<number>(players[3]?.id ?? 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
-  const [openSessionFromDate, setOpenSessionFromDate] = useState(today);
-  const [openSessionToDate, setOpenSessionToDate] = useState(today);
-  const [openSessionStartTime, setOpenSessionStartTime] = useState('19:00');
-  const [openingSession, setOpeningSession] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSlot, setPickerSlot] = useState<SlotKey | null>(null);
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [showCustomTime, setShowCustomTime] = useState(false);
+  const [customTime, setCustomTime] = useState('');
+  const [courtExpanded, setCourtExpanded] = useState(true);
+  const [timeExpanded, setTimeExpanded] = useState(false);
   const [confirmSoftDuplicate, setConfirmSoftDuplicate] = useState<null | {
     message: string;
     payload: {
@@ -1545,19 +1673,218 @@ function AddGameScreen({
       sideBPlayerIds: [number, number];
     };
   }>(null);
-  const saveDisabled = busy || !session || Boolean(recordContextError);
-  const timeOptions = Array.from({ length: 24 * 12 }, (_, i) => {
-    const hours = Math.floor(i / 12);
-    const minutes = (i % 12) * 5;
-    const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-    return value;
-  });
+  const isEditMode = Boolean(editGame);
 
-  const getHHmm = (iso: string) => {
+  const activePlayers = players.filter((player) => player.is_active);
+  const playerOptions = activePlayers.length
+    ? activePlayers
+    : [{ id: 0, display_name: 'No active players', club_id: 0, is_active: false, created_at: '' }];
+  const playerById = new Map(activePlayers.map((player) => [player.id, player]));
+
+  const now = new Date();
+
+  const sessionStartDate = session ? new Date(session.session_start_time) : null;
+  const sessionEndDate = session?.session_end_time ? new Date(session.session_end_time) : null;
+
+  // Use session-day midnight as the reference point so midnight crossover works:
+  // e.g. session starts 8 PM (1200 min), current time 12:30 AM = 1470 min since session-day midnight
+  const sessionDay = sessionStartDate
+    ? new Date(sessionStartDate.getFullYear(), sessionStartDate.getMonth(), sessionStartDate.getDate(), 0, 0, 0, 0)
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+  const nowMinutes = Math.floor((now.getTime() - sessionDay.getTime()) / 60000);
+  // Cap at 5 min before now, floored to 5-min boundary — prevents future slots
+  const nowCapMinutes = Math.max(0, nowMinutes - 5 - ((nowMinutes - 5) % 5));
+
+  const sessionStartLocalMinutes = sessionStartDate
+    ? Math.floor((sessionStartDate.getTime() - sessionDay.getTime()) / 60000)
+    : Math.max(0, nowCapMinutes - 120);
+
+  const sessionEndLocalMinutes = sessionEndDate
+    ? Math.floor((sessionEndDate.getTime() - sessionDay.getTime()) / 60000)
+    : sessionStartLocalMinutes + 120; // default 2h session if no end time set
+
+  // Selectable slots: from session start → session end, capped at now
+  const windowStartMinutes = sessionStartLocalMinutes;
+  const latestAllowedMinutes = Math.min(sessionEndLocalMinutes, nowCapMinutes);
+
+  const formatTimeLabel = (value: string) => {
+    const [hh, mm] = value.split(':').map(Number);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
+    const suffix = hh >= 12 ? 'PM' : 'AM';
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+    return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
+  };
+
+  const parseHHmm = (value: string): number | null => {
+    const [hh, mm] = value.split(':').map(Number);
+    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const toHHmm = (totalMinutes: number): string => {
+    // Normalize to 0-1439 so slot keys remain valid HH:mm even across midnight
+    const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+    const hh = Math.floor(normalized / 60);
+    const mm = normalized % 60;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  };
+
+  const normalizeName = (name: string) => name.toLowerCase().replace(/[^a-z]/g, '');
+  const selectedPlayerIds = (Object.values(playersBySlot).filter((value) => value > 0)) as number[];
+  const step1Valid = selectedPlayerIds.length === 4 && new Set(selectedPlayerIds).size === 4;
+  const scoreGateError = validateAddGameInput({
+    courtId,
+    scoreA,
+    scoreB,
+    sideAPlayerIds: [playersBySlot.a1, playersBySlot.a2],
+    sideBPlayerIds: [playersBySlot.b1, playersBySlot.b2],
+    sessionId: session?.id ?? null,
+    startTime,
+  });
+  const saveDisabled = busy || !session || Boolean(recordContextError) || !step1Valid || Boolean(scoreGateError);
+  const scoreRuleMessage =
+    step === 2 && scoreGateError && (
+      scoreGateError.includes('Winner') ||
+      scoreGateError.includes('Maximum score') ||
+      scoreGateError.includes('Draw is not allowed')
+    )
+      ? 'Score is invalid for standard badminton game end rules.'
+      : scoreGateError;
+
+  const sessionTimeKeys = (() => {
+    const keys: string[] = [];
+    for (let minute = windowStartMinutes; minute <= latestAllowedMinutes; minute += 5) {
+      keys.push(toHHmm(minute));
+    }
+    return keys;
+  })();
+
+  const getHHmm = (iso: string): string | null => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return null;
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
+
+  const occupiedSlotSet = (() => {
+    const occupied = new Set<string>();
+    if (!courtId || !session) return occupied;
+    existingGames.forEach((game) => {
+      if (game.sessionId !== session.id) return;
+      if (game.courtId !== courtId) return;
+      const slot = getHHmm(game.startTime);
+      if (!slot) return;
+      occupied.add(floorToFiveMinuteIncrement(slot));
+    });
+    return occupied;
+  })();
+
+  const availableTimeKeys = courtId ? sessionTimeKeys.filter((slot) => !occupiedSlotSet.has(slot)) : [];
+
+  const buildRecentsAndSuggested = (slot: SlotKey) => {
+    const currentValue = playersBySlot[slot];
+    const selectedWithoutCurrent = new Set<number>(selectedPlayerIds.filter((playerId) => playerId !== currentValue));
+    const candidates = activePlayers.filter((player) => !selectedWithoutCurrent.has(player.id));
+
+    const recentIds: number[] = [];
+    const seenRecent = new Set<number>();
+    const sortedHistory = [...existingGames].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+    sortedHistory.forEach((game) => {
+      [...game.teamAIds, ...game.teamBIds].forEach((id) => {
+        if (selectedWithoutCurrent.has(id) || seenRecent.has(id)) return;
+        if (!playerById.has(id)) return;
+        seenRecent.add(id);
+        recentIds.push(id);
+      });
+    });
+    const recents = recentIds.slice(0, 6);
+
+    const teammateId =
+      slot === 'a1' ? playersBySlot.a2 :
+      slot === 'a2' ? playersBySlot.a1 :
+      slot === 'b1' ? playersBySlot.b2 :
+      playersBySlot.b1;
+    const opponentIds = slot.startsWith('a')
+      ? [playersBySlot.b1, playersBySlot.b2].filter((id) => id > 0)
+      : [playersBySlot.a1, playersBySlot.a2].filter((id) => id > 0);
+    const selectedTimeMinutes = parseHHmm(startTime);
+
+    const scoreByCandidate = new Map<number, number>();
+    candidates.forEach((candidate) => {
+      if (recents.includes(candidate.id)) return;
+      let score = 0;
+      sortedHistory.forEach((game, idx) => {
+        const recency = Math.max(0, 20 - idx);
+        const inA = game.teamAIds.includes(candidate.id);
+        const inB = game.teamBIds.includes(candidate.id);
+        if (!inA && !inB) return;
+        score += 1 + recency;
+        if (teammateId && ((inA && game.teamAIds.includes(teammateId)) || (inB && game.teamBIds.includes(teammateId)))) {
+          score += 16;
+        }
+        opponentIds.forEach((oppId) => {
+          const opposed = (inA && game.teamBIds.includes(oppId)) || (inB && game.teamAIds.includes(oppId));
+          if (opposed) score += 8;
+        });
+        if (courtId && game.courtId === courtId) score += 4;
+        if (selectedTimeMinutes !== null) {
+          const gameMinutes = parseHHmm(getHHmm(game.startTime) ?? '');
+          if (gameMinutes !== null && Math.abs(gameMinutes - selectedTimeMinutes) <= 15) score += 3;
+        }
+        if (session && game.sessionId === session.id) score += 3;
+      });
+      scoreByCandidate.set(candidate.id, score);
+    });
+
+    const suggestions = [...scoreByCandidate.entries()]
+      .filter(([, score]) => score > 0)
+      .sort((a, b) => b[1] - a[1] || (playerById.get(a[0])?.display_name ?? '').localeCompare(playerById.get(b[0])?.display_name ?? ''))
+      .slice(0, 8)
+      .map(([id]) => id);
+
+    return { recents, suggestions, candidates };
+  };
+
+  const pickerData = pickerSlot ? buildRecentsAndSuggested(pickerSlot) : { recents: [], suggestions: [], candidates: [] as Player[] };
+
+  const filterByQuery = (list: Player[]) => {
+    const query = pickerQuery.trim().toLowerCase();
+    if (!query) return list;
+    return list.filter((player) => {
+      const lower = player.display_name.toLowerCase();
+      return lower.startsWith(query) || lower.split(/\s+/).some((word) => word.startsWith(query));
+    });
+  };
+
+  const recentPlayers = filterByQuery(pickerData.recents.map((id) => playerById.get(id)).filter(Boolean) as Player[]);
+  const suggestedPlayers = filterByQuery(pickerData.suggestions.map((id) => playerById.get(id)).filter(Boolean) as Player[]);
+  const recentsSet = new Set(pickerData.recents);
+  const suggestedSet = new Set(pickerData.suggestions);
+  const allPlayersRemainder = [...pickerData.candidates]
+    .filter((player) => !recentsSet.has(player.id) && !suggestedSet.has(player.id))
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+  const allPlayersList = filterByQuery(allPlayersRemainder);
+  const matchingFromAllCandidates = filterByQuery(
+    [...pickerData.candidates].sort((a, b) => a.display_name.localeCompare(b.display_name))
+  );
+
+  const duplicateSelection = selectedPlayerIds.length !== new Set(selectedPlayerIds).size;
+  const similarNameWarning = (() => {
+    const values = selectedPlayerIds.map((id) => playerById.get(id)?.display_name ?? '').filter(Boolean);
+    const normalized = values.map(normalizeName);
+    for (let i = 0; i < normalized.length; i += 1) {
+      for (let j = i + 1; j < normalized.length; j += 1) {
+        if (!normalized[i] || !normalized[j]) continue;
+        if (normalized[i] === normalized[j]) continue;
+        if (normalized[i].slice(0, 5) === normalized[j].slice(0, 5)) {
+          return 'Heads up: similar player names selected. Please verify correct players before saving.';
+        }
+      }
+    }
+    return null;
+  })();
+
   const isSoftDuplicate = (payload: {
     courtId: number | null;
     startTimeLocal: string;
@@ -1579,6 +1906,29 @@ function AddGameScreen({
     });
   };
 
+  const openPicker = (slot: SlotKey) => {
+    setPickerSlot(slot);
+    setPickerOpen(true);
+    setPickerQuery('');
+  };
+
+  const applyPlayerToSlot = (playerId: number) => {
+    if (!pickerSlot) return;
+    setPlayersBySlot((prev) => ({ ...prev, [pickerSlot]: playerId }));
+    setPickerOpen(false);
+    setPickerSlot(null);
+  };
+  const clearPickerSlotSelection = () => {
+    if (!pickerSlot) return;
+    setPlayersBySlot((prev) => ({ ...prev, [pickerSlot]: null }));
+  };
+
+  const slotPlayerName = (slot: SlotKey) => {
+    const id = playersBySlot[slot];
+    if (!id) return 'Select player';
+    return playerById.get(id)?.display_name ?? 'Select player';
+  };
+
   async function submitPayload(payload: {
     courtId: number | null;
     startTimeLocal: string;
@@ -1590,18 +1940,12 @@ function AddGameScreen({
     try {
       setBusy(true);
       await onSubmit(payload);
+      setStep(1);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'GAME_CONFLICT') {
-        const [hoursRaw, minutesRaw] = floorToFiveMinuteIncrement(startTime).split(':');
-        const hours = Number(hoursRaw);
-        const minutes = Number(minutesRaw);
-        if (Number.isInteger(hours) && Number.isInteger(minutes)) {
-          const next = new Date(0, 0, 1, hours, minutes + 5, 0, 0);
-          setStartTime(`${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`);
-        }
-        setError('A game already exists for this court and start time. Time moved to the next 5-minute slot.');
+        setError('A game already exists for this court and start time. Choose a different slot.');
       } else if (e instanceof ApiError && e.code === 'INVALID_GAME_TIME') {
-        setError('Start time must be on a 5-minute boundary. Try 7:00, 7:05, 7:10.');
+        setError('Start time must be on a 5-minute boundary.');
       } else if (e instanceof ApiError && e.code === 'SESSION_IMMUTABLE') {
         setError('Selected session is not writable anymore. Select a season with one OPEN session.');
       } else {
@@ -1612,186 +1956,550 @@ function AddGameScreen({
     }
   }
 
-  const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
-  const formatTimeLabel = (value: string) => {
-    const [hh, mm] = value.split(':').map(Number);
-    if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
-    const suffix = hh >= 12 ? 'PM' : 'AM';
-    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
-    return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
-  };
-  const formatDateLabel = (dateStr: string) => {
-    if (!dateStr) return 'Select date';
-    const d = new Date(`${dateStr}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   useEffect(() => {
-    setA1(players[0]?.id ?? 0);
-    setA2(players[1]?.id ?? 0);
-    setB1(players[2]?.id ?? 0);
-    setB2(players[3]?.id ?? 0);
+    setPlayersBySlot((prev) => {
+      const activeIds = new Set(activePlayers.map((player) => player.id));
+      return {
+        a1: activeIds.has(prev.a1) ? prev.a1 : 0,
+        a2: activeIds.has(prev.a2) ? prev.a2 : 0,
+        b1: activeIds.has(prev.b1) ? prev.b1 : 0,
+        b2: activeIds.has(prev.b2) ? prev.b2 : 0,
+      };
+    });
   }, [players]);
 
   useEffect(() => {
     setCourtId(null);
-  }, [courts, recordClubId, recordSeasonId]);
+    setStartTime('');
+    setCourtExpanded(true);
+    setTimeExpanded(false);
+    setShowCustomTime(false);
+    setCustomTime('');
+  }, [courts, recordClubId, recordSeasonId, isEditMode]);
+
+  useEffect(() => {
+    if (!editGame) return;
+    const teamAIds: [number, number] = [editGame.teamAIds[0] ?? 0, editGame.teamAIds[1] ?? 0];
+    const teamBIds: [number, number] = [editGame.teamBIds[0] ?? 0, editGame.teamBIds[1] ?? 0];
+    setPlayersBySlot({
+      a1: teamAIds[0],
+      a2: teamAIds[1],
+      b1: teamBIds[0],
+      b2: teamBIds[1],
+    });
+    setCourtId(editGame.courtId);
+    const existingStart = getHHmm(editGame.startTime);
+    setStartTime(existingStart ? floorToFiveMinuteIncrement(existingStart) : '');
+    setScoreA(editGame.scoreA);
+    setScoreB(editGame.scoreB);
+    setStep(1);
+    setCourtExpanded(true);
+    setTimeExpanded(false);
+    setError(null);
+    setWarning(null);
+  }, [editGame]);
+
+  useEffect(() => {
+    if (!courtId && startTime) {
+      setStartTime('');
+    }
+    if (courtId && startTime && occupiedSlotSet.has(startTime)) {
+      setStartTime('');
+    }
+  }, [courtId, occupiedSlotSet, startTime]);
+
+  const courtName = courtId ? (courts.find((court) => court.id === courtId)?.name ?? 'Select court') : 'Select court';
+  const selectedTimeLabel = startTime ? formatTimeLabel(startTime) : 'Select time';
+  const selectedSeasonName = seasons.find((season) => season.id === recordSeasonId)?.name ?? (recordSeasonId ? `Season ${recordSeasonId}` : 'Season not selected');
+  const selectedSessionLabel = session ? 'Open' : 'No open session';
+  const nowChipLabel = formatTimeLabel(toHHmm(latestAllowedMinutes));
+  const teamANames = [playersBySlot.a1, playersBySlot.a2].map((id) => playerById.get(id)?.display_name).filter(Boolean) as string[];
+  const teamBNames = [playersBySlot.b1, playersBySlot.b2].map((id) => playerById.get(id)?.display_name).filter(Boolean) as string[];
+
+  const renderNameBubbles = (names: string[], tone: 'neutral' | 'red' = 'neutral') => {
+    if (!names.length) return <span style={{ color: '#64748b', fontSize: 13 }}>-</span>;
+    const chipStyle: React.CSSProperties =
+      tone === 'red'
+        ? {
+            border: '1px solid #f8b4c0',
+            borderRadius: 999,
+            background: 'linear-gradient(180deg, #fff6f7 0%, #ffeef1 100%)',
+            color: '#7f1d1d',
+            padding: '4px 10px',
+            fontWeight: 600,
+            lineHeight: 1.2,
+            fontSize: 13,
+            display: 'block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '100%',
+          }
+        : {
+            border: '1px solid #bfdaf6',
+            borderRadius: 999,
+            background: 'linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%)',
+            color: '#334155',
+            padding: '4px 10px',
+            fontWeight: 600,
+            lineHeight: 1.2,
+            fontSize: 13,
+            display: 'block',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '100%',
+          };
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, minWidth: 0, overflow: 'hidden' }}>
+        {names.map((name) => (
+          <span key={name} style={chipStyle} title={name}>{name}</span>
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ marginTop: 16, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', padding: 16 }}>
+    <div
+      style={{
+        marginTop: 16,
+        background: '#f8fafc',
+        borderRadius: 20,
+        border: '1px solid var(--border)',
+        padding: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: step === 2 ? 760 : undefined,
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>Add Game</h2>
-        <button onClick={onBack} style={outlineBtn}>← Back</button>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{isEditMode ? 'Edit Game' : 'New Game'}</h2>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap' }}>{`Step ${step} of 2`}</div>
       </div>
 
-      {recordContextError && !(recordContextError.toLowerCase().includes('no open session') && !canOpenSession && !session) ? (
-        <p style={{ marginTop: 6, color: 'var(--bad)', fontSize: 14 }}>{recordContextError}</p>
-      ) : null}
-      {canOpenSession && recordSeasonId && !session ? (
-        <div style={{ marginTop: 8, border: '1px solid #99f6e4', background: '#f0fdfa', borderRadius: 12, padding: 10 }}>
-          <div style={{ fontSize: 13, color: '#0f766e', marginBottom: 8, fontWeight: 600 }}>No OPEN session for this season</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <ModernDateInput label="From Date" value={openSessionFromDate} onChange={setOpenSessionFromDate} displayValue={formatDateLabel(openSessionFromDate)} />
-            <ModernDateInput label="To Date" value={openSessionToDate} onChange={setOpenSessionToDate} displayValue={formatDateLabel(openSessionToDate)} />
-            <ModernTimeSelect
-              label="Start Time"
-              value={openSessionStartTime}
-              onChange={setOpenSessionStartTime}
-              options={timeOptions}
-              formatLabel={formatTimeLabel}
-            />
+      <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            style={{
+              border: '1px solid #cce7e8',
+              borderRadius: 999,
+              padding: '8px 18px',
+              fontWeight: 700,
+              fontSize: 16,
+              background: step === 1 ? 'linear-gradient(180deg, #d3ecee 0%, #c6e7e8 100%)' : 'linear-gradient(180deg, #e6edf5 0%, #dbe4ef 100%)',
+              color: step === 1 ? '#0f766e' : '#52667d',
+              cursor: 'pointer',
+            }}
+          >
+            Players
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!step1Valid) {
+                setWarning('Select 4 unique players before moving to Score + Save.');
+                return;
+              }
+              setWarning(null);
+              setStep(2);
+            }}
+            style={{
+              border: '1px solid #cce7e8',
+              borderRadius: 999,
+              padding: '8px 18px',
+              fontWeight: 700,
+              fontSize: 16,
+              background: step === 2 ? 'linear-gradient(180deg, #d3ecee 0%, #c6e7e8 100%)' : 'linear-gradient(180deg, #e6edf5 0%, #dbe4ef 100%)',
+              color: step === 2 ? '#0f766e' : '#52667d',
+              cursor: 'pointer',
+            }}
+          >
+            Score + Save
+          </button>
+        </div>
+
+        {step === 1 ? (
+          <div style={{ borderTop: '1px solid #dbe3ee', margin: '2px -16px 0', paddingTop: 10, paddingLeft: 16, paddingRight: 16 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: '#e8edf4', color: '#42566f' }}>
+                Season: {selectedSeasonName}
+              </span>
+              <span style={{ borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: '#e8edf4', color: '#42566f' }}>
+                Session: {selectedSessionLabel}
+              </span>
+              <span style={{ borderRadius: 999, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: '#e8edf4', color: '#42566f' }}>
+                Now: {nowChipLabel}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {recordContextError ? (
+          <div style={{ marginTop: 2, border: '1px solid #fecaca', background: '#fff1f2', borderRadius: 12, padding: 10, color: '#9f1239', fontSize: 13 }}>
+            {recordContextError}
+          </div>
+        ) : null}
+
+        {step === 1 ? (
+          <>
+            {duplicateSelection ? (
+              <div style={{ color: 'var(--bad)', fontSize: 14 }}>Duplicate player selected. Each slot must have a unique player.</div>
+            ) : null}
+            {similarNameWarning ? (
+              <div style={{ color: '#9a3412', fontSize: 14, background: '#ffedd5', border: '1px solid #fdba74', borderRadius: 10, padding: '8px 10px' }}>
+                {similarNameWarning}
+              </div>
+            ) : null}
+            {warning ? <div style={{ color: '#9a3412', fontSize: 14 }}>{warning}</div> : null}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+              <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#334155' }}>Team A</div>
+                <button type="button" onClick={() => openPicker('a1')} style={{ ...modalInput, textAlign: 'left', background: '#fff' }}>{slotPlayerName('a1')}</button>
+                <button type="button" onClick={() => openPicker('a2')} style={{ ...modalInput, textAlign: 'left', background: '#fff' }}>{slotPlayerName('a2')}</button>
+              </div>
+              <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#7f1d1d' }}>Team B</div>
+                <button type="button" onClick={() => openPicker('b1')} style={{ ...modalInput, textAlign: 'left', background: '#fff' }}>{slotPlayerName('b1')}</button>
+                <button type="button" onClick={() => openPicker('b2')} style={{ ...modalInput, textAlign: 'left', background: '#fff' }}>{slotPlayerName('b2')}</button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setCourtExpanded((prev) => !prev)}
+                style={{ width: '100%', border: 0, background: '#f8fafc', textAlign: 'left', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, color: '#0f172a' }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span>Court:</span>
+                  <span style={{ border: '1px solid #bfdaf6', borderRadius: 999, background: 'linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%)', color: '#334155', padding: '3px 10px', fontWeight: 700, fontSize: 14 }}>{courtName}</span>
+                </span>
+                <span
+                  style={{
+                    border: '1px solid #b9cfe5',
+                    borderRadius: 999,
+                    padding: '2px 10px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    background: '#f1f6fb',
+                    color: '#486581',
+                  }}
+                >
+                  {courtExpanded ? 'Collapse' : 'Expand'}
+                </span>
+              </button>
+              {courtExpanded ? (
+                <div style={{ padding: 10, display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {courts.map((court) => (
+                      <button
+                        key={court.id}
+                        type="button"
+                        onClick={() => {
+                          setCourtId(court.id);
+                          setCourtExpanded(false);
+                          setTimeExpanded(true);
+                          setError(null);
+                        }}
+                        style={{
+                          border: `1px solid ${courtId === court.id ? '#78d8d3' : '#b9cfe5'}`,
+                          borderRadius: 999,
+                          background: courtId === court.id ? 'linear-gradient(180deg, #e3f8f7 0%, #d1f2ee 100%)' : 'linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%)',
+                          color: courtId === court.id ? '#0f766e' : '#334155',
+                          padding: '7px 14px',
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {court.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setTimeExpanded((prev) => !prev)}
+                style={{ width: '100%', border: 0, background: '#f8fafc', textAlign: 'left', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, color: '#0f172a' }}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span>Time Slot:</span>
+                  <span style={{ border: '1px solid #bfdaf6', borderRadius: 999, background: 'linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%)', color: '#334155', padding: '3px 10px', fontWeight: 700, fontSize: 14 }}>{selectedTimeLabel}</span>
+                </span>
+                <span
+                  style={{
+                    border: '1px solid #b9cfe5',
+                    borderRadius: 999,
+                    padding: '2px 10px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    lineHeight: 1.2,
+                    background: '#f1f6fb',
+                    color: '#486581',
+                  }}
+                >
+                  {timeExpanded ? 'Collapse' : 'Expand'}
+                </span>
+              </button>
+              {timeExpanded ? (
+                <div style={{ padding: 10, display: 'grid', gap: 8 }}>
+                  <div style={{ color: '#64748b', fontSize: 12 }}>
+                    {session
+                      ? `Session: ${formatTimeLabel(toHHmm(sessionStartLocalMinutes))} → ${formatTimeLabel(toHHmm(sessionEndLocalMinutes))}`
+                      : `Available: ${formatTimeLabel(toHHmm(windowStartMinutes))} to ${formatTimeLabel(toHHmm(latestAllowedMinutes))}`}
+                  </div>
+                  {!courtId ? (
+                    <div style={{ color: '#64748b', fontSize: 13 }}>Select a court first.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {availableTimeKeys.map((slot) => (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => {
+                            setStartTime(slot);
+                            setTimeExpanded(false);
+                            setError(null);
+                          }}
+                        style={{
+                            border: `1px solid ${startTime === slot ? '#78d8d3' : '#9fd8dd'}`,
+                            borderRadius: 999,
+                            background: startTime === slot ? 'linear-gradient(180deg, #e3f8f7 0%, #d1f2ee 100%)' : 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                            color: startTime === slot ? '#0b7b73' : '#0f6c75',
+                            padding: '7px 13px',
+                            fontWeight: 700,
+                            fontSize: 14,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {formatTimeLabel(slot)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomTime((prev) => {
+                      if (!prev && !customTime) {
+                        setCustomTime(toHHmm(sessionStartLocalMinutes));
+                      }
+                      return !prev;
+                    })}
+                    style={{
+                      border: '1px dashed #9fd8dd',
+                      borderRadius: 999,
+                      background: showCustomTime
+                        ? 'linear-gradient(180deg, #e3f8f7 0%, #d1f2ee 100%)'
+                        : 'linear-gradient(180deg, #f0fdfb 0%, #e6f8f8 100%)',
+                      color: '#0f6c75',
+                      padding: '7px 13px',
+                      fontWeight: 700,
+                      fontSize: 14,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showCustomTime ? '✕ Hide custom time' : '+ Custom time'}
+                  </button>
+                  {showCustomTime ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        type="time"
+                        step={300}
+                        value={customTime}
+                        onChange={(e) => setCustomTime(e.target.value)}
+                        style={{ ...modalInput, width: 170 }}
+                      />
+                      <button
+                        type="button"
+                        style={{
+                          border: '1px solid #9fd8dd',
+                          borderRadius: 999,
+                          background: 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                          color: '#0f6c75',
+                          padding: '7px 13px',
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          if (!courtId) {
+                            setError('Select a court before using custom time.');
+                            return;
+                          }
+                          if (!customTime) {
+                            setError('Choose a custom time first.');
+                            return;
+                          }
+                          // Strip optional seconds component ("20:15:00" → "20:15") and floor to 5-min
+                          const normalized = floorToFiveMinuteIncrement(customTime.slice(0, 5));
+                          const rawMinutes = parseHHmm(normalized);
+                          if (rawMinutes === null) {
+                            setError('Invalid time entered.');
+                            return;
+                          }
+                          // Midnight crossover: early-AM time after an evening session → add 1440
+                          const minutes = sessionStartLocalMinutes > 720 && rawMinutes < sessionStartLocalMinutes - 360
+                            ? rawMinutes + 1440
+                            : rawMinutes;
+                          if (minutes > nowCapMinutes) {
+                            setError('Time cannot be in the future.');
+                            return;
+                          }
+                          if (occupiedSlotSet.has(normalized)) {
+                            setError('That custom time is already occupied for the selected court.');
+                            return;
+                          }
+                          setStartTime(normalized);
+                          setTimeExpanded(false);
+                          setError(null);
+                        }}
+                      >
+                        Use time
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ borderRadius: 14, background: '#e8edff', border: '1px solid #c7d2fe', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ fontWeight: 700, color: '#334155' }}>Team A</div>
+                {renderNameBubbles(teamANames, 'neutral')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button type="button" onClick={() => setScoreA((prev) => Math.max(0, prev - 1))} style={scoreAdjBtn}>−</button>
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      textAlign: 'center',
+                      background: '#fff',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      fontWeight: 900,
+                      fontSize: 40,
+                      lineHeight: 1.05,
+                      color: '#0f172a',
+                      padding: '8px 4px',
+                    }}
+                  >
+                    {scoreA}
+                  </div>
+                  <button type="button" onClick={() => setScoreA((prev) => Math.min(30, prev + 1))} style={scoreAdjBtn}>+</button>
+                </div>
+              </div>
+              <div style={{ borderRadius: 14, background: '#fdecef', border: '1px solid #fecdd3', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ fontWeight: 700, color: '#7f1d1d' }}>Team B</div>
+                {renderNameBubbles(teamBNames, 'red')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button type="button" onClick={() => setScoreB((prev) => Math.max(0, prev - 1))} style={scoreAdjBtn}>−</button>
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      textAlign: 'center',
+                      background: '#fff',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      fontWeight: 900,
+                      fontSize: 40,
+                      lineHeight: 1.05,
+                      color: '#0f172a',
+                      padding: '8px 4px',
+                    }}
+                  >
+                    {scoreB}
+                  </div>
+                  <button type="button" onClick={() => setScoreB((prev) => Math.min(30, prev + 1))} style={scoreAdjBtn}>+</button>
+                </div>
+              </div>
+            </div>
+
+            {scoreRuleMessage ? (
+              <div
+                style={{
+                  color: '#9f1239',
+                  fontSize: 13,
+                  border: '1px solid #fecaca',
+                  background: '#fff1f2',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                }}
+              >
+                {scoreRuleMessage}
+              </div>
+            ) : null}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {['21-19', '21-18', '21-17', '21-16', '22-20', '23-21', '24-22', '25-23', '30-29'].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  style={{
+                    border: '1px solid #9fd8dd',
+                    borderRadius: 999,
+                    background: 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                    color: '#0f6c75',
+                    padding: '7px 13px',
+                    fontWeight: 700,
+                    fontSize: 14,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    const [nextA, nextB] = chip.split('-').map(Number);
+                    setScoreA(nextA);
+                    setScoreB(nextB);
+                    setError(null);
+                  }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
             <button
-              style={primaryBtn}
-              disabled={openingSession}
-              onClick={async () => {
-                setError(null);
-                if (!openSessionFromDate || !openSessionToDate) {
-                  setError('Select from/to dates.');
-                  return;
-                }
-                if (!openSessionStartTime) {
-                  setError('Select a start time.');
-                  return;
-                }
-                try {
-                  setOpeningSession(true);
-                  await onOpenSession({
-                    fromDate: openSessionFromDate,
-                    toDate: openSessionToDate,
-                    startTime: openSessionStartTime,
-                  });
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'Failed to open session.');
-                } finally {
-                  setOpeningSession(false);
-                }
+              type="button"
+              onClick={() => {
+                setScoreA((prevA) => {
+                  setScoreB(prevA);
+                  return scoreB;
+                });
+              }}
+              style={{
+                border: '1px solid #9fd8dd',
+                borderRadius: 999,
+                background: 'linear-gradient(180deg, #e6f8f8 0%, #d7f2f3 100%)',
+                color: '#0f6c75',
+                padding: '10px 18px',
+                fontWeight: 800,
+                fontSize: 16,
+                cursor: 'pointer',
+                alignSelf: 'center',
               }}
             >
-              {openingSession ? 'Opening...' : 'Open Session'}
+              Flip Sides (A ↔ B)
             </button>
           </div>
-        </div>
-      ) : null}
-      {!canOpenSession && !session ? (
-        <div style={{ marginTop: 8, border: '1px solid #fecaca', background: '#fff1f2', borderRadius: 12, padding: 10, color: '#9f1239', fontSize: 13 }}>
-          No open session is available. Please contact your club admin to start a new season/session.
-        </div>
-      ) : null}
-
-      <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Club</span>
-          <select value={recordClubId} onChange={(e) => void onRecordClubChange(Number(e.target.value))} style={modalInput}>
-            {!clubs.length ? <option value={recordClubId}>Club {recordClubId}</option> : null}
-            {clubs.map((club) => (
-              <option key={club.id} value={club.id}>{club.name}</option>
-            ))}
-          </select>
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Season (open only)</span>
-          <select value={recordSeasonId ?? ''} onChange={(e) => { const next = Number(e.target.value); if (!Number.isNaN(next)) void onRecordSeasonChange(next); }} style={modalInput} disabled={!seasons.length}>
-            {!seasons.length ? <option value="">No open seasons</option> : null}
-            {seasons.map((season) => (
-              <option key={season.id} value={season.id}>{season.name}</option>
-            ))}
-          </select>
-        </label>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span>Session Name</span>
-            <input
-              type="text"
-              value={session ? (session.location?.trim() || `Session ${session.id}`) : ''}
-              readOnly
-              style={{ ...modalInput, background: '#f8fafc', color: '#475569' }}
-              placeholder="Session Name"
-            />
-          </label>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span>Session Date</span>
-            <input
-              type="text"
-              value={session?.session_date ?? ''}
-              readOnly
-              style={{ ...modalInput, background: '#f8fafc', color: '#475569' }}
-              placeholder="YYYY-MM-DD"
-            />
-          </label>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Court</span>
-          <select value={courtId ?? ''} onChange={(e) => setCourtId(e.target.value ? Number(e.target.value) : null)} style={modalInput}>
-            <option value="">Select court</option>
-            {courts.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span>Start Time</span>
-          <ModernTimeSelect value={startTime} onChange={setStartTime} options={timeOptions} formatLabel={formatTimeLabel} />
-        </label>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ borderRadius: 14, background: '#818cf8', border: '1px solid #6366f1', padding: 12, display: 'grid', gap: 8 }}>
-            <div style={{ fontWeight: 700, color: '#eef2ff' }}>Team A</div>
-            <select value={a1} onChange={(e) => setA1(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-            <select value={a2} onChange={(e) => setA2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ color: '#eef2ff', fontWeight: 700 }}>Score A</span>
-              <input type="number" min={0} value={scoreA} onChange={(e) => setScoreA(Number(e.target.value))} style={modalInput} />
-            </label>
-          </div>
-          <div style={{ borderRadius: 14, background: '#fda4af', border: '1px solid #fb7185', padding: 12, display: 'grid', gap: 8 }}>
-            <div style={{ fontWeight: 700, color: '#881337' }}>Team B</div>
-            <select value={b1} onChange={(e) => setB1(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-            <select value={b2} onChange={(e) => setB2(Number(e.target.value))} style={modalInput}>{playerOptions.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</select>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ color: '#881337', fontWeight: 700 }}>Score B</span>
-              <input type="number" min={0} value={scoreB} onChange={(e) => setScoreB(Number(e.target.value))} style={modalInput} />
-            </label>
-          </div>
-        </div>
+        )}
 
         {error ? <div style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div> : null}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: step === 2 ? 'auto' : 0 }}>
           <button
             style={{
               border: 0,
               borderRadius: 12,
-              background: 'linear-gradient(90deg, #94a3b8, #64748b)',
+              background: 'linear-gradient(90deg, #cbd5e1, #94a3b8)',
               color: '#fff',
               padding: '12px 14px',
               fontWeight: 700,
@@ -1799,75 +2507,93 @@ function AddGameScreen({
               opacity: busy ? 0.65 : 1,
             }}
             disabled={busy}
-            onClick={onBack}
-          >
-            Cancel
-          </button>
-          <button
-            style={{
-              border: 0,
-              borderRadius: 12,
-              background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
-              color: '#fff',
-              padding: '12px 14px',
-              fontWeight: 700,
-              cursor: saveDisabled ? 'not-allowed' : 'pointer',
-              opacity: saveDisabled ? 0.65 : 1,
+            onClick={() => {
+              if (step === 2) {
+                setStep(1);
+                return;
+              }
+              onBack();
             }}
-            disabled={saveDisabled}
-            onClick={async () => {
-            setError(null);
-            const normalizedTime = floorToFiveMinuteIncrement(startTime);
-            const [hRaw, mRaw] = normalizedTime.split(':');
-            const h = Number(hRaw);
-            const m = Number(mRaw);
-            if (!Number.isInteger(h) || !Number.isInteger(m) || m % 5 !== 0) {
-              setError('Start time must be aligned to 5-minute increments.');
-              return;
-            }
-            const duplicateBySlot = existingGames.some((game) => {
-              if (!session || game.sessionId !== session.id || !courtId) return false;
-              const gameHhmm = getHHmm(game.startTime);
-              return gameHhmm === normalizedTime && game.courtId === courtId;
-            });
-            if (duplicateBySlot) {
-              setError('A game already exists for this session, court, and start time.');
-              return;
-            }
-            const validationError = validateAddGameInput({
-              courtId,
-              scoreA,
-              scoreB,
-              sideAPlayerIds: [a1, a2],
-              sideBPlayerIds: [b1, b2],
-              sessionId: session?.id ?? null,
-              startTime: normalizedTime,
-            });
-            if (validationError) {
-              setError(validationError);
-              return;
-            }
-
-            const payload = {
-              courtId,
-              startTimeLocal: normalizedTime,
-              scoreA,
-              scoreB,
-              sideAPlayerIds: [a1, a2] as [number, number],
-              sideBPlayerIds: [b1, b2] as [number, number],
-            };
-            if (isSoftDuplicate(payload)) {
-              setConfirmSoftDuplicate({
-                message: 'Potential duplicate: same session, same 4 players, and same score. Save anyway?',
-                payload,
-              });
-              return;
-            }
-            await submitPayload(payload);
-          }}
           >
-            {busy ? 'Saving...' : 'Save Game'}
+            Back
           </button>
+          {step === 1 ? (
+            <button
+              style={{
+                border: 0,
+                borderRadius: 12,
+                background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+                color: '#fff',
+                padding: '12px 14px',
+                fontWeight: 700,
+                cursor: step1Valid ? 'pointer' : 'not-allowed',
+                opacity: step1Valid ? 1 : 0.65,
+              }}
+              disabled={!step1Valid}
+              onClick={() => setStep(2)}
+            >
+              Next: Score
+            </button>
+          ) : (
+            <button
+              style={{
+                border: 0,
+                borderRadius: 12,
+                background: 'linear-gradient(90deg, var(--teal-start), var(--teal-end))',
+                color: '#fff',
+                padding: '12px 14px',
+                fontWeight: 700,
+                cursor: saveDisabled ? 'not-allowed' : 'pointer',
+                opacity: saveDisabled ? 0.65 : 1,
+              }}
+              disabled={saveDisabled}
+              onClick={async () => {
+                setError(null);
+                const normalizedTime = floorToFiveMinuteIncrement(startTime);
+                const duplicateBySlot = existingGames.some((game) => {
+                  if (!session || game.sessionId !== session.id || !courtId) return false;
+                  const gameHhmm = getHHmm(game.startTime);
+                  return gameHhmm === normalizedTime && game.courtId === courtId;
+                });
+                if (duplicateBySlot) {
+                  setError('A game already exists for this session, court, and start time.');
+                  return;
+                }
+                const validationError = validateAddGameInput({
+                  courtId,
+                  scoreA,
+                  scoreB,
+                  sideAPlayerIds: [playersBySlot.a1, playersBySlot.a2],
+                  sideBPlayerIds: [playersBySlot.b1, playersBySlot.b2],
+                  sessionId: session?.id ?? null,
+                  startTime: normalizedTime,
+                });
+                if (validationError) {
+                  setError(validationError);
+                  return;
+                }
+
+                const payload = {
+                  courtId,
+                  startTimeLocal: normalizedTime,
+                  scoreA,
+                  scoreB,
+                  sideAPlayerIds: [playersBySlot.a1, playersBySlot.a2] as [number, number],
+                  sideBPlayerIds: [playersBySlot.b1, playersBySlot.b2] as [number, number],
+                };
+                if (isSoftDuplicate(payload)) {
+                  setConfirmSoftDuplicate({
+                    message: 'Potential duplicate: same session, same 4 players, and same score. Save anyway?',
+                    payload,
+                  });
+                  return;
+                }
+                await submitPayload(payload);
+              }}
+            >
+              {busy ? 'Saving...' : isEditMode ? 'Update Game' : 'Save Game'}
+            </button>
+          )}
         </div>
         {confirmSoftDuplicate ? (
           <div style={seasonModalBackdrop}>
@@ -1891,6 +2617,84 @@ function AddGameScreen({
           </div>
         ) : null}
       </div>
+
+      {pickerOpen && pickerSlot ? (
+        <div style={seasonModalBackdrop}>
+          <div style={{ ...seasonModalCard, maxWidth: 620 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 20 }}>Select Player</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  style={{
+                    ...outlineBtn,
+                    borderColor: '#fca5a5',
+                    color: '#b91c1c',
+                  }}
+                  onClick={clearPickerSlotSelection}
+                  disabled={!playersBySlot[pickerSlot]}
+                >
+                  Clear
+                </button>
+                <button style={outlineBtn} onClick={() => setPickerOpen(false)}>Close</button>
+              </div>
+            </div>
+            <div style={{ color: '#64748b', fontSize: 13, marginTop: 6 }}>
+              Slot: {pickerSlot.toUpperCase()} · selected players are removed automatically.
+            </div>
+            <input
+              value={pickerQuery}
+              onChange={(e) => setPickerQuery(e.target.value)}
+              placeholder="Search players..."
+              style={{ ...modalInput, marginTop: 10 }}
+            />
+            {(() => {
+              const isSearching = pickerQuery.trim().length > 0;
+              return (
+                <div style={{ display: 'grid', gap: 10, marginTop: 10, maxHeight: '55vh', overflow: 'auto', paddingRight: 4 }}>
+                  {!isSearching ? (
+                    <>
+                      <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
+                        <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Recents</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {!recentPlayers.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No recent players</span> : null}
+                          {recentPlayers.map((player) => (
+                            <button key={`recent-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
+                              {player.display_name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
+                        <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Suggested</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {!suggestedPlayers.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No suggestions yet</span> : null}
+                          {suggestedPlayers.map((player) => (
+                            <button key={`suggested-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
+                              {player.display_name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                  <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
+                    <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>{isSearching ? 'Matching players' : 'All Players'}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {(isSearching ? matchingFromAllCandidates : allPlayersList).length === 0 ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No matching players</span> : null}
+                      {(isSearching ? matchingFromAllCandidates : allPlayersList).map((player) => (
+                        <button key={`all-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
+                          {player.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2073,6 +2877,22 @@ const outlineBtn: React.CSSProperties = {
   background: '#fff',
   padding: '8px 10px',
   cursor: 'pointer',
+};
+
+const scoreAdjBtn: React.CSSProperties = {
+  flexShrink: 0,
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  border: '1px solid var(--border)',
+  background: '#fff',
+  fontSize: 22,
+  lineHeight: 1,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
 };
 
 const primaryBtn: React.CSSProperties = {

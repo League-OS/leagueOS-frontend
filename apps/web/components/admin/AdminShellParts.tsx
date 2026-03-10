@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-export type AdminNavKey = 'dashboard' | 'clubs' | 'seasons' | 'sessions' | 'courts' | 'tournaments' | 'players' | 'users';
+export type AdminNavKey = 'dashboard' | 'clubs' | 'config' | 'seasons' | 'sessions' | 'courts' | 'tournaments' | 'players' | 'users';
 
 export function AdminSidebar({
   active,
@@ -15,6 +15,7 @@ export function AdminSidebar({
   const items: Array<{ key: AdminNavKey; label: string; href: string }> = [
     { key: 'dashboard', label: 'Dashboard', href: '/admin' },
     { key: 'clubs', label: 'Clubs', href: '/admin/clubs' },
+    { key: 'config', label: 'Config', href: '/admin/config' },
     { key: 'seasons', label: 'Seasons', href: '/admin/seasons' },
     { key: 'sessions', label: 'Sessions', href: '/admin/sessions' },
     { key: 'courts', label: 'Courts', href: '/admin/courts' },

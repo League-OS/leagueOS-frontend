@@ -3,6 +3,7 @@ import type { Game, GameParticipant, Player, Season, Session } from '@leagueos/s
 export type AdminPage =
   | 'dashboard'
   | 'clubs'
+  | 'config'
   | 'players'
   | 'users'
   | 'courts'
@@ -22,6 +23,7 @@ export function adminPageTitle(page: AdminPage): string {
   switch (page) {
     case 'dashboard': return 'Admin Dashboard';
     case 'clubs': return 'Clubs';
+    case 'config': return 'Config';
     case 'players': return 'Club Players';
     case 'users': return 'Users';
     case 'courts': return 'Courts';
@@ -52,6 +54,7 @@ export function buildAdminBreadcrumbs(args: {
   const map: Record<Exclude<AdminPage, 'seasonDetail' | 'sessionDetail'>, string> = {
     dashboard: 'Dashboard',
     clubs: 'Clubs',
+    config: 'Config',
     players: 'Club Players',
     users: 'Users',
     courts: 'Courts',
@@ -66,4 +69,9 @@ export function countUniquePlayersInSessionGames(sessionGames: Game[], participa
   return new Set(
     sessionGames.flatMap((g) => (participantsByGame[g.id] ?? []).map((p) => p.player_id)),
   ).size;
+}
+
+/** Display label for game status in the admin Session Detail match table. */
+export function gameStatusDisplay(game: { status?: string }): string {
+  return game.status === 'FINALIZED' ? 'FINALIZED' : 'Created';
 }
