@@ -1851,7 +1851,10 @@ function AddGameScreen({
   const filterByQuery = (list: Player[]) => {
     const query = pickerQuery.trim().toLowerCase();
     if (!query) return list;
-    return list.filter((player) => player.display_name.toLowerCase().includes(query));
+    return list.filter((player) => {
+      const lower = player.display_name.toLowerCase();
+      return lower.startsWith(query) || lower.split(/\s+/).some((word) => word.startsWith(query));
+    });
   };
 
   const recentPlayers = filterByQuery(pickerData.recents.map((id) => playerById.get(id)).filter(Boolean) as Player[]);
@@ -1862,6 +1865,9 @@ function AddGameScreen({
     .filter((player) => !recentsSet.has(player.id) && !suggestedSet.has(player.id))
     .sort((a, b) => a.display_name.localeCompare(b.display_name));
   const allPlayersList = filterByQuery(allPlayersRemainder);
+  const matchingFromAllCandidates = filterByQuery(
+    [...pickerData.candidates].sort((a, b) => a.display_name.localeCompare(b.display_name))
+  );
 
   const duplicateSelection = selectedPlayerIds.length !== new Set(selectedPlayerIds).size;
   const similarNameWarning = (() => {
@@ -2642,41 +2648,50 @@ function AddGameScreen({
               placeholder="Search players..."
               style={{ ...modalInput, marginTop: 10 }}
             />
-            <div style={{ display: 'grid', gap: 10, marginTop: 10, maxHeight: '55vh', overflow: 'auto', paddingRight: 4 }}>
-              <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
-                <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Recents</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {!recentPlayers.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No recent players</span> : null}
-                  {recentPlayers.map((player) => (
-                    <button key={`recent-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
-                      {player.display_name}
-                    </button>
-                  ))}
+            {(() => {
+              const isSearching = pickerQuery.trim().length > 0;
+              return (
+                <div style={{ display: 'grid', gap: 10, marginTop: 10, maxHeight: '55vh', overflow: 'auto', paddingRight: 4 }}>
+                  {!isSearching ? (
+                    <>
+                      <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
+                        <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Recents</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {!recentPlayers.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No recent players</span> : null}
+                          {recentPlayers.map((player) => (
+                            <button key={`recent-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
+                              {player.display_name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
+                        <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Suggested</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {!suggestedPlayers.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No suggestions yet</span> : null}
+                          {suggestedPlayers.map((player) => (
+                            <button key={`suggested-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
+                              {player.display_name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                  <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
+                    <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>{isSearching ? 'Matching players' : 'All Players'}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {(isSearching ? matchingFromAllCandidates : allPlayersList).length === 0 ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No matching players</span> : null}
+                      {(isSearching ? matchingFromAllCandidates : allPlayersList).map((player) => (
+                        <button key={`all-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
+                          {player.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
-                <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>Suggested</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {!suggestedPlayers.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No suggestions yet</span> : null}
-                  {suggestedPlayers.map((player) => (
-                    <button key={`suggested-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
-                      {player.display_name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: 10 }}>
-                <div style={{ fontWeight: 700, color: '#64748b', marginBottom: 8 }}>All Players</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {!allPlayersList.length ? <span style={{ color: '#94a3b8', fontSize: 13 }}>No matching players</span> : null}
-                  {allPlayersList.map((player) => (
-                    <button key={`all-${player.id}`} type="button" style={outlineBtn} onClick={() => applyPlayerToSlot(player.id)}>
-                      {player.display_name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       ) : null}
