@@ -1,0 +1,2427 @@
+{
+  "config": {
+    "configFile": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/playwright.config.ts",
+    "rootDir": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e",
+    "forbidOnly": true,
+    "fullyParallel": false,
+    "globalSetup": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e",
+        "testIgnore": [
+          "/add-game\\.integration\\.spec\\.ts/",
+          "/login-redirect-by-role\\.integration\\.spec\\.ts/",
+          "/leaderboard\\.integration\\.spec\\.ts/",
+          "/leaderboard-visibility\\.integration\\.spec\\.ts/",
+          "/los106-(api-proof|preference-persistence|visibility-proof)\\.spec\\.ts/"
+        ],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-no-auth",
+        "name": "chromium-no-auth",
+        "testDir": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/add-game.integration.spec.ts",
+          "**/login-redirect-by-role.integration.spec.ts",
+          "**/leaderboard.integration.spec.ts",
+          "**/leaderboard-visibility.integration.spec.ts",
+          "**/los106-api-proof.spec.ts",
+          "**/los106-preference-persistence.spec.ts",
+          "**/los106-visibility-proof.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "artifacts/integration-e2e/latest/html-report",
+          "open": "never"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "artifacts/integration-e2e/latest/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "add-game-workflow.spec.ts",
+      "file": "add-game-workflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01: Score+Save tab requires 4 players; Players tab always returns to step 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1145,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:50.332Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-01-Sc-4c829-ab-always-returns-to-step-1-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-01-Sc-4c829-ab-always-returns-to-step-1-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-01-Sc-4c829-ab-always-returns-to-step-1-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-50f00e105d740a1d8f49",
+          "file": "add-game-workflow.spec.ts",
+          "line": 83,
+          "column": 5
+        },
+        {
+          "title": "TC-02: court and score survive round-trip between step 1 and step 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1089,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:51.991Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-02-co-0abf3-p-between-step-1-and-step-2-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-02-co-0abf3-p-between-step-1-and-step-2-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-02-co-0abf3-p-between-step-1-and-step-2-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-d4c079f84116f6a0ec89",
+          "file": "add-game-workflow.spec.ts",
+          "line": 107,
+          "column": 5
+        },
+        {
+          "title": "TC-03: player selected in one slot is absent from other slot pickers",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 945,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:53.117Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-03-pl-46ed0-ent-from-other-slot-pickers-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-03-pl-46ed0-ent-from-other-slot-pickers-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-03-pl-46ed0-ent-from-other-slot-pickers-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-029d962e4ab8002422b8",
+          "file": "add-game-workflow.spec.ts",
+          "line": 143,
+          "column": 5
+        },
+        {
+          "title": "TC-04: picker shows sections in order Recents → Suggested → All Players",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1066,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:54.120Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-04-pi-9d0ad-s-→-Suggested-→-All-Players-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-04-pi-9d0ad-s-→-Suggested-→-All-Players-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-04-pi-9d0ad-s-→-Suggested-→-All-Players-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-8223819b6efcfc08f454",
+          "file": "add-game-workflow.spec.ts",
+          "line": 170,
+          "column": 5
+        },
+        {
+          "title": "TC-05: search filters names; no-match shows \"No matching players\" in All Players section",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 906,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:55.224Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-05-se-3a0c7-yers-in-All-Players-section-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-05-se-3a0c7-yers-in-All-Players-section-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-05-se-3a0c7-yers-in-All-Players-section-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-5d1ce718fe867a37e73c",
+          "file": "add-game-workflow.spec.ts",
+          "line": 190,
+          "column": 5
+        },
+        {
+          "title": "TC-07: court section is expanded and shows \"Select court\" when entering step 2 fresh",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 903,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:56.161Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-07-co-f510e--when-entering-step-2-fresh-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-07-co-f510e--when-entering-step-2-fresh-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-07-co-f510e--when-entering-step-2-fresh-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-9ab8bddf80d6b3d4d67d",
+          "file": "add-game-workflow.spec.ts",
+          "line": 207,
+          "column": 5
+        },
+        {
+          "title": "TC-08: selecting a court collapses court section and auto-expands time section",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 902,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:57.095Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-08-se-687c9-d-auto-expands-time-section-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-08-se-687c9-d-auto-expands-time-section-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-08-se-687c9-d-auto-expands-time-section-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-24737d4bdde6e297c5f6",
+          "file": "add-game-workflow.spec.ts",
+          "line": 226,
+          "column": 5
+        },
+        {
+          "title": "TC-09: selecting a time chip collapses time section and shows time in header",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 922,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:58.027Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-09-se-c5183-on-and-shows-time-in-header-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-09-se-c5183-on-and-shows-time-in-header-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-09-se-c5183-on-and-shows-time-in-header-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-457b7213e7d29a1f9135",
+          "file": "add-game-workflow.spec.ts",
+          "line": 249,
+          "column": 5
+        },
+        {
+          "title": "TC-11: custom time input hidden by default; appears after clicking \"+ Custom time\"",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 913,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:58.980Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-11-cu-32095-after-clicking-Custom-time--chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-11-cu-32095-after-clicking-Custom-time--chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-11-cu-32095-after-clicking-Custom-time--chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-6df726affa84a0c417ec",
+          "file": "add-game-workflow.spec.ts",
+          "line": 276,
+          "column": 5
+        },
+        {
+          "title": "TC-12: entering a future time shows \"Time cannot be in the future\"",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 901,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:44:59.924Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-12-en-d7b36-me-cannot-be-in-the-future--chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-12-en-d7b36-me-cannot-be-in-the-future--chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-12-en-d7b36-me-cannot-be-in-the-future--chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-a04d0f6c94c09e3ca42a",
+          "file": "add-game-workflow.spec.ts",
+          "line": 301,
+          "column": 5
+        },
+        {
+          "title": "TC-14: 21-20 score shows validation warning and Save Game is disabled",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 913,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:00.857Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-14-21-f8b0c-g-and-Save-Game-is-disabled-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-14-21-f8b0c-g-and-Save-Game-is-disabled-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-14-21-f8b0c-g-and-Save-Game-is-disabled-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-1f389c5fbcf6e6860163",
+          "file": "add-game-workflow.spec.ts",
+          "line": 348,
+          "column": 5
+        },
+        {
+          "title": "TC-15: Flip Sides (A ↔ B) swaps Team A and Team B scores",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 913,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:01.801Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-15-Fl-5b120-ps-Team-A-and-Team-B-scores-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-15-Fl-5b120-ps-Team-A-and-Team-B-scores-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-15-Fl-5b120-ps-Team-A-and-Team-B-scores-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-d0895ecf16f0e5ebe630",
+          "file": "add-game-workflow.spec.ts",
+          "line": 373,
+          "column": 5
+        },
+        {
+          "title": "TC-16: Save Game disabled without court+time; enabled when all inputs valid",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 914,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:02.745Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-16-Sa-2038a-abled-when-all-inputs-valid-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-16-Sa-2038a-abled-when-all-inputs-valid-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-16-Sa-2038a-abled-when-all-inputs-valid-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-adcc9a1c4925d1ccf2a5",
+          "file": "add-game-workflow.spec.ts",
+          "line": 398,
+          "column": 5
+        },
+        {
+          "title": "TC-17: court and time sections can be manually expanded and collapsed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 914,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:03.696Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-17-co-94b81-ally-expanded-and-collapsed-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-17-co-94b81-ally-expanded-and-collapsed-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-17-co-94b81-ally-expanded-and-collapsed-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-bf3c3845c2254d47c083",
+          "file": "add-game-workflow.spec.ts",
+          "line": 423,
+          "column": 5
+        },
+        {
+          "title": "TC-18: Back on step 2 returns to step 1 and preserves court + time selection",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No OPEN session available – skipping test",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                    "line": 41,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 935,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:04.645Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No OPEN session available – skipping test",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game-workflow.spec.ts",
+                        "line": 41,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-18-Ba-abe47-serves-court-time-selection-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-18-Ba-abe47-serves-court-time-selection-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game-workflow-TC-18-Ba-abe47-serves-court-time-selection-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "3fa2f0d61b3c2f6a4f4a-fc5c080c0cb586a26a2d",
+          "file": "add-game-workflow.spec.ts",
+          "line": 448,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "edit-game-workflow.spec.ts",
+      "file": "edit-game-workflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "EG-01: opening a game row pre-fills players, court, time, and score",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Edit Game form did not open – no editable game available",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                    "line": 51,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 890,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:05.616Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Edit Game form did not open – no editable game available",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                        "line": 51,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-01-o-5f4a8-layers-court-time-and-score-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-01-o-5f4a8-layers-court-time-and-score-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-01-o-5f4a8-layers-court-time-and-score-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "6fdf70a50e033296efc0-6e837edc05cc7f4f52d5",
+          "file": "edit-game-workflow.spec.ts",
+          "line": 59,
+          "column": 5
+        },
+        {
+          "title": "EG-02: editing score via quick-score chip and saving closes the edit form",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Edit Game form did not open – no editable game available",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                    "line": 51,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 925,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:06.533Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Edit Game form did not open – no editable game available",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                        "line": 51,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-02-e-ab8ae-saving-closes-the-edit-form-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-02-e-ab8ae-saving-closes-the-edit-form-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-02-e-ab8ae-saving-closes-the-edit-form-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "6fdf70a50e033296efc0-bbab0c46f1b289977d21",
+          "file": "edit-game-workflow.spec.ts",
+          "line": 84,
+          "column": 5
+        },
+        {
+          "title": "EG-03: Back on edit step 2 returns to step 1 and players remain pre-filled",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Edit Game form did not open – no editable game available",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                    "line": 51,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 896,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:07.487Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Edit Game form did not open – no editable game available",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                        "line": 51,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-03-B-d494d-d-players-remain-pre-filled-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-03-B-d494d-d-players-remain-pre-filled-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-03-B-d494d-d-players-remain-pre-filled-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "6fdf70a50e033296efc0-4594a9b300640ac2fa33",
+          "file": "edit-game-workflow.spec.ts",
+          "line": 109,
+          "column": 5
+        },
+        {
+          "title": "EG-04: Flip Sides in edit mode swaps Team A and Team B scores",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Edit Game form did not open – no editable game available",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                    "line": 51,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 879,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:08.412Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Edit Game form did not open – no editable game available",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/edit-game-workflow.spec.ts",
+                        "line": 51,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-04-F-63da5-ps-Team-A-and-Team-B-scores-chromium/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-04-F-63da5-ps-Team-A-and-Team-B-scores-chromium/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/edit-game-workflow-EG-04-F-63da5-ps-Team-A-and-Team-B-scores-chromium/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "6fdf70a50e033296efc0-bd76ef1119e3334aceea",
+          "file": "edit-game-workflow.spec.ts",
+          "line": 128,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "add-game.integration.spec.ts",
+      "file": "add-game.integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "rejects invalid login",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 966,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:10.137Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-rejects-invalid-login-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-rejects-invalid-login-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-rejects-invalid-login-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "95af785fb1af8bd14479-2b9270f8c22088b706c1",
+          "file": "add-game.integration.spec.ts",
+          "line": 56,
+          "column": 5
+        },
+        {
+          "title": "shows validation for draw score in Add Game",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 11905,
+                  "error": {
+                    "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Score A')\u001b[22m\n",
+                    "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Score A')\u001b[22m\n\n    at /Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts:73:36",
+                    "location": {
+                      "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts",
+                      "column": 36,
+                      "line": 73
+                    },
+                    "snippet": "  71 |   await selectFirstCourt(page);\n  72 |\n> 73 |   await page.getByLabel('Score A').fill('21');\n     |                                    ^\n  74 |   await page.getByLabel('Score B').fill('21');\n  75 |   await page.getByRole('button', { name: 'Save Game' }).click();\n  76 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts",
+                        "column": 36,
+                        "line": 73
+                      },
+                      "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Score A')\u001b[22m\n\n\n  71 |   await selectFirstCourt(page);\n  72 |\n> 73 |   await page.getByLabel('Score A').fill('21');\n     |                                    ^\n  74 |   await page.getByLabel('Score B').fill('21');\n  75 |   await page.getByRole('button', { name: 'Save Game' }).click();\n  76 |\n    at /Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts:73:36"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:11.475Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-shows-4109b--for-draw-score-in-Add-Game-chromium-no-auth/test-failed-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-shows-4109b--for-draw-score-in-Add-Game-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-shows-4109b--for-draw-score-in-Add-Game-chromium-no-auth/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-shows-4109b--for-draw-score-in-Add-Game-chromium-no-auth/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts",
+                    "column": 36,
+                    "line": 73
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "95af785fb1af8bd14479-282498669713eefff42e",
+          "file": "add-game.integration.spec.ts",
+          "line": 64,
+          "column": 5
+        },
+        {
+          "title": "creates game from UI and reflects via API",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 11861,
+                  "error": {
+                    "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Score A')\u001b[22m\n",
+                    "stack": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Score A')\u001b[22m\n\n    at /Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts:106:36",
+                    "location": {
+                      "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts",
+                      "column": 36,
+                      "line": 106
+                    },
+                    "snippet": "  104 |   }\n  105 |   await selectFirstCourt(page);\n> 106 |   await page.getByLabel('Score A').fill('21');\n      |                                    ^\n  107 |   await page.getByLabel('Score B').fill('18');\n  108 |\n  109 |   const saveBtn = page.getByRole('button', { name: 'Save Game' });"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts",
+                        "column": 36,
+                        "line": 106
+                      },
+                      "message": "TimeoutError: locator.fill: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Score A')\u001b[22m\n\n\n  104 |   }\n  105 |   await selectFirstCourt(page);\n> 106 |   await page.getByLabel('Score A').fill('21');\n      |                                    ^\n  107 |   await page.getByLabel('Score B').fill('18');\n  108 |\n  109 |   const saveBtn = page.getByRole('button', { name: 'Save Game' });\n    at /Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts:106:36"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:24.363Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-creat-6af2c-rom-UI-and-reflects-via-API-chromium-no-auth/test-failed-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-creat-6af2c-rom-UI-and-reflects-via-API-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-creat-6af2c-rom-UI-and-reflects-via-API-chromium-no-auth/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/add-game.integration-creat-6af2c-rom-UI-and-reflects-via-API-chromium-no-auth/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/add-game.integration.spec.ts",
+                    "column": 36,
+                    "line": 106
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "95af785fb1af8bd14479-f3b0641778ab42f5a700",
+          "file": "add-game.integration.spec.ts",
+          "line": 80,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "leaderboard-visibility.integration.spec.ts",
+      "file": "leaderboard-visibility.integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "profile leaderboard visibility toggle hides player from leaderboard and keeps contiguous ranks",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No finalized session in this club/season; seed data may be needed",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/leaderboard-visibility.integration.spec.ts",
+                    "line": 45,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 226,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:37.370Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No finalized session in this club/season; seed data may be needed",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/leaderboard-visibility.integration.spec.ts",
+                        "line": 45,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard-visibility.int-e6546--and-keeps-contiguous-ranks-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard-visibility.int-e6546--and-keeps-contiguous-ranks-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard-visibility.int-e6546--and-keeps-contiguous-ranks-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "750a826431c8c043f491-07e2dbaf979ce81ae530",
+          "file": "leaderboard-visibility.integration.spec.ts",
+          "line": 13,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "leaderboard.integration.spec.ts",
+      "file": "leaderboard.integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "leaderboard api rows are structurally valid with unique players",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "No finalized session in this club/season; seed data may be needed",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/leaderboard.integration.spec.ts",
+                    "line": 31,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 80,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:38.018Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "No finalized session in this club/season; seed data may be needed",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/leaderboard.integration.spec.ts",
+                        "line": 31,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard.integration-le-a69a5-y-valid-with-unique-players-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "76039d827beee7547a7d-d1aef2f15a164486dcb9",
+          "file": "leaderboard.integration.spec.ts",
+          "line": 15,
+          "column": 5
+        },
+        {
+          "title": "leaderboard api returns empty for brand new season with no finalized sessions",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 78,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:38.107Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard.integration-le-9c6c0--with-no-finalized-sessions-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "76039d827beee7547a7d-aa18b6f34a0ec7e78e45",
+          "file": "leaderboard.integration.spec.ts",
+          "line": 59,
+          "column": 5
+        },
+        {
+          "title": "leaderboard endpoint rejects unauthorized token",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 22,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:38.196Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard.integration-le-89698--rejects-unauthorized-token-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "76039d827beee7547a7d-a5b382475f6eac0a922f",
+          "file": "leaderboard.integration.spec.ts",
+          "line": 97,
+          "column": 5
+        },
+        {
+          "title": "ui leaderboard contains top player from api",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 937,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:38.228Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard.integration-ui-523cd-ontains-top-player-from-api-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard.integration-ui-523cd-ontains-top-player-from-api-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/leaderboard.integration-ui-523cd-ontains-top-player-from-api-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "76039d827beee7547a7d-107d9900e0448da5d9b0",
+          "file": "leaderboard.integration.spec.ts",
+          "line": 104,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "login-redirect-by-role.integration.spec.ts",
+      "file": "login-redirect-by-role.integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Global Admin redirects to /admin after login",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1398,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:39.214Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-6963c-irects-to-admin-after-login-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-6963c-irects-to-admin-after-login-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-6963c-irects-to-admin-after-login-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f539f58dc345858b686a-54cf1ee6ebc9ad7f719f",
+          "file": "login-redirect-by-role.integration.spec.ts",
+          "line": 49,
+          "column": 5
+        },
+        {
+          "title": "Club Admin redirects to /admin after login",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1397,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:40.643Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-5efee-irects-to-admin-after-login-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-5efee-irects-to-admin-after-login-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-5efee-irects-to-admin-after-login-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f539f58dc345858b686a-68ccad67ca0c126dc04f",
+          "file": "login-redirect-by-role.integration.spec.ts",
+          "line": 54,
+          "column": 5
+        },
+        {
+          "title": "Recorder remains in player app (not /admin) after login",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Login may have failed or player app did not load (env/credentials)",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/login-redirect-by-role.integration.spec.ts",
+                    "line": 43,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 2920,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:42.087Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Login may have failed or player app did not load (env/credentials)",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/login-redirect-by-role.integration.spec.ts",
+                        "line": 43,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-c2bdb-r-app-not-admin-after-login-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-c2bdb-r-app-not-admin-after-login-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-c2bdb-r-app-not-admin-after-login-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "f539f58dc345858b686a-8e34153168d5ca7da518",
+          "file": "login-redirect-by-role.integration.spec.ts",
+          "line": 59,
+          "column": 5
+        },
+        {
+          "title": "User remains in player app (not /admin) after login",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Login may have failed or player app did not load (env/credentials)",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/login-redirect-by-role.integration.spec.ts",
+                    "line": 43,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 2949,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:45.053Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Login may have failed or player app did not load (env/credentials)",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/login-redirect-by-role.integration.spec.ts",
+                        "line": 43,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-d610c-r-app-not-admin-after-login-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-d610c-r-app-not-admin-after-login-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/login-redirect-by-role.int-d610c-r-app-not-admin-after-login-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "f539f58dc345858b686a-a19b579d0e0a01cc28c6",
+          "file": "login-redirect-by-role.integration.spec.ts",
+          "line": 64,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "los106-api-proof.spec.ts",
+      "file": "los106-api-proof.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "LOS-106 proof: hidden player is excluded from leaderboard API and UI",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "API login failed (check E2E_API_BASE and credentials)",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/los106-api-proof.spec.ts",
+                    "line": 22,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 122,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:48.047Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "API login failed (check E2E_API_BASE and credentials)",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/los106-api-proof.spec.ts",
+                        "line": 22,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-api-proof-LOS-106-p-a7458-from-leaderboard-API-and-UI-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-api-proof-LOS-106-p-a7458-from-leaderboard-API-and-UI-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-api-proof-LOS-106-p-a7458-from-leaderboard-API-and-UI-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "83e6126af698f9a85c93-2038c95c257dff878afb",
+          "file": "los106-api-proof.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "los106-preference-persistence.spec.ts",
+      "file": "los106-preference-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "LOS-106 proof: show_on_leaderboard preference persists via profile API",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "API login failed 429 (check E2E_API_BASE and credentials)",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/los106-preference-persistence.spec.ts",
+                    "line": 23,
+                    "column": 10
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1038,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:48.184Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "API login failed 429 (check E2E_API_BASE and credentials)",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/los106-preference-persistence.spec.ts",
+                        "line": 23,
+                        "column": 10
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-preference-persiste-3e2cf-ce-persists-via-profile-API-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-preference-persiste-3e2cf-ce-persists-via-profile-API-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-preference-persiste-3e2cf-ce-persists-via-profile-API-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "88686e62ca27074c53f4-74919753a5f8d61bd484",
+          "file": "los106-preference-persistence.spec.ts",
+          "line": 15,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "los106-visibility-proof.spec.ts",
+      "file": "los106-visibility-proof.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "LOS-106 proof: player can toggle leaderboard visibility preference",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "Profile button not found (UI may vary by env)",
+                  "location": {
+                    "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/los106-visibility-proof.spec.ts",
+                    "line": 25,
+                    "column": 14
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "chromium-no-auth",
+              "projectName": "chromium-no-auth",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 886,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-10T00:45:49.273Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Profile button not found (UI may vary by env)",
+                      "location": {
+                        "file": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/e2e/los106-visibility-proof.spec.ts",
+                        "line": 25,
+                        "column": 14
+                      }
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-visibility-proof-LO-50dc6-board-visibility-preference-chromium-no-auth/test-finished-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-visibility-proof-LO-50dc6-board-visibility-preference-chromium-no-auth/video.webm"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/bonythomas/Documents/code/leagueOS-frontend/apps/web/artifacts/integration-e2e/latest/test-output/los106-visibility-proof-LO-50dc6-board-visibility-preference-chromium-no-auth/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "40aa2752a34528e5ae51-7ad74aeb5f02828c6c96",
+          "file": "los106-visibility-proof.spec.ts",
+          "line": 7,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-10T00:44:39.497Z",
+    "duration": 70750.47600000001,
+    "expected": 6,
+    "skipped": 26,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}

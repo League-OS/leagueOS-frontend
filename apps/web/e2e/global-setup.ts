@@ -7,8 +7,8 @@
 import { chromium } from '@playwright/test';
 import path from 'path';
 
-const EMAIL    = process.env.E2E_EMAIL    || 'enosh_fvma_badminton_club@leagueos.local';
-const PASSWORD = process.env.E2E_PASSWORD || 'Recorder@123';
+const EMAIL    = process.env.E2E_EMAIL    || 'playerone@leagueos.local';
+const PASSWORD = process.env.E2E_PASSWORD || 'PlayerOne@123';
 
 export const AUTH_STATE_PATH = path.resolve(__dirname, '../.auth-state.json');
 
@@ -19,9 +19,9 @@ export default async function globalSetup() {
 
   await page.goto(process.env.E2E_BASE_URL || 'http://127.0.0.1:3000');
 
-  await page.getByRole('textbox', { name: 'Email' }).fill(EMAIL);
-  await page.getByRole('textbox', { name: /password/i }).fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.getByLabel('Email').fill(EMAIL);
+  await page.getByPlaceholder('Enter your password').fill(PASSWORD);
+  await page.getByRole('button', { name: /Sign In/i }).click();
 
   // Wait until dashboard is ready
   await page.getByRole('button', { name: '+' }).waitFor({ timeout: 20_000 });

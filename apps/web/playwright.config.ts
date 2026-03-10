@@ -27,13 +27,32 @@ export default defineConfig({
     video: 'on',
     screenshot: 'on',
     viewport: { width: 1440, height: 900 },
-    // Reuse logged-in auth state across all tests to avoid repeated logins
     storageState: authStatePath,
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], storageState: authStatePath },
+      testIgnore: [
+        /add-game\.integration\.spec\.ts/,
+        /login-redirect-by-role\.integration\.spec\.ts/,
+        /leaderboard\.integration\.spec\.ts/,
+        /leaderboard-visibility\.integration\.spec\.ts/,
+        /los106-(api-proof|preference-persistence|visibility-proof)\.spec\.ts/,
+      ],
+    },
+    {
+      name: 'chromium-no-auth',
+      use: { ...devices['Desktop Chrome'], storageState: { cookies: [], origins: [] } },
+      testMatch: [
+        '**/add-game.integration.spec.ts',
+        '**/login-redirect-by-role.integration.spec.ts',
+        '**/leaderboard.integration.spec.ts',
+        '**/leaderboard-visibility.integration.spec.ts',
+        '**/los106-api-proof.spec.ts',
+        '**/los106-preference-persistence.spec.ts',
+        '**/los106-visibility-proof.spec.ts',
+      ],
     },
   ],
 });

@@ -10,8 +10,8 @@
  *     If none exists the tests are skipped gracefully.
  *
  * Credentials override via env vars:
- *   E2E_EMAIL  (default: enosh_fvma_badminton_club@leagueos.local)
- *   E2E_PASSWORD  (default: Recorder@123)
+ *   E2E_EMAIL  (default: fvma-clubAdmin@leagueos.local)
+ *   E2E_PASSWORD  (default: Admin@123)
  */
 
 import { expect, test, type Page } from '@playwright/test';

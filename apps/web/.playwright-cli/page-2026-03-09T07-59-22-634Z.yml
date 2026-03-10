@@ -1,0 +1,75 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e25] [cursor=pointer]:
+    - img [ref=e26]
+  - alert [ref=e29]
+  - main [ref=e32]:
+    - generic [ref=e33]:
+      - generic [ref=e35]:
+        - img "LeagueOS menu" [ref=e37]
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - button "Open user preferences" [ref=e40] [cursor=pointer]: enosh_record
+            - generic [ref=e41]:
+              - generic [ref=e42]: 🎯 In Training
+              - generic [ref=e43]: 🏸🏸 DOUBLES
+          - button "Open profile" [ref=e44] [cursor=pointer]:
+            - generic [ref=e45]:
+              - generic [ref=e46]: 🏸
+              - generic [ref=e47]: E
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - heading "Recent Games" [level=2] [ref=e51]
+            - button "View All →" [ref=e52] [cursor=pointer]
+          - generic [ref=e53]:
+            - generic [ref=e54]: Date
+            - generic [ref=e55]: Partner
+            - generic [ref=e56]: Result
+            - generic [ref=e57]: Game Score
+          - button "Mar 8 Player One W 21-19" [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]: Mar 8
+            - generic [ref=e60]: Player One
+            - generic [ref=e61]: W
+            - generic [ref=e62]: 21-19
+          - button "Mar 8 Maya Joseph L 18-21" [ref=e63] [cursor=pointer]:
+            - generic [ref=e64]: Mar 8
+            - generic [ref=e65]: Maya Joseph
+            - generic [ref=e66]: L
+            - generic [ref=e67]: 18-21
+          - button "Mar 8 Nila Varghese W 21-17" [ref=e68] [cursor=pointer]:
+            - generic [ref=e69]: Mar 8
+            - generic [ref=e70]: Nila Varghese
+            - generic [ref=e71]: W
+            - generic [ref=e72]: 21-17
+          - button "Mar 8 Priya Nair L 20-22" [ref=e73] [cursor=pointer]:
+            - generic [ref=e74]: Mar 8
+            - generic [ref=e75]: Priya Nair
+            - generic [ref=e76]: L
+            - generic [ref=e77]: 20-22
+          - button "Mar 8 Joel Varghese W 21-17" [ref=e78] [cursor=pointer]:
+            - generic [ref=e79]: Mar 8
+            - generic [ref=e80]: Joel Varghese
+            - generic [ref=e81]: W
+            - generic [ref=e82]: 21-17
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - heading "Upcoming Sessions" [level=2] [ref=e85]
+            - button "View All →" [ref=e86] [cursor=pointer]
+          - generic [ref=e87]:
+            - generic [ref=e88]: Date
+            - generic [ref=e89]: Season
+            - generic [ref=e90]: Club
+          - generic [ref=e91]: No data available.
+        - generic [ref=e92]:
+          - generic [ref=e93]: Add Game
+          - button "+" [ref=e94] [cursor=pointer]
+    - navigation [ref=e95]:
+      - button "⌂ Home" [ref=e96] [cursor=pointer]:
+        - generic [ref=e97]: ⌂
+        - generic [ref=e98]: Home
+      - button "🏆 Leaderboard" [ref=e99] [cursor=pointer]:
+        - generic [ref=e100]: 🏆
+        - generic [ref=e101]: Leaderboard
+      - button "◉ Profile" [ref=e102] [cursor=pointer]:
+        - generic [ref=e103]: ◉
+        - generic [ref=e104]: Profile

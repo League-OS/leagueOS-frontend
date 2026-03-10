@@ -1,0 +1,30 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:3000",
+      "localStorage": [
+        {
+          "name": "leagueos.player.selectedTab.playerone@leagueos.local",
+          "value": "home"
+        },
+        {
+          "name": "leagueos.player.profile",
+          "value": "{\"id\":5,\"email\":\"playerone@leagueos.local\",\"full_name\":\"Player One\",\"display_name\":\"player_one\",\"role\":\"USER\",\"club_role\":\"RECORDER\",\"club_id\":1,\"show_on_leaderboard\":true}"
+        },
+        {
+          "name": "leagueos.player.selectedTab",
+          "value": "home"
+        },
+        {
+          "name": "leagueos.profile.avatar.playerone@leagueos.local",
+          "value": "{\"avatarPreview\":null,\"selectedAvatarId\":\"shuttle-pro\"}"
+        },
+        {
+          "name": "leagueos.player.auth",
+          "value": "{\"token\":\"wRzeTYEukIO_cal1ywZWKda65aV_y7uJhI_0qPXpe7lNXhFWu7974LuUqnHRNYiJ\",\"clubId\":1}"
+        }
+      ]
+    }
+  ]
+}

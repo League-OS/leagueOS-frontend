@@ -25,7 +25,7 @@ import {
   primaryBtn,
 } from './AdminShellParts';
 import type { AdminNavKey } from './AdminShellParts';
-import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
+import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
 
@@ -2826,7 +2826,7 @@ function SessionDetailPanel(props: {
         startTimeTs: Number.isNaN(startTs) ? Number.NEGATIVE_INFINITY : startTs,
         scoreA: g.score_a,
         scoreB: g.score_b,
-        status: 'Created',
+        status: gameStatusDisplay(g),
       };
     });
 
