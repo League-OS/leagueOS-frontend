@@ -4,6 +4,7 @@ import {
   adminPageTitle,
   buildAdminBreadcrumbs,
   countUniquePlayersInSessionGames,
+  gameStatusDisplay,
   mergeAdminPlayers,
 } from '../components/admin/adminWorkspaceLogic.ts';
 
@@ -69,4 +70,11 @@ test('countUniquePlayersInSessionGames counts unique players across matches', ()
   };
   const count = countUniquePlayersInSessionGames(sessionGames as never, participantsByGame as never);
   assert.equal(count, 6);
+});
+
+test('gameStatusDisplay reflects API game.status for session match table', () => {
+  assert.equal(gameStatusDisplay({ status: 'FINALIZED' }), 'FINALIZED');
+  assert.equal(gameStatusDisplay({ status: 'CREATED' }), 'Created');
+  assert.equal(gameStatusDisplay({}), 'Created');
+  assert.equal(gameStatusDisplay({ status: undefined }), 'Created');
 });

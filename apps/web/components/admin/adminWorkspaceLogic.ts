@@ -67,3 +67,8 @@ export function countUniquePlayersInSessionGames(sessionGames: Game[], participa
     sessionGames.flatMap((g) => (participantsByGame[g.id] ?? []).map((p) => p.player_id)),
   ).size;
 }
+
+/** Display label for game status in the admin Session Detail match table. */
+export function gameStatusDisplay(game: { status?: string }): string {
+  return game.status === 'FINALIZED' ? 'FINALIZED' : 'Created';
+}
