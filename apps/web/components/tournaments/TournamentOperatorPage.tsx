@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
 import { createTournamentLiveChannel } from '../../lib/tournamentLive';
-import { tournamentsApi } from '../../lib/tournamentsApi';
+import { tournamentsApi, type TournamentMatch } from '../../lib/tournamentsApi';
 
 type Auth = { token: string; clubId: number };
 
@@ -11,8 +11,9 @@ const ADMIN_STORAGE_AUTH = 'leagueos.admin.auth';
 
 export function TournamentOperatorPage({ tournamentId }: { tournamentId: number }) {
   const [auth, setAuth] = useState<Auth | null>(null);
-  const [selectedMatchId, setSelectedMatchId] = useState<number | null>(101);
-  const [winnerTeamId, setWinnerTeamId] = useState<number | null>(1);
+  const [matches, setMatches] = useState<TournamentMatch[]>([]);
+  const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
+  const [winnerTeamId, setWinnerTeamId] = useState<number | null>(null);
   const [scoreA, setScoreA] = useState('0');
   const [scoreB, setScoreB] = useState('0');
   const [rallies, setRallies] = useState<string[]>(['0-0']);
@@ -30,21 +31,46 @@ export function TournamentOperatorPage({ tournamentId }: { tournamentId: number 
     }
   }, []);
 
-  const live = useMemo(() => createTournamentLiveChannel({ tournamentId, onMessage: () => {} }), [tournamentId]);
+  async function refreshMatches() {
+    if (!auth) return;
+    const res = await tournamentsApi.matches(auth.clubId, tournamentId, auth.token);
+    setMatches(res.matches);
+    if (!selectedMatchId && res.matches[0]) {
+      setSelectedMatchId(res.matches[0].id);
+      setWinnerTeamId(res.matches[0].team_a_id);
+      setScoreA(String(res.matches[0].team_a_points ?? 0));
+      setScoreB(String(res.matches[0].team_b_points ?? 0));
+    }
+  }
+
+  useEffect(() => {
+    if (!auth) return;
+    void refreshMatches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.token, tournamentId]);
+
+  const selectedMatch = useMemo(() => matches.find((m) => m.id === selectedMatchId) ?? null, [matches, selectedMatchId]);
+
+  useEffect(() => {
+    if (!selectedMatch) return;
+    setWinnerTeamId(selectedMatch.team_a_id);
+    setScoreA(String(selectedMatch.team_a_points ?? 0));
+    setScoreB(String(selectedMatch.team_b_points ?? 0));
+  }, [selectedMatchId, selectedMatch]);
+
+  const live = useMemo(() => createTournamentLiveChannel({ tournamentId, onMessage: () => void refreshMatches() }), [tournamentId, auth?.token]);
   useEffect(() => () => live.close(), [live]);
 
   function scorePoint(side: 'A' | 'B') {
     setServes(side);
-    setScoreA((prev) => {
-      const a = Number(prev);
-      const b = Number(scoreB);
-      const nextA = side === 'A' ? a + 1 : a;
-      const nextB = side === 'B' ? b + 1 : b;
-      setScoreB(String(nextB));
-      setRallies((r) => [...r, `${nextA}-${nextB}`].slice(-60));
-      live.publishLocal({ type: 'match_update', matchId: selectedMatchId ?? undefined, payload: { scoreA: nextA, scoreB: nextB } });
-      return String(nextA);
-    });
+    const a = Number(scoreA);
+    const b = Number(scoreB);
+    const nextA = side === 'A' ? a + 1 : a;
+    const nextB = side === 'B' ? b + 1 : b;
+    setScoreA(String(nextA));
+    setScoreB(String(nextB));
+    setRallies((r) => [...r, `${nextA}-${nextB}`].slice(-60));
+    live.publishLocal({ type: 'match_update', matchId: selectedMatchId ?? undefined, payload: { scoreA: nextA, scoreB: nextB } });
   }
 
   async function onRecord() {
@@ -59,6 +85,7 @@ export function TournamentOperatorPage({ tournamentId }: { tournamentId: number 
         team_b_points: Number(scoreB),
       });
       live.publishLocal({ type: 'match_update', matchId: selectedMatchId, payload: { status: 'COMPLETED' } });
+      await refreshMatches();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Record failed');
     }
@@ -73,6 +100,13 @@ export function TournamentOperatorPage({ tournamentId }: { tournamentId: number 
         <p style={{ color: '#5d6b86', marginTop: 6 }}>Dedicated scoring surface for scorer/umpire.</p>
         {error ? <div style={{ background: '#fff1f2', border: '1px solid #fecaca', padding: 10, borderRadius: 8 }}>{error}</div> : null}
 
+        <div style={{ marginTop: 8 }}>
+          <select value={selectedMatchId ?? ''} onChange={(e) => setSelectedMatchId(Number(e.target.value))} style={{ width: '100%' }}>
+            <option value="">Select match</option>
+            {matches.map((m) => <option key={m.id} value={m.id}>#{m.id} · {m.stage} · {m.team_a_name} vs {m.team_b_name}</option>)}
+          </select>
+        </div>
+
         <div style={{ textAlign: 'center', fontSize: 56, fontWeight: 900, marginTop: 8 }}>{scoreA} - {scoreB}</div>
         <div style={{ textAlign: 'center', color: '#475569' }}>Server: Team {serves}</div>
 
@@ -83,11 +117,12 @@ export function TournamentOperatorPage({ tournamentId }: { tournamentId: number 
         </div>
 
         <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <input value={selectedMatchId ?? ''} onChange={(e) => setSelectedMatchId(Number(e.target.value))} placeholder="Match id" />
-          <input value={winnerTeamId ?? ''} onChange={(e) => setWinnerTeamId(Number(e.target.value))} placeholder="Winner team id" />
+          <select value={winnerTeamId ?? ''} onChange={(e) => setWinnerTeamId(Number(e.target.value))}>
+            <option value={selectedMatch?.team_a_id ?? ''}>{selectedMatch?.team_a_name ?? 'Team A'}</option>
+            <option value={selectedMatch?.team_b_id ?? ''}>{selectedMatch?.team_b_name ?? 'Team B'}</option>
+          </select>
+          <button onClick={onRecord}>Finalize Result</button>
         </div>
-
-        <button onClick={onRecord} style={{ marginTop: 10, width: '100%' }}>Finalize Result</button>
 
         <div style={{ marginTop: 10, border: '1px solid #d8e0ee', borderRadius: 10, padding: 8, background: '#f8fbff' }}>
           {rallies.slice(-18).map((r, idx) => (
