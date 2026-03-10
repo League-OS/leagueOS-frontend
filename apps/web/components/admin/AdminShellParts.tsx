@@ -190,9 +190,11 @@ export function AdminTable({
 
 export const adminPageShell: React.CSSProperties = {
   minHeight: '100vh',
-  background: '#eef2f7',
+  background:
+    'radial-gradient(circle at 10% 12%, #e0efe8 0%, rgba(224, 239, 232, 0) 32%), radial-gradient(circle at 88% 16%, #f5ead3 0%, rgba(245, 234, 211, 0) 28%), linear-gradient(160deg, #f4f6f2 0%, #eef2ef 100%)',
   display: 'grid',
   gridTemplateColumns: '260px minmax(0, 1fr)',
+  color: '#182521',
 };
 
 export const adminMainPanel: React.CSSProperties = {
@@ -222,19 +224,19 @@ export const adminAlertSuccess: React.CSSProperties = {
 };
 
 export const field: React.CSSProperties = {
-  border: '1px solid #cbd5e1',
+  border: '1px solid #c3d2ca',
   borderRadius: 10,
   background: '#fff',
   padding: '10px 12px',
   minHeight: 40,
-  color: '#0f172a',
+  color: '#17302a',
 };
 
 export const outlineBtn: React.CSSProperties = {
-  border: '1px solid #cbd5e1',
+  border: '1px solid #c3d2ca',
   borderRadius: 10,
   background: '#fff',
-  color: '#0f172a',
+  color: '#17302a',
   padding: '8px 12px',
   fontWeight: 600,
   cursor: 'pointer',
@@ -243,7 +245,7 @@ export const outlineBtn: React.CSSProperties = {
 export const primaryBtn: React.CSSProperties = {
   border: 0,
   borderRadius: 10,
-  background: 'linear-gradient(90deg, #14b8a6, #0d9488)',
+  background: 'linear-gradient(92deg, #12856b, #1b9f78)',
   color: '#fff',
   padding: '9px 12px',
   fontWeight: 700,
@@ -251,8 +253,9 @@ export const primaryBtn: React.CSSProperties = {
 };
 
 const sidebar: React.CSSProperties = {
-  background: '#fff',
-  borderRight: '1px solid #dbe3ef',
+  background: 'rgba(255, 255, 255, 0.82)',
+  borderRight: '1px solid #d2ddd7',
+  backdropFilter: 'blur(8px)',
   padding: 16,
   position: 'sticky',
   top: 0,
@@ -260,26 +263,28 @@ const sidebar: React.CSSProperties = {
 };
 
 const navLink: React.CSSProperties = {
-  border: '1px solid #dbe3ef',
+  border: '1px solid #d1ddd7',
   borderRadius: 12,
   padding: '10px 12px',
   textDecoration: 'none',
-  color: '#0f172a',
+  color: '#1a2b26',
   fontWeight: 600,
   background: '#fff',
 };
 
 const navLinkActive: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #14b8a6, #0d9488)',
+  background: 'linear-gradient(92deg, #0f7c64, #15916f)',
   color: '#fff',
-  borderColor: '#0d9488',
+  borderColor: '#0f7c64',
 };
 
 const topbar: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #dbe3ef',
+  background: 'rgba(255, 255, 255, 0.88)',
+  border: '1px solid #d2ddd7',
   borderRadius: 14,
   padding: 14,
+  backdropFilter: 'blur(8px)',
+  boxShadow: '0 8px 18px rgba(22, 35, 30, 0.07)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -289,35 +294,38 @@ const topbar: React.CSSProperties = {
 
 const roleBadge: React.CSSProperties = {
   borderRadius: 999,
-  border: '1px solid #bae6fd',
-  background: '#eff6ff',
-  color: '#075985',
+  border: '1px solid #9fd5bf',
+  background: '#ebf8f1',
+  color: '#115f4b',
   padding: '6px 10px',
   fontWeight: 700,
   fontSize: 12,
 };
 
 const crumbBar: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #dbe3ef',
+  background: 'rgba(255, 255, 255, 0.88)',
+  border: '1px solid #d2ddd7',
   borderRadius: 12,
   padding: '8px 12px',
+  backdropFilter: 'blur(8px)',
   display: 'flex',
   gap: 6,
   flexWrap: 'wrap',
 };
 
 const card: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #dbe3ef',
+  background: 'rgba(255, 255, 255, 0.88)',
+  border: '1px solid #d2ddd7',
   borderRadius: 14,
   padding: 14,
+  backdropFilter: 'blur(8px)',
+  boxShadow: '0 8px 18px rgba(22, 35, 30, 0.07)',
 };
 
 const emptyState: React.CSSProperties = {
-  border: '1px dashed #cbd5e1',
+  border: '1px dashed #cad7d0',
   borderRadius: 12,
-  background: '#f8fafc',
+  background: '#f6faf8',
   padding: 16,
 };
 
@@ -329,15 +337,15 @@ const table: React.CSSProperties = {
 
 const th: React.CSSProperties = {
   textAlign: 'left',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid #d8e2dc',
   padding: '10px 8px',
-  color: '#475569',
+  color: '#5f6f68',
   fontSize: 13,
 };
 
 const td: React.CSSProperties = {
-  borderBottom: '1px solid #f1f5f9',
+  borderBottom: '1px solid #ebf1ed',
   padding: '10px 8px',
-  color: '#0f172a',
+  color: '#1d2e29',
   fontSize: 14,
 };
