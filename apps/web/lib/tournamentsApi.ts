@@ -38,6 +38,8 @@ export type TournamentMatch = {
   group_id: number | null;
   group_code: string | null;
   is_duplicate: boolean;
+  display_state?: 'LIVE' | 'UPCOMING' | 'DONE';
+  title?: string;
   created_at: string;
   updated_at: string;
 };
@@ -57,6 +59,12 @@ export type TournamentDisplayResponse = {
     status: string;
     enable_quarterfinals: boolean;
   };
+  summary: {
+    live_count: number;
+    upcoming_count: number;
+    completed_count: number;
+    total_match_count: number;
+  };
   live_matches: TournamentMatch[];
   upcoming_matches: TournamentMatch[];
   completed_matches: TournamentMatch[];
@@ -65,6 +73,14 @@ export type TournamentDisplayResponse = {
     quarterfinals: TournamentMatch[];
     semifinals: TournamentMatch[];
     finals: TournamentMatch[];
+  };
+};
+
+export type TournamentMatchDetailResponse = {
+  match: TournamentMatch;
+  operator_hints: {
+    can_record_result: boolean;
+    suggested_winner_team_id: number;
   };
 };
 
@@ -117,6 +133,8 @@ export const tournamentsApi = {
   },
   display: (clubId: number, tournamentId: number, token: string) =>
     api<TournamentDisplayResponse>(`/clubs/${clubId}/tournaments-v2/${tournamentId}/display`, token),
+  matchDetail: (clubId: number, tournamentId: number, matchId: number, token: string) =>
+    api<TournamentMatchDetailResponse>(`/clubs/${clubId}/tournaments-v2/${tournamentId}/matches/${matchId}`, token),
   advance: (clubId: number, tournamentId: number, token: string) =>
     api(`/clubs/${clubId}/tournaments-v2/${tournamentId}/advance`, token, { method: 'POST' }),
   recordMatch: (

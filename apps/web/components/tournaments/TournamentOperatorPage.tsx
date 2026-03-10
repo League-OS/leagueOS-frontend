@@ -52,11 +52,13 @@ export function TournamentOperatorPage({ tournamentId }: { tournamentId: number 
   const selectedMatch = useMemo(() => matches.find((m) => m.id === selectedMatchId) ?? null, [matches, selectedMatchId]);
 
   useEffect(() => {
-    if (!selectedMatch) return;
-    setWinnerTeamId(selectedMatch.team_a_id);
+    if (!selectedMatch || !auth) return;
     setScoreA(String(selectedMatch.team_a_points ?? 0));
     setScoreB(String(selectedMatch.team_b_points ?? 0));
-  }, [selectedMatchId, selectedMatch]);
+    void tournamentsApi.matchDetail(auth.clubId, tournamentId, selectedMatch.id, auth.token)
+      .then((detail) => setWinnerTeamId(detail.operator_hints.suggested_winner_team_id))
+      .catch(() => setWinnerTeamId(selectedMatch.team_a_id));
+  }, [selectedMatchId, selectedMatch, auth, tournamentId]);
 
   const live = useMemo(() => createTournamentLiveChannel({ tournamentId, onMessage: () => void refreshMatches() }), [tournamentId, auth?.token]);
   useEffect(() => () => live.close(), [live]);

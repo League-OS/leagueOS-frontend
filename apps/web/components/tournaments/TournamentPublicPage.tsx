@@ -78,7 +78,7 @@ export function TournamentPublicPage() {
             <div style={{ fontSize: 12, opacity: 0.8 }}>Public URL + QR ready</div>
             <h1 style={{ margin: '4px 0' }}>{rows.find((r) => r.id === selected)?.name ?? 'Tournament'}</h1>
           </div>
-          <div style={{ fontSize: 12 }}>Live: {display?.live_matches.length ?? 0} · Upcoming: {display?.upcoming_matches.length ?? 0}</div>
+          <div style={{ fontSize: 12 }}>Live: {display?.summary.live_count ?? 0} · Upcoming: {display?.summary.upcoming_count ?? 0}</div>
         </div>
         <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
           <div style={{ textAlign: 'center' }}>
