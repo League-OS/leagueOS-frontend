@@ -1,6 +1,8 @@
+import path from 'path';
 import { defineConfig, devices } from '@playwright/test';
 
 const artifactDir = process.env.E2E_ARTIFACT_DIR || 'artifacts/integration-e2e/latest';
+const authStatePath = path.resolve(__dirname, '.auth-state.json');
 
 export default defineConfig({
   testDir: './e2e',
@@ -10,6 +12,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
+  globalSetup: './e2e/global-setup.ts',
   reporter: [
     ['list'],
     ['html', { outputFolder: `${artifactDir}/html-report`, open: 'never' }],
@@ -24,6 +27,8 @@ export default defineConfig({
     video: 'on',
     screenshot: 'on',
     viewport: { width: 1440, height: 900 },
+    // Reuse logged-in auth state across all tests to avoid repeated logins
+    storageState: authStatePath,
   },
   projects: [
     {
