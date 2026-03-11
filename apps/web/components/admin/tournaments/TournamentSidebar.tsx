@@ -1,12 +1,11 @@
 import { card, outlineBtn } from './styles';
-import type { CourtItem, Format, TournamentRecord } from './types';
+import type { Format, TournamentRecord } from './types';
 
 type TournamentSidebarProps = {
   activeTournament: TournamentRecord | null;
   tournamentTimezone: string;
   formats: Format[];
   activeFormatId: string | null;
-  courts: CourtItem[];
   requestShowAddFormat: () => void;
   openFormatConfig: (formatId: string) => void;
   closeTournament: () => void;
@@ -17,7 +16,6 @@ export function TournamentSidebar({
   tournamentTimezone,
   formats,
   activeFormatId,
-  courts,
   requestShowAddFormat,
   openFormatConfig,
   closeTournament,
@@ -60,18 +58,6 @@ export function TournamentSidebar({
         ))}
       </div>
 
-      <hr style={{ border: 0, borderTop: '1px solid #e2e8f0', margin: '12px 0' }} />
-      <strong>Tournament Courts</strong>
-      <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-        {courts.map((court) => (
-          <div key={court.id} style={{ border: '1px solid #dbe3ef', borderRadius: 999, padding: '6px 10px', fontSize: 13 }}>
-            {court.name}
-          </div>
-        ))}
-      </div>
-      <p style={{ color: '#64748b', margin: '8px 0 0', fontSize: 12 }}>
-        Manage courts and availability in the Courts tab.
-      </p>
     </aside>
   );
 }

@@ -87,7 +87,6 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 tournamentTimezone={state.tournamentTimezone}
                 formats={state.formats}
                 activeFormatId={state.activeFormatId}
-                courts={state.courts}
                 requestShowAddFormat={state.requestShowAddFormat}
                 openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
                 closeTournament={state.closeTournament}
