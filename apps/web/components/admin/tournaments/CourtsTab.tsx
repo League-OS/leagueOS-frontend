@@ -1,10 +1,8 @@
-import { EditModeHeader, SaveRow } from './shared';
+import { SaveRow } from './shared';
 import { field, grid3, labelCol, outlineBtn, subCard, td, th } from './styles';
 import type { CourtConfig, CourtItem, SlotDraft } from './types';
 
 type CourtsTabProps = {
-  courtsEditMode: boolean;
-  setCourtsEditMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   courts: CourtItem[];
   setShowAddCourtModal: (value: boolean) => void;
   activeCourtId: string | null;
@@ -19,8 +17,6 @@ type CourtsTabProps = {
 };
 
 export function CourtsTab({
-  courtsEditMode,
-  setCourtsEditMode,
   courts,
   setShowAddCourtModal,
   activeCourtId,
@@ -35,10 +31,9 @@ export function CourtsTab({
 }: CourtsTabProps) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <EditModeHeader enabled={courtsEditMode} label="Courts" onToggle={() => setCourtsEditMode((prev) => !prev)} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong>Tournament Courts</strong>
-        <button style={outlineBtn} disabled={!courtsEditMode} onClick={() => setShowAddCourtModal(true)}>+ Add Court</button>
+        <button style={outlineBtn} onClick={() => setShowAddCourtModal(true)}>+ Add Court</button>
       </div>
 
       {!courts.length ? (
@@ -84,7 +79,6 @@ export function CourtsTab({
                   value={slotDraft.date}
                   onChange={(event) => setSlotDraft((prev) => ({ ...prev, date: event.target.value }))}
                   style={field}
-                  disabled={!courtsEditMode}
                 />
               </label>
               <label style={labelCol}>
@@ -94,7 +88,6 @@ export function CourtsTab({
                   value={slotDraft.startTime}
                   onChange={(event) => setSlotDraft((prev) => ({ ...prev, startTime: event.target.value }))}
                   style={field}
-                  disabled={!courtsEditMode}
                 />
               </label>
               <label style={labelCol}>
@@ -104,11 +97,10 @@ export function CourtsTab({
                   value={slotDraft.endTime}
                   onChange={(event) => setSlotDraft((prev) => ({ ...prev, endTime: event.target.value }))}
                   style={field}
-                  disabled={!courtsEditMode}
                 />
               </label>
             </div>
-            <button style={outlineBtn} onClick={addCourtAvailabilitySlot} disabled={!courtsEditMode}>Add Availability Slot</button>
+            <button style={outlineBtn} onClick={addCourtAvailabilitySlot}>Add Availability Slot</button>
 
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
               <thead>
@@ -126,7 +118,7 @@ export function CourtsTab({
                       <td style={td}>{slot.startTime}</td>
                       <td style={td}>{slot.endTime}</td>
                       <td style={td}>
-                        <button style={outlineBtn} onClick={() => removeCourtAvailabilitySlot(slot.id)} disabled={!courtsEditMode}>
+                        <button style={outlineBtn} onClick={() => removeCourtAvailabilitySlot(slot.id)}>
                           Remove
                         </button>
                       </td>
@@ -143,7 +135,7 @@ export function CourtsTab({
         )}
       </section>
 
-      <SaveRow enabled={courtsEditMode && courtDirty} onSave={saveCourtsConfig} />
+      <SaveRow enabled={courtDirty} onSave={saveCourtsConfig} />
     </div>
   );
 }

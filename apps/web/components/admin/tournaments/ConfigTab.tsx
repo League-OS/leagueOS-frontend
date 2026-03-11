@@ -1,11 +1,9 @@
 import { defaultStageRule, isKoStage } from './config';
-import { EditModeHeader, Metric, SaveRow } from './shared';
+import { Metric, SaveRow } from './shared';
 import { editFieldset, field, grid2, grid4, insightCard, labelCol, subCard } from './styles';
 import type { FormatConfig, PlanningMetrics, SchedulingModel, StageDef, StageRule, WinCondition } from './types';
 
 type ConfigTabProps = {
-  configEditMode: boolean;
-  setConfigEditMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   configDirty: boolean;
   saveConfig: () => void;
   configDraft: FormatConfig;
@@ -19,8 +17,6 @@ type ConfigTabProps = {
 };
 
 export function ConfigTab({
-  configEditMode,
-  setConfigEditMode,
   configDirty,
   saveConfig,
   configDraft,
@@ -34,9 +30,7 @@ export function ConfigTab({
 }: ConfigTabProps) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <EditModeHeader enabled={configEditMode} label="Config" onToggle={() => setConfigEditMode((prev) => !prev)} />
-
-      <fieldset style={editFieldset} disabled={!configEditMode}>
+      <fieldset style={editFieldset}>
         <section style={subCard}>
           <label style={labelCol}>
             Format Name <span style={{ color: '#b91c1c' }}>*</span>
@@ -363,7 +357,7 @@ export function ConfigTab({
         </section>
       ) : null}
 
-      <SaveRow enabled={configEditMode && configDirty} onSave={saveConfig} />
+      <SaveRow enabled={configDirty} onSave={saveConfig} />
     </div>
   );
 }

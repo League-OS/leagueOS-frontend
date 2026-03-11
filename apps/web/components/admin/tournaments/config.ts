@@ -62,7 +62,7 @@ export const defaultStageRule = (): StageRule => ({
 export const defaultFormatConfig = (): FormatConfig => ({
   maxTeamsAllowed: 16,
   setDurationMinutes: 10,
-  schedulingModel: '',
+  schedulingModel: 'DIRECT_KNOCKOUT',
   rrType: 'single',
   rrIncludeKo: 'no',
   rrTeamsToKo: 4,

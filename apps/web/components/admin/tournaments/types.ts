@@ -64,10 +64,13 @@ export type Format = {
   regOpen: string;
   regClose: string;
   autoClose: boolean;
+  scheduleGeneratedAt?: string | null;
+  scheduleLocked?: boolean;
   config: FormatConfig;
   pool: PoolConfig;
   courtConfig: CourtConfig;
   courtAssignments: Record<string, string[]>;
+  metaConfigJson?: Record<string, unknown>;
 };
 
 export type CourtItem = { id: string; name: string };
@@ -90,6 +93,9 @@ export type ClubPlayer = {
   email: string;
   phone: string;
   elo: number;
+  eloSingles?: number;
+  eloDoubles?: number;
+  eloMixed?: number;
 };
 
 export type PlanningMetrics = {

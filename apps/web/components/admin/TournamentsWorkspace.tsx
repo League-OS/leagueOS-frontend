@@ -44,10 +44,10 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
       <div style={innerStyle}>
         <div style={{ ...heroBlock, ...revealStyle(state.mounted, 0) }}>
           <h1 style={{ margin: 0, color: '#182521', fontFamily: displayFontStack, fontSize: 34, letterSpacing: '-0.02em' }}>
-            Tournament Config Workspace (Mock)
+            Tournament Configuration Workspace
           </h1>
           <p style={{ margin: '4px 0 0', color: '#52605b', fontSize: 14 }}>
-            React/Next implementation with local state only. No API hooks.
+            Manage tournament setup, formats, pools, schedules, and courts.
           </p>
           {state.saveNotice ? (
             <div style={{ marginTop: 8 }}>
@@ -117,8 +117,6 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
 
                   {state.activeTab === 'config' ? (
                     <ConfigTab
-                      configEditMode={state.configEditMode}
-                      setConfigEditMode={state.setConfigEditMode}
                       configDirty={state.configDirty}
                       saveConfig={state.saveConfig}
                       configDraft={state.configDraft}
@@ -134,8 +132,6 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
 
                   {state.activeTab === 'pool' ? (
                     <PoolTab
-                      poolEditMode={state.poolEditMode}
-                      setPoolEditMode={state.setPoolEditMode}
                       poolDirty={state.poolDirty}
                       savePool={state.savePool}
                       poolDraft={state.poolDraft}
@@ -150,19 +146,27 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       isSinglesFormat={state.isSinglesFormat}
                       unitLabel={state.unitLabel}
                       unitLabelPlural={state.unitLabelPlural}
+                      clubPlayers={state.clubPlayersForActiveFormat}
+                      poolPlayersOpen={state.poolPlayersOpen}
+                      setPoolPlayersOpen={state.setPoolPlayersOpen}
+                      poolGroupsOpen={state.poolGroupsOpen}
+                      setPoolGroupsOpen={state.setPoolGroupsOpen}
                     />
                   ) : null}
 
                   {state.activeTab === 'schedules' ? (
                     <ScheduleTab
-                      scheduleEditMode={state.scheduleEditMode}
-                      setScheduleEditMode={state.setScheduleEditMode}
                       scheduleDirty={state.scheduleDirty}
                       courtDirty={state.courtDirty}
                       saveSchedules={state.saveSchedules}
+                      scheduleStatusLabel={state.scheduleStatusLabel}
+                      scheduleActionBusy={state.scheduleActionBusy}
+                      generateSchedule={state.generateSchedule}
+                      viewBrackets={state.viewBrackets}
+                      resetSchedule={state.resetSchedule}
                       courtConfigDraft={state.courtConfigDraft}
                       patchCourtConfigDraft={state.patchCourtConfigDraft}
-                      entrants={state.configDraft.maxTeamsAllowed}
+                      entrants={state.effectiveEntrantCount}
                       planningMetrics={state.planningMetrics}
                       stageCourtAssignmentsOpen={state.stageCourtAssignmentsOpen}
                       setStageCourtAssignmentsOpen={state.setStageCourtAssignmentsOpen}
@@ -170,13 +174,14 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       courts={state.courts}
                       scheduleDraft={state.scheduleDraft}
                       toggleStageCourt={state.toggleStageCourt}
+                      bracketMatchesOpen={state.bracketMatchesOpen}
+                      setBracketMatchesOpen={state.setBracketMatchesOpen}
+                      bracketMatches={state.bracketMatches}
                     />
                   ) : null}
 
                   {state.activeTab === 'courts' ? (
                     <CourtsTab
-                      courtsEditMode={state.courtsEditMode}
-                      setCourtsEditMode={state.setCourtsEditMode}
                       courts={state.courts}
                       setShowAddCourtModal={state.setShowAddCourtModal}
                       activeCourtId={state.activeCourtId}

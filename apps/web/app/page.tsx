@@ -159,6 +159,17 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  function clearPlayerSessionAndShowLogin() {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+      window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+    }
+    setAuth(null);
+    setProfile(null);
+    setError(null);
+    setSuccessMessage(null);
+  }
+
   const enableTeamRanking = useMemo(
     () => featureFlags.some((flag) => flag.key === FEATURE_FLAGS.TEAM_RANKING && flag.enabled),
     [featureFlags],
@@ -436,6 +447,10 @@ export default function Page() {
       }));
       setEloHistory(eloRows);
     } catch (e) {
+      if (isUnauthorizedError(e)) {
+        clearPlayerSessionAndShowLogin();
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Unexpected error');
     } finally {
       setLoading(false);
@@ -471,10 +486,7 @@ export default function Page() {
         await loadDashboard(parsed.token, parsed.clubId);
       } catch (e) {
         if (isUnauthorizedError(e)) {
-          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
-          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
-          setAuth(null);
-          setProfile(null);
+          clearPlayerSessionAndShowLogin();
         }
       } finally {
         setHydratingAuth(false);
