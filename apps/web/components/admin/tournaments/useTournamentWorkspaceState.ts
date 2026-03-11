@@ -1605,10 +1605,42 @@ export function useTournamentWorkspaceState() {
   function setPoolSeasonId(seasonId: string) {
     if (!poolDraft) return;
     if (poolDraft.seasonId === seasonId) return;
-    setPoolDraft({
-      ...poolDraft,
-      seasonId,
+    const next = clone(poolDraft);
+    if (next.poolPlayers.length) {
+      const ok = window.confirm(
+        'Changing ELO Source Season will reload ELO snapshots for all current pool players and recompute team ELO values. Continue?',
+      );
+      if (!ok) return;
+    }
+
+    next.seasonId = seasonId;
+    const playersById = new Map(clubPlayersForActiveFormat.map((player) => [player.id, player]));
+    next.poolPlayers = next.poolPlayers.map((entry) => {
+      const player = playersById.get(entry.playerId);
+      return {
+        ...entry,
+        seededElo: player?.elo ?? entry.seededElo,
+        eloSeasonId: seasonId,
+      };
     });
+
+    if (next.generatedTeams.length) {
+      const seededLookup = buildPoolPlayerLookup(next, clubPlayersForActiveFormat);
+      next.generatedTeams = next.generatedTeams.map((team) => {
+        if (activeFormat?.type === 'SINGLES') {
+          const player = seededLookup.get(team.playerIds[0] || '');
+          return {
+            ...team,
+            name: player?.name || team.name,
+            elo: player?.elo ?? team.elo,
+          };
+        }
+        const playerIds: [string, string] = [team.playerIds[0] || '', team.playerIds[1] || ''];
+        return hydrateTeam(team.id, playerIds, seededLookup);
+      });
+    }
+
+    setPoolDraft(next);
     setPoolDirty(true);
   }
 

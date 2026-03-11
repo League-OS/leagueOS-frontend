@@ -100,7 +100,7 @@ export function PoolTab({
             {seasonLoadError ? <span style={{ color: '#b91c1c' }}>{seasonLoadError}</span> : null}
             {poolDraft.poolPlayers.length ? (
               <span style={{ color: '#64748b' }}>
-                Changing season affects only players added after this change.
+                Changing season will prompt to reload ELO snapshots for current pool players.
               </span>
             ) : null}
           </label>
