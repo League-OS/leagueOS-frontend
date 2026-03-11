@@ -7,6 +7,10 @@ build
 *.log
 .env
 .env.local
+.env.*
+!.env.example
+.evn
+.evn.*
 .DS_Store
 
 .turbo/

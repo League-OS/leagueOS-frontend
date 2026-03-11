@@ -1,9 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRecordGameState } from '../hooks/useRecordGameState';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
-import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { Club, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import {
+  DEFAULT_API_BASE_URL,
+  DEFAULT_CLUB_ID,
+  DEFAULT_SESSION_ADDRESS,
+  DEFAULT_SESSION_LOCATION,
+  DEFAULT_TIMEZONE,
+  FEATURE_FLAGS,
+} from '@leagueos/config';
+import type { Club, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import {
   combineSessionDateAndTimeToIso,
   listOpenSeasons,
@@ -18,8 +26,9 @@ import {
 } from '../components/LeaderboardView';
 import { LoginView } from '../components/LoginView';
 import type { AuthState } from '../components/types';
+import { formatSequentialFinalizeBlockedError } from '../components/lib/apiErrorMessages';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 const ADMIN_STORAGE_AUTH = 'leagueos.admin.auth';
 const ADMIN_STORAGE_PROFILE = 'leagueos.admin.profile';
 const PLAYER_STORAGE_AUTH = 'leagueos.player.auth';
@@ -46,12 +55,6 @@ function parseStoredAuth(raw: string | null): AuthState | null {
 function isUnauthorizedError(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }
-const CLUB_NAME_FALLBACK: Record<number, string> = {
-  1: 'Fraser Valley Badminton Club',
-  2: 'BC Panthers Badminton Club',
-  3: 'SuperGiants Badminton Club',
-  4: 'Redhawks Badminton Club',
-};
 
 function formatMonthDay(dateish: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateish)) {
@@ -63,6 +66,16 @@ function formatMonthDay(dateish: string): string {
   const value = new Date(dateish);
   if (Number.isNaN(value.getTime())) return dateish;
   return value.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function latestSeasonByCreatedAt(seasons: Season[]): Season | null {
+  if (!seasons.length) return null;
+  return [...seasons].sort((a, b) => {
+    const createdA = Date.parse(a.created_at);
+    const createdB = Date.parse(b.created_at);
+    if (!Number.isNaN(createdA) && !Number.isNaN(createdB) && createdA !== createdB) return createdB - createdA;
+    return b.id - a.id;
+  })[0] ?? null;
 }
 
 function findUserPlayerId(profile: Profile | null, players: Player[]): number | null {
@@ -120,15 +133,11 @@ export default function Page() {
   const [selectedClubId, setSelectedClubId] = useState(DEFAULT_CLUB_ID);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [recordClubId, setRecordClubId] = useState(DEFAULT_CLUB_ID);
-  const [recordSession, setRecordSession] = useState<Session | null>(null);
-  const [recordSeasonId, setRecordSeasonId] = useState<number | null>(null);
-  const [recordSeasons, setRecordSeasons] = useState<Season[]>([]);
-  const [recordPlayers, setRecordPlayers] = useState<Player[]>([]);
-  const [recordCourts, setRecordCourts] = useState<Court[]>([]);
-  const [recordContextError, setRecordContextError] = useState<string | null>(null);
+  const { record, updateRecord, resetRecord } = useRecordGameState(DEFAULT_CLUB_ID);
   const [sessionsBySeason, setSessionsBySeason] = useState<Record<number, Session[]>>({});
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [teamLeaderboard, setTeamLeaderboard] = useState<TeamLeaderboardEntry[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [profileStats, setProfileStats] = useState<ProfileStatSummary>({
@@ -142,7 +151,6 @@ export default function Page() {
   const [eloHistory, setEloHistory] = useState<EloHistoryRow[]>([]);
   const [recentGames, setRecentGames] = useState<HomeGameRow[]>([]);
   const [allGames, setAllGames] = useState<HomeGameRow[]>([]);
-  const [recordExistingGames, setRecordExistingGames] = useState<HomeGameRow[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [allUpcomingSessions, setAllUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<number | null>(null);
@@ -150,6 +158,22 @@ export default function Page() {
   const [hydratingAuth, setHydratingAuth] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  function clearPlayerSessionAndShowLogin() {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+      window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+    }
+    setAuth(null);
+    setProfile(null);
+    setError(null);
+    setSuccessMessage(null);
+  }
+
+  const enableTeamRanking = useMemo(
+    () => featureFlags.some((flag) => flag.key === FEATURE_FLAGS.TEAM_RANKING && flag.enabled),
+    [featureFlags],
+  );
 
   async function loadDashboard(token: string, clubId: number, seasonId?: number, profilePlayerId?: number | null) {
     setLoading(true);
@@ -184,7 +208,7 @@ export default function Page() {
           : [
               {
                 id: clubId,
-                name: CLUB_NAME_FALLBACK[clubId] ?? `Club ${clubId}`,
+                name: `Club ${clubId}`,
                 created_at: new Date().toISOString(),
               },
             ],
@@ -196,40 +220,40 @@ export default function Page() {
         throw seasonsRes.reason;
       }
       const openRecordSeasons = listOpenSeasons(seasonsRes.value);
-      setRecordSeasons(openRecordSeasons);
-      setRecordClubId(clubId);
+      updateRecord({ seasons: openRecordSeasons, clubId });
 
       if (playersRes.status === 'fulfilled') {
         setPlayers(playersRes.value);
-        setRecordPlayers(playersRes.value);
+        updateRecord({ players: playersRes.value });
       } else {
         setPlayers([]);
-        setRecordPlayers([]);
+        updateRecord({ players: [] });
       }
 
       if (courtsRes.status === 'fulfilled') {
         setCourts(courtsRes.value);
-        setRecordCourts(courtsRes.value);
+        updateRecord({ courts: courtsRes.value });
       } else {
         setCourts([]);
-        setRecordCourts([]);
+        updateRecord({ courts: [] });
       }
 
       const seasonList = seasonsRes.value;
       const seasonById = new Map<number, Season>(seasonList.map((season) => [season.id, season]));
+      const activeSeasons = seasonList.filter((season) => season.is_active);
+      const latestActiveSeason = latestSeasonByCreatedAt(activeSeasons);
 
-      const seasonToLoad = seasonId ?? seasonList[0]?.id;
+      const seasonToLoad = seasonId ?? latestActiveSeason?.id ?? null;
       if (!seasonToLoad) {
         setSelectedSeasonId(null);
         setSelectedSession(null);
-        setRecordSession(null);
-        setRecordSeasonId(null);
-        setRecordContextError('No open seasons available for this club.');
+        updateRecord({ session: null, seasonId: null, contextError: 'No open seasons available for this club.' });
         setSessionsBySeason({});
         setLeaderboard([]);
+        setTeamLeaderboard([]);
         setRecentGames([]);
         setAllGames([]);
-        setRecordExistingGames([]);
+        updateRecord({ existingGames: [] });
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setProfileStats({
@@ -245,16 +269,29 @@ export default function Page() {
       }
 
       setSelectedSeasonId(seasonToLoad);
-      const data = await client.seasonLeaderboard(token, clubId, seasonToLoad);
+      const nextFeatureFlags = await client.featureFlags(token).catch(() => [] as FeatureFlag[]);
+      setFeatureFlags(nextFeatureFlags);
+      const isTeamRankingEnabled = nextFeatureFlags.some(
+        (flag) => flag.key === FEATURE_FLAGS.TEAM_RANKING && flag.enabled,
+      );
+      const [data, teamData] = await Promise.all([
+        client.seasonLeaderboard(token, clubId, seasonToLoad),
+        isTeamRankingEnabled ? client.seasonTeamLeaderboard(token, clubId, seasonToLoad) : Promise.resolve([]),
+      ]);
       setSelectedSession(data.session);
       setLeaderboard(data.leaderboard);
+      setTeamLeaderboard(teamData);
 
-      const seasonSessionsEntries = await Promise.all(
-        seasonList.map(async (season) => [season.id, await client.sessions(token, clubId, season.id)] as const),
-      );
-      const nextSessionsBySeason = Object.fromEntries(seasonSessionsEntries);
+      // Fetch all sessions for the club in one request, then group by season client-side.
+      // Previously: N parallel requests (one per season). Now: 1 request.
+      const allSessions = await client.sessions(token, clubId);
+      const nextSessionsBySeason: Record<number, Session[]> = {};
+      for (const session of allSessions) {
+        const sid = session.season_id;
+        if (!nextSessionsBySeason[sid]) nextSessionsBySeason[sid] = [];
+        nextSessionsBySeason[sid].push(session);
+      }
       setSessionsBySeason(nextSessionsBySeason);
-      const allSessions = seasonSessionsEntries.flatMap((entry) => entry[1]);
       const sessionById = new Map<number, Session>(allSessions.map((session) => [session.id, session]));
       const clubById = new Map<number, Club>();
       for (const club of [...profileClubSet, ...adminClubSet]) {
@@ -262,43 +299,35 @@ export default function Page() {
       }
 
       if (!openRecordSeasons.length) {
-        setRecordSeasonId(null);
-        setRecordSession(null);
-        setRecordContextError('No open seasons available for this club.');
+        updateRecord({ seasonId: null, session: null, contextError: 'No open seasons available for this club.' });
       } else {
-        const initialRecordSeasonId = openRecordSeasons[0].id;
-        setRecordSeasonId(initialRecordSeasonId);
+        const initialRecordSeasonId = latestSeasonByCreatedAt(openRecordSeasons)?.id ?? openRecordSeasons[0].id;
         const picked = selectSingleOpenSession(nextSessionsBySeason[initialRecordSeasonId] ?? []);
-        setRecordSession(picked.session);
-        setRecordContextError(picked.error);
+        updateRecord({ seasonId: initialRecordSeasonId, session: picked.session, contextError: picked.error });
       }
 
-      const [gamesRes, eloBySeasonRes] = await Promise.all([
-        client.games(token, clubId),
-        Promise.allSettled(
-          seasonList.map(async (season) => {
-            const lb = await client.seasonLeaderboard(token, clubId, season.id);
-            return { season, leaderboard: lb.leaderboard };
-          }),
-        ),
-      ]);
-
-      const games = gamesRes ?? [];
-      const participantsByGame = new Map<number, GameParticipant[]>();
-      const participantFetches = await Promise.allSettled(
-        games.map(async (game) => [game.id, await client.gameParticipants(token, clubId, game.id)] as const),
-      );
-      for (const fetchRes of participantFetches) {
-        if (fetchRes.status === 'fulfilled') {
-          participantsByGame.set(fetchRes.value[0], fetchRes.value[1]);
-        }
-      }
-
+      // Compute effectivePlayerId early so we can pass it to playerEloHistory.
       const currentUserPlayerId = findUserPlayerId(meRes.value, playersRes.status === 'fulfilled' ? playersRes.value : []);
       const effectivePlayerId = profilePlayerId ?? selectedProfilePlayerId ?? currentUserPlayerId;
+
+      const [games, eloHistoryEntries] = await Promise.all([
+        // include_participants=true: all participants come back embedded in one request
+        // instead of one GET /games/{id}/participants call per game.
+        client.games(token, clubId, undefined, undefined, undefined, true),
+        // playerEloHistory: one request for all seasons' Elo data, replacing the
+        // old pattern of one GET /sessions/{id}/leaderboard call per season.
+        client.playerEloHistory(token, clubId, effectivePlayerId ?? undefined).catch(() => []),
+      ]);
+
+      // Build participantsByGame from the embedded participants field.
+      const participantsByGame = new Map<number, GameParticipant[]>();
+      for (const game of games) {
+        participantsByGame.set(game.id, game.participants ?? []);
+      }
       const sourceGames = effectivePlayerId
         ? games.filter((game) => (participantsByGame.get(game.id) ?? []).some((p) => p.player_id === effectivePlayerId))
         : games;
+      const finalizedSourceGames = sourceGames.filter((game) => (game.status ?? 'CREATED') === 'FINALIZED');
       const courtNameById = new Map<number, string>((courtsRes.status === 'fulfilled' ? courtsRes.value : []).map((court) => [court.id, court.name]));
 
       const mapGameRow = (game: (typeof games)[number], playerIdForView: number | null): HomeGameRow => {
@@ -318,6 +347,9 @@ export default function Page() {
         return {
           id: game.id,
           sessionId: game.session_id,
+          sessionStatus: session?.status,
+          status: game.status ?? 'CREATED',
+          createdBy: game.created_by_label ?? 'Unknown',
           date: formatMonthDay(session?.session_date ?? game.start_time),
           season: season?.name ?? `Season ${session?.season_id ?? '-'}`,
           partner,
@@ -345,7 +377,7 @@ export default function Page() {
 
       setAllGames(mappedGames);
       setRecentGames(mappedGames.slice(0, 5));
-      setRecordExistingGames(mappedRecordGames);
+      updateRecord({ existingGames: mappedRecordGames });
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -360,8 +392,8 @@ export default function Page() {
         .map((session): UpcomingRow => {
           const season = seasonById.get(session.season_id);
           const clubName = season
-            ? clubById.get(season.club_id)?.name ?? CLUB_NAME_FALLBACK[season.club_id] ?? `Club ${season.club_id}`
-            : CLUB_NAME_FALLBACK[clubId] ?? `Club ${clubId}`;
+            ? clubById.get(season.club_id)?.name ?? `Club ${season.club_id}`
+            : `Club ${clubId}`;
           return {
             id: session.id,
             seasonId: session.season_id,
@@ -384,7 +416,7 @@ export default function Page() {
       let pointsAgainst = 0;
       let wins = 0;
 
-      for (const game of sourceGames) {
+      for (const game of finalizedSourceGames) {
         const session = sessionById.get(game.session_id);
         const season = session ? seasonById.get(session.season_id) : undefined;
         if (season?.format === 'SINGLES') singles += 1;
@@ -403,37 +435,22 @@ export default function Page() {
         if (computed.outcome === 'W') wins += 1;
       }
 
-      const totalGames = sourceGames.length;
+      const totalGames = finalizedSourceGames.length;
       const winPct = totalGames ? Number(((wins / totalGames) * 100).toFixed(1)) : 0;
       setProfileStats({ singles, doubles, mixed, pointsFor, pointsAgainst, winPct });
 
-      const eloRows: EloHistoryRow[] = [];
-      for (const entry of eloBySeasonRes) {
-        if (entry.status !== 'fulfilled') continue;
-        const season = entry.value.season;
-        const candidates = entry.value.leaderboard;
-        const currentById = effectivePlayerId ? candidates.find((row) => row.player_id === effectivePlayerId) : null;
-        const currentByName = !currentById
-          ? candidates.find((row) =>
-              [meRes.value.display_name, meRes.value.full_name]
-                .filter((value): value is string => Boolean(value))
-                .map((value) => value.toLowerCase())
-                .includes(row.display_name.toLowerCase()),
-            )
-          : null;
-        const row = currentById ?? currentByName;
-        if (!row) continue;
-        const clubName =
-          clubById.get(season.club_id)?.name ?? CLUB_NAME_FALLBACK[season.club_id] ?? `Club ${season.club_id}`;
-        eloRows.push({
-          season: season.name,
-          club: clubName,
-          elo: row.global_elo_score ?? 1000,
-          change: row.season_elo_delta,
-        });
-      }
+      const eloRows: EloHistoryRow[] = eloHistoryEntries.map((entry) => ({
+        season: entry.season_name,
+        club: clubById.get(entry.club_id)?.name ?? `Club ${entry.club_id}`,
+        elo: entry.global_elo_score,
+        change: entry.season_elo_delta,
+      }));
       setEloHistory(eloRows);
     } catch (e) {
+      if (isUnauthorizedError(e)) {
+        clearPlayerSessionAndShowLogin();
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Unexpected error');
     } finally {
       setLoading(false);
@@ -469,10 +486,7 @@ export default function Page() {
         await loadDashboard(parsed.token, parsed.clubId);
       } catch (e) {
         if (isUnauthorizedError(e)) {
-          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
-          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
-          setAuth(null);
-          setProfile(null);
+          clearPlayerSessionAndShowLogin();
         }
       } finally {
         setHydratingAuth(false);
@@ -515,9 +529,12 @@ export default function Page() {
       const scoped = res.club_id === initialClubId ? res : await client.switchClub(res.token, initialClubId);
       const nextAuth = { token: scoped.token, clubId: initialClubId };
       const me = await client.profile(nextAuth.token);
-      const effectiveRole = String(me.club_role ?? me.role ?? '').toUpperCase();
+      const loginRole = String(res.role || '').toUpperCase();
+      const effectiveRole = String(
+        loginRole === 'GLOBAL_ADMIN' ? 'GLOBAL_ADMIN' : (me.role === 'GLOBAL_ADMIN' ? me.role : (me.club_role ?? me.role ?? '')),
+      ).toUpperCase();
 
-      if (effectiveRole === 'CLUB_ADMIN') {
+      if (effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'GLOBAL_ADMIN') {
         if (typeof window !== 'undefined') {
           window.localStorage.setItem(ADMIN_STORAGE_AUTH, JSON.stringify(nextAuth));
           window.localStorage.setItem(ADMIN_STORAGE_PROFILE, JSON.stringify(me));
@@ -572,7 +589,11 @@ export default function Page() {
         `Session finalized. Games finalized: ${result.games_finalized}, Elo ledger rows: ${result.ledger_rows_written}.`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to finalize session.');
+      if (e instanceof ApiError && e.code === 'SEQUENTIAL_FINALIZE_BLOCKED') {
+        setError(formatSequentialFinalizeBlockedError(e));
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to finalize session.');
+      }
     }
   }
 
@@ -608,7 +629,7 @@ export default function Page() {
     if (!canRecord) {
       throw new Error('Only club members with recording access can record games.');
     }
-    const sessionToUse = recordSession;
+    const sessionToUse = record.session;
     if (!sessionToUse) {
       throw new Error('No open session available. Open one session before recording games.');
     }
@@ -638,7 +659,7 @@ export default function Page() {
     }
 
     // Client-side precheck for UNIQUE(session, court, start time) before API create.
-    const existingGames = await client.games(auth.token, recordClubId);
+    const existingGames = await client.games(auth.token, record.clubId);
     const hasConflict = existingGames.some((game) => {
       if (game.session_id !== sessionToUse.id || game.court_id !== payload.courtId) return false;
       const start = new Date(game.start_time);
@@ -649,7 +670,7 @@ export default function Page() {
       throw new Error('A game already exists for this session, court, and start time.');
     }
 
-    const game = await client.createGame(auth.token, recordClubId, {
+    const game = await client.createGame(auth.token, record.clubId, {
       session_id: sessionToUse.id,
       court_id: payload.courtId,
       start_time: startTimeIso,
@@ -657,7 +678,7 @@ export default function Page() {
       score_b: payload.scoreB,
     });
 
-    await client.upsertGameParticipants(auth.token, recordClubId, game.id, [
+    await client.upsertGameParticipants(auth.token, record.clubId, game.id, [
       { player_id: payload.sideAPlayerIds[0], side: 'A' },
       { player_id: payload.sideAPlayerIds[1], side: 'A' },
       { player_id: payload.sideBPlayerIds[0], side: 'B' },
@@ -667,23 +688,105 @@ export default function Page() {
     await refresh();
   }
 
+  function toLocalDateOnly(isoLike: string): string | null {
+    const parsed = new Date(isoLike);
+    if (Number.isNaN(parsed.getTime())) return null;
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  async function handleUpdateGame(gameId: number, payload: {
+    courtId: number | null;
+    startTimeLocal: string;
+    scoreA: number;
+    scoreB: number;
+    sideAPlayerIds: [number, number];
+    sideBPlayerIds: [number, number];
+  }) {
+    if (!auth) return;
+    const effectiveRole = String(profile?.club_role ?? profile?.role ?? '').toUpperCase();
+    const canRecord =
+      effectiveRole === 'CLUB_ADMIN' || effectiveRole === 'RECORDER' || effectiveRole === 'USER';
+    if (!canRecord) {
+      throw new Error('Only club members with recording access can update games.');
+    }
+
+    if (!payload.courtId) {
+      throw new Error('Please select a court.');
+    }
+    if (payload.scoreA === payload.scoreB) {
+      throw new Error('No tied scores allowed.');
+    }
+
+    const allPlayerIds = [...payload.sideAPlayerIds, ...payload.sideBPlayerIds];
+    if (new Set(allPlayerIds).size !== allPlayerIds.length) {
+      throw new Error('Player appears more than once in this game. Choose 4 unique players.');
+    }
+
+    const targetGame = (record.existingGames.find((game) => game.id === gameId) ?? allGames.find((game) => game.id === gameId)) ?? null;
+    if (!targetGame) {
+      throw new Error('Game not found.');
+    }
+    if (targetGame.sessionStatus === 'FINALIZED') {
+      throw new Error('This game belongs to a finalized session and cannot be edited.');
+    }
+
+    const gameDate = toLocalDateOnly(targetGame.startTime);
+    const startTimeIso = gameDate ? combineSessionDateAndTimeToIso(gameDate, payload.startTimeLocal) : null;
+    if (!startTimeIso) {
+      throw new Error('Invalid start time. Please pick a valid time in 5-minute increments.');
+    }
+
+    const [h, m] = payload.startTimeLocal.split(':').map(Number);
+    if (!Number.isInteger(h) || !Number.isInteger(m) || m % 5 !== 0) {
+      throw new Error('Start time must be aligned to 5-minute increments.');
+    }
+
+    const existingGames = await client.games(auth.token, record.clubId);
+    const hasConflict = existingGames.some((game) => {
+      if (game.id === gameId) return false;
+      if (game.session_id !== targetGame.sessionId || game.court_id !== payload.courtId) return false;
+      const start = new Date(game.start_time);
+      if (Number.isNaN(start.getTime())) return false;
+      return start.getHours() === h && start.getMinutes() === m;
+    });
+    if (hasConflict) {
+      throw new Error('A game already exists for this session, court, and start time.');
+    }
+
+    await client.updateGame(auth.token, record.clubId, gameId, {
+      court_id: payload.courtId,
+      start_time: startTimeIso,
+      score_a: payload.scoreA,
+      score_b: payload.scoreB,
+    });
+    await client.upsertGameParticipants(auth.token, record.clubId, gameId, [
+      { player_id: payload.sideAPlayerIds[0], side: 'A' },
+      { player_id: payload.sideAPlayerIds[1], side: 'A' },
+      { player_id: payload.sideBPlayerIds[0], side: 'B' },
+      { player_id: payload.sideBPlayerIds[1], side: 'B' },
+    ]);
+
+    await refresh();
+    setSuccessMessage('Game updated.');
+  }
+
   async function handleRecordSeasonChange(seasonId: number) {
     if (!auth) return;
     try {
-      setRecordSeasonId(seasonId);
-      setRecordContextError(null);
+      updateRecord({ seasonId, contextError: null });
 
       let seasonSessions = sessionsBySeason[seasonId];
       if (!seasonSessions) {
-        seasonSessions = await client.sessions(auth.token, recordClubId, seasonId);
+        seasonSessions = await client.sessions(auth.token, record.clubId, seasonId);
         setSessionsBySeason((prev) => ({ ...prev, [seasonId]: seasonSessions ?? [] }));
       }
       const picked = selectSingleOpenSession(seasonSessions ?? []);
-      setRecordSession(picked.session);
-      setRecordContextError(picked.error);
+      updateRecord({ session: picked.session, contextError: picked.error });
     } catch (e) {
-      setRecordSession(null);
-      setRecordContextError(e instanceof Error ? e.message : 'Failed to load session for the selected season.');
+      updateRecord({ session: null, contextError: e instanceof Error ? e.message : 'Failed to load session for the selected season.' });
     }
   }
 
@@ -699,8 +802,7 @@ export default function Page() {
     if (!canRecord) return;
     try {
       setSelectedProfilePlayerId(null);
-      setRecordClubId(clubId);
-      setRecordContextError(null);
+      updateRecord({ clubId, contextError: null });
 
       const [seasonsRes, playersRes, courtsRes] = await Promise.allSettled([
         client.seasons(auth.token, clubId, true),
@@ -708,48 +810,41 @@ export default function Page() {
         client.courts(auth.token, clubId),
       ]);
 
-      if (playersRes.status === 'fulfilled') {
-        setRecordPlayers(playersRes.value);
-      } else {
-        setRecordPlayers([]);
-      }
-
-      if (courtsRes.status === 'fulfilled') {
-        setRecordCourts(courtsRes.value);
-      } else {
-        setRecordCourts([]);
-      }
+      updateRecord({
+        players: playersRes.status === 'fulfilled' ? playersRes.value : [],
+        courts: courtsRes.status === 'fulfilled' ? courtsRes.value : [],
+      });
 
       if (seasonsRes.status !== 'fulfilled') {
-        setRecordSeasons([]);
-        setRecordSeasonId(null);
-        setRecordSession(null);
-        setRecordContextError(seasonsRes.reason instanceof Error ? seasonsRes.reason.message : 'Failed to load open seasons.');
+        updateRecord({
+          seasons: [],
+          seasonId: null,
+          session: null,
+          contextError: seasonsRes.reason instanceof Error ? seasonsRes.reason.message : 'Failed to load open seasons.',
+        });
         return;
       }
 
       const openSeasons = listOpenSeasons(seasonsRes.value);
-      setRecordSeasons(openSeasons);
+      updateRecord({ seasons: openSeasons });
 
       if (!openSeasons.length) {
-        setRecordSeasonId(null);
-        setRecordSession(null);
-        setRecordContextError('No open seasons available for this club.');
+        updateRecord({ seasonId: null, session: null, contextError: 'No open seasons available for this club.' });
         return;
       }
 
-      const nextSeasonId = openSeasons[0].id;
-      setRecordSeasonId(nextSeasonId);
+      const nextSeasonId = latestSeasonByCreatedAt(openSeasons)?.id ?? openSeasons[0].id;
       const sessions = await client.sessions(auth.token, clubId, nextSeasonId);
       setSessionsBySeason((prev) => ({ ...prev, [nextSeasonId]: sessions ?? [] }));
       const picked = selectSingleOpenSession(sessions ?? []);
-      setRecordSession(picked.session);
-      setRecordContextError(picked.error);
+      updateRecord({ seasonId: nextSeasonId, session: picked.session, contextError: picked.error });
     } catch (e) {
-      setRecordSeasons([]);
-      setRecordSeasonId(null);
-      setRecordSession(null);
-      setRecordContextError(e instanceof Error ? e.message : 'Failed to load add game options.');
+      updateRecord({
+        seasons: [],
+        seasonId: null,
+        session: null,
+        contextError: e instanceof Error ? e.message : 'Failed to load add game options.',
+      });
     }
   }
 
@@ -767,7 +862,7 @@ export default function Page() {
     }
     const season = await client.createSeason(auth.token, auth.clubId, {
       ...payload,
-      timezone: 'America/Vancouver',
+      timezone: DEFAULT_TIMEZONE,
     });
     await loadDashboard(auth.token, auth.clubId, season.id);
     setSuccessMessage(`Season "${season.name}" created.`);
@@ -780,7 +875,7 @@ export default function Page() {
       if (!isClubAdmin) {
         throw new Error('Please contact your club admin to start a new season/session.');
       }
-      if (!recordSeasonId) {
+      if (!record.seasonId) {
         throw new Error('Select a season first.');
       }
 
@@ -794,10 +889,10 @@ export default function Page() {
       }
 
       const time = /^\d{2}:\d{2}$/.test(args.startTime) ? `${args.startTime}:00` : args.startTime;
-      await client.updateSeason(auth.token, recordClubId, recordSeasonId, {
+      await client.updateSeason(auth.token, record.clubId, record.seasonId, {
         weekday: from.getDay(),
         start_time_local: time,
-        timezone: 'America/Vancouver',
+        timezone: DEFAULT_TIMEZONE,
       });
 
       let created = 0;
@@ -812,19 +907,19 @@ export default function Page() {
         if (!sessionStartIso) {
           throw new Error(`Invalid session date/time generated for ${dateStr} ${time}.`);
         }
-        await client.createSession(auth.token, recordClubId, {
-          season_id: recordSeasonId,
+        await client.createSession(auth.token, record.clubId, {
+          season_id: record.seasonId,
           session_start_time: sessionStartIso,
           status,
-          location: 'Club Session',
-          address: 'TBD',
+          location: DEFAULT_SESSION_LOCATION,
+          address: DEFAULT_SESSION_ADDRESS,
         });
         created += 1;
         status = 'UPCOMING';
         cursor.setDate(cursor.getDate() + 7);
       }
 
-      await handleRecordSeasonChange(recordSeasonId);
+      await handleRecordSeasonChange(record.seasonId);
       await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined);
       setSuccessMessage(`Opened session plan: ${created} session(s) created from ${args.fromDate} to ${args.toDate}.`);
     } catch (e) {
@@ -836,6 +931,23 @@ export default function Page() {
     if (!auth) return;
     setSelectedProfilePlayerId(playerId);
     await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, playerId);
+  }
+
+  async function handleToggleLeaderboardVisibility(visible: boolean) {
+    if (!auth) return;
+    const previousProfile = profile;
+    try {
+      setError(null);
+      setProfile((current) => (current ? { ...current, show_on_leaderboard: visible } : current));
+      const updated = await client.updateProfile(auth.token, { show_on_leaderboard: visible });
+      setProfile(updated);
+      setSuccessMessage(visible ? 'Your name will appear on leaderboards.' : 'Your name is now hidden from leaderboards.');
+      await loadDashboard(auth.token, auth.clubId, selectedSeasonId ?? undefined, selectedProfilePlayerId);
+    } catch (e) {
+      setProfile(previousProfile);
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to update leaderboard privacy preference.';
+      setError(msg);
+    }
   }
 
   if (hydratingAuth) {
@@ -875,22 +987,24 @@ export default function Page() {
       selectedClubId={selectedClubId}
       selectedSeasonId={selectedSeasonId}
       selectedSession={selectedSession}
-      recordClubId={recordClubId}
-      recordSession={recordSession}
-      recordSeasonId={recordSeasonId}
-      leaderboard={leaderboard}
+      recordClubId={record.clubId}
+      recordSession={record.session}
+      recordSeasonId={record.seasonId}
+        leaderboard={leaderboard}
+        teamLeaderboard={teamLeaderboard}
+        enableTeamRanking={enableTeamRanking}
       loading={loading}
       error={error}
       successMessage={successMessage}
-      recordSeasons={recordSeasons}
-      players={recordPlayers}
-      courts={recordCourts}
-      recordContextError={recordContextError}
+      recordSeasons={record.seasons}
+      players={record.players}
+      courts={record.courts}
+      recordContextError={record.contextError}
       profileStats={profileStats}
       eloHistory={eloHistory}
       recentGames={recentGames}
       allGames={allGames}
-      recordExistingGames={recordExistingGames}
+      recordExistingGames={record.existingGames}
       upcomingSessions={upcomingSessions}
       allUpcomingSessions={allUpcomingSessions}
       onRecordClubChange={handleRecordClubChange}
@@ -907,11 +1021,13 @@ export default function Page() {
       onFinalizeSession={handleFinalizeSession}
       onRevertSessionFinalize={handleRevertSessionFinalize}
       onRecordGame={handleRecordGame}
+      onUpdateGame={handleUpdateGame}
       onRecordSeasonChange={handleRecordSeasonChange}
       onCreateSeason={handleCreateSeason}
       canOpenSession={Boolean(isClubAdmin)}
       onOpenSession={handleOpenRecordSession}
       onProfilePlayerChange={handleProfilePlayerChange}
+      onToggleLeaderboardVisibility={handleToggleLeaderboardVisibility}
       onLogout={() => {
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
@@ -934,19 +1050,12 @@ export default function Page() {
         setEloHistory([]);
         setRecentGames([]);
         setAllGames([]);
-        setRecordExistingGames([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setSelectedProfilePlayerId(null);
         setSelectedSeasonId(null);
         setSelectedSession(null);
-        setRecordClubId(DEFAULT_CLUB_ID);
-        setRecordSession(null);
-        setRecordSeasonId(null);
-        setRecordSeasons([]);
-        setRecordPlayers([]);
-        setRecordCourts([]);
-        setRecordContextError(null);
+        resetRecord();
         setSessionsBySeason({});
         setLeaderboard([]);
         setError(null);

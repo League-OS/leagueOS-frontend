@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
-import { DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { AdminUser, Club, ClubUser, Court, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import { DEFAULT_API_BASE_URL, DEFAULT_CLUB_ID } from '@leagueos/config';
+import type { AdminUser, Club, ClubUser, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { LoginView } from '../LoginView';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
@@ -25,10 +25,12 @@ import {
   primaryBtn,
 } from './AdminShellParts';
 import type { AdminNavKey } from './AdminShellParts';
-import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
+import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
+import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
+import { TournamentsWorkspace } from './TournamentsWorkspace';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 const STORAGE_AUTH = 'leagueos.admin.auth';
 const STORAGE_CTX = 'leagueos.admin.ctx';
 const STORAGE_PROFILE = 'leagueos.admin.profile';
@@ -53,7 +55,12 @@ type AddMatchPayload = {
 };
 
 function getMessage(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) return e.message;
+  if (e instanceof ApiError) {
+    if (e.code === 'SEQUENTIAL_FINALIZE_BLOCKED') {
+      return formatSequentialFinalizeBlockedError(e);
+    }
+    return e.message;
+  }
   if (typeof e === 'object' && e !== null && 'issues' in e) {
     const issues = (e as { issues?: Array<{ message?: string }> }).issues;
     if (Array.isArray(issues) && issues.length) return issues[0]?.message || fallback;
@@ -77,6 +84,17 @@ function fmtDateTime(value?: string | null) {
   if (!value) return '-';
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
+}
+
+function fmtLocalTimeLabel(value?: string | null) {
+  if (!value) return '-';
+  const [hhStr, mmStr] = value.split(':');
+  const hh = Number(hhStr);
+  const mm = Number(mmStr);
+  if (!Number.isInteger(hh) || !Number.isInteger(mm)) return value;
+  const suffix = hh >= 12 ? 'PM' : 'AM';
+  const hour12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
 }
 
 function toLocalDateInputValue(value?: string | null): string {
@@ -188,6 +206,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [lastPlayerInvite, setLastPlayerInvite] = useState<null | { email: string; temporary_password?: string | null; invite_link: string; status: string }>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [clubUsers, setClubUsers] = useState<ClubUser[]>([]);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -202,6 +221,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [newPlayerEloSingles, setNewPlayerEloSingles] = useState('1000');
   const [newPlayerEloDoubles, setNewPlayerEloDoubles] = useState('1000');
   const [newPlayerEloMixed, setNewPlayerEloMixed] = useState('1000');
+  const [newPlayerShowOnLeaderboard, setNewPlayerShowOnLeaderboard] = useState(true);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [newPlayerType, setNewPlayerType] = useState<'ROSTER' | 'DROP_IN' | 'DROP_IN_A1'>('ROSTER');
   const [newCourtName, setNewCourtName] = useState('');
@@ -217,11 +237,11 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const role = toAdminEffectiveRole(profile?.role, profile?.club_role);
   const allowed = canAccessAdmin(role);
   const isGlobalAdmin = role === 'GLOBAL_ADMIN';
-  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs', 'users']);
+  const globalAdminAllowedPages = new Set<AdminPage>(['dashboard', 'clubs', 'config', 'users']);
   const pageAllowedForRole = !isGlobalAdmin || globalAdminAllowedPages.has(page);
   const visibleNavItems: AdminNavKey[] = isGlobalAdmin
-    ? ['dashboard', 'clubs', 'users']
-    : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'players'];
+    ? ['dashboard', 'clubs', 'config', 'users']
+    : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'tournaments', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
 
@@ -308,8 +328,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       }
 
       if (me.role === 'GLOBAL_ADMIN') {
-        const usersList = await client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]);
+        const [usersList, featureFlagList] = await Promise.all([
+          client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]),
+          client.featureFlags(effectiveToken).catch(() => [] as FeatureFlag[]),
+        ]);
         setAdminUsers(usersList);
+        setFeatureFlags(featureFlagList);
         setClubUsers([]);
         setPlayers([]);
         setCourts([]);
@@ -329,7 +353,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         client.courts(token, activeClubId),
         client.seasons(token, activeClubId),
         client.sessions(token, activeClubId),
-        client.games(token, activeClubId).catch(() => [] as Game[]),
+        client.games(token, activeClubId, undefined, undefined, undefined, true).catch(() => [] as Game[]),
         client.clubUsers(token, activeClubId).catch(() => [] as ClubUser[]),
       ]);
       const clubPlayers = mergeAdminPlayers(activePlayers, inactivePlayers);
@@ -341,23 +365,15 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setGames(clubGames);
       setAdminUsers([]);
       setClubUsers(clubUsersList);
+      setFeatureFlags([]);
       setNewSessionSeasonId((prev) => prev ?? clubSeasons[0]?.id ?? null);
 
-      const needParticipants = page === 'sessions' || page === 'sessionDetail' || page === 'seasonDetail';
-      if (needParticipants && clubGames.length) {
-        const rows = await Promise.allSettled(
-          clubGames.map(async (g) => [g.id, await client.gameParticipants(token, activeClubId, g.id)] as const),
-        );
-        const next: Record<number, GameParticipant[]> = {};
-        for (const row of rows) {
-          if (row.status === 'fulfilled') next[row.value[0]] = row.value[1];
-        }
-        setParticipantsByGame(next);
-      } else {
-        setParticipantsByGame({});
-    setSeasonLeaderboardRows([]);
-    setSeasonLeaderboardSession(null);
+      // Build participantsByGame from embedded participants (no extra per-game round-trips)
+      const participantsMap: Record<number, GameParticipant[]> = {};
+      for (const g of clubGames) {
+        if (g.participants) participantsMap[g.id] = g.participants;
       }
+      setParticipantsByGame(participantsMap);
 
       if (page === 'seasonDetail' && seasonId) {
         try {
@@ -394,6 +410,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setGames([]);
       setAdminUsers([]);
       setClubUsers([]);
+      setFeatureFlags([]);
       setParticipantsByGame({});
       setSeasonLeaderboardRows([]);
       setSeasonLeaderboardSession(null);
@@ -485,6 +502,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setGames([]);
     setAdminUsers([]);
     setClubUsers([]);
+    setFeatureFlags([]);
     setParticipantsByGame({});
     setError(null);
     setSuccess(null);
@@ -718,6 +736,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
           />
         ) : null}
+        {page === 'config' ? (
+          <ConfigPanel
+            featureFlags={featureFlags}
+            loading={loading}
+            onToggle={async (flag, enabled) => {
+              if (!auth) return;
+              await client.updateFeatureFlag(auth.token, flag.key, enabled);
+              setSuccess(`Updated ${flag.name}.`);
+              await refresh();
+            }}
+          />
+        ) : null}
         {page === 'users' ? (
           <UsersPanel
             canManage={role === 'GLOBAL_ADMIN'}
@@ -787,6 +817,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               await client.resetClubUserPassword(auth.token, selectedClubId, userId, newPassword, confirmPassword);
               setSuccess('Password changed.');
             }}
+            onDeleteClubUser={async (userId) => {
+              if (!auth) throw new Error('Not authenticated');
+              await client.deleteClubUser(auth.token, selectedClubId, userId);
+              setSuccess('User removed from club.');
+              await refresh();
+            }}
           />
         ) : null}
         {page === 'players' ? (
@@ -809,6 +845,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             setNewPlayerEloDoubles={setNewPlayerEloDoubles}
             newPlayerEloMixed={newPlayerEloMixed}
             setNewPlayerEloMixed={setNewPlayerEloMixed}
+            newPlayerShowOnLeaderboard={newPlayerShowOnLeaderboard}
+            setNewPlayerShowOnLeaderboard={setNewPlayerShowOnLeaderboard}
             showAddPlayerModal={showAddPlayerModal}
             setShowAddPlayerModal={setShowAddPlayerModal}
             newPlayerType={newPlayerType}
@@ -827,6 +865,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
                 player_type: newPlayerType,
                 sex: newPlayerSex,
                 is_active: true,
+                show_on_leaderboard: newPlayerShowOnLeaderboard,
               });
               setNewPlayerName('');
               setNewPlayerEmail('');
@@ -836,9 +875,38 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               setNewPlayerEloSingles('1000');
               setNewPlayerEloDoubles('1000');
               setNewPlayerEloMixed('1000');
+              setNewPlayerShowOnLeaderboard(true);
               setShowAddPlayerModal(false);
               setLastPlayerInvite(null);
               setSuccess('Player created.');
+              await refresh();
+            }}
+            onUpsertExisting={async (playerId) => {
+              if (!auth || !newPlayerName.trim()) return;
+              await client.updatePlayer(auth.token, selectedClubId, playerId, {
+                display_name: newPlayerName.trim(),
+                email: newPlayerEmail.trim() || null,
+                phone: newPlayerPhone.trim() || null,
+                elo_initial_singles: Number(newPlayerEloSingles || '1000'),
+                elo_initial_doubles: Number(newPlayerEloDoubles || '1000'),
+                elo_initial_mixed: Number(newPlayerEloMixed || '1000'),
+                player_type: newPlayerType,
+                sex: newPlayerSex,
+                is_active: true,
+                show_on_leaderboard: newPlayerShowOnLeaderboard,
+              });
+              setNewPlayerName('');
+              setNewPlayerEmail('');
+              setNewPlayerPhone('');
+              setNewPlayerAddress('');
+              setNewPlayerSex('M');
+              setNewPlayerEloSingles('1000');
+              setNewPlayerEloDoubles('1000');
+              setNewPlayerEloMixed('1000');
+              setNewPlayerShowOnLeaderboard(true);
+              setShowAddPlayerModal(false);
+              setLastPlayerInvite(null);
+              setSuccess('Player updated.');
               await refresh();
             }}
             onInviteFromPlayer={async (p) => {
@@ -861,9 +929,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
             onDelete={async (p) => {
               if (!auth) return;
-              await client.deletePlayer(auth.token, selectedClubId, p.id);
-              setSuccess('Player deleted.');
-              await refresh();
+              try {
+                await client.deletePlayer(auth.token, selectedClubId, p.id);
+                setSuccess('Player deleted.');
+                setError(null);
+                await refresh();
+              } catch (e) {
+                if (e instanceof ApiError && e.code === 'PLAYER_IN_USE') {
+                  setError('Cannot delete this player because they are already used in match/rating history. Deactivate the player instead, or remove related records first.');
+                  return;
+                }
+                setError(getMessage(e, 'Failed to delete player.'));
+              }
             }}
           />
         ) : null}
@@ -893,10 +970,14 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
           />
         ) : null}
+        {page === 'tournaments' ? (
+          <TournamentsWorkspace />
+        ) : null}
         {page === 'seasons' ? (
           <SeasonsPanel
             seasons={seasons}
             sessions={sessions}
+            games={games}
             players={players}
             newSeasonName={newSeasonName}
             setNewSeasonName={setNewSeasonName}
@@ -920,6 +1001,20 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth) return;
               await client.updateSeason(auth.token, selectedClubId, s.id, { is_active: !s.is_active });
               setSuccess('Season updated.');
+              await refresh();
+            }}
+            onDelete={async (s) => {
+              if (!auth) return;
+              const seasonSessions = sessions.filter((x) => x.season_id === s.id);
+              const seasonSessionIds = new Set(seasonSessions.map((x) => x.id));
+              const seasonGames = games.filter((g) => seasonSessionIds.has(g.session_id));
+              if (seasonSessions.length > 0 || seasonGames.length > 0) {
+                setError('Season can only be deleted when it has no sessions and no games.');
+                return;
+              }
+              await client.deleteSeason(auth.token, selectedClubId, s.id);
+              setError(null);
+              setSuccess('Season deleted.');
               await refresh();
             }}
           />
@@ -957,6 +1052,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             newSessionLocation={newSessionLocation}
             setNewSessionLocation={setNewSessionLocation}
             loading={loading}
+            onRenameSeason={async (newName) => {
+              if (!auth || !selectedSeason) return;
+              await client.updateSeason(auth.token, selectedClubId, selectedSeason.id, { name: newName });
+              setSuccess('Season renamed.');
+              await refresh();
+            }}
+            onRenameSession={async (sessionId, newName) => {
+              if (!auth) return;
+              await client.updateSession(auth.token, selectedClubId, sessionId, { location: newName });
+              setSuccess('Session renamed.');
+              await refresh();
+            }}
           />
         ) : null}
         {page === 'sessions' ? (
@@ -994,6 +1101,12 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               if (!auth) return;
               await client.deleteSession(auth.token, selectedClubId, sessionId);
               setSuccess('Session deleted.');
+              await refresh();
+            }}
+            onRenameSession={async (sessionId, newName) => {
+              if (!auth) return;
+              await client.updateSession(auth.token, selectedClubId, sessionId, { location: newName });
+              setSuccess('Session renamed.');
               await refresh();
             }}
           />
@@ -1045,9 +1158,13 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
             }}
             onFinalize={async () => {
               if (!auth || !selectedSession) return;
-              await client.finalizeSession(auth.token, selectedClubId, selectedSession.id);
-              setSuccess('Session finalized.');
-              await refresh();
+              try {
+                await client.finalizeSession(auth.token, selectedClubId, selectedSession.id);
+                setSuccess('Session finalized.');
+                await refresh();
+              } catch (e) {
+                setError(getMessage(e, 'Failed to finalize session.'));
+              }
             }}
             onRevert={async () => {
               if (!auth || !selectedSession) return;
@@ -1111,6 +1228,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               } catch (e) {
                 setError(getMessage(e, `Failed to update status to ${nextStatus}.`));
               }
+            }}
+            onUpdateSchedule={async (sessionDate, startTimeHHmm) => {
+              if (!auth || !selectedSession) return;
+              const sessionStartIso = combineSessionDateAndTimeToIso(sessionDate, `${startTimeHHmm}:00`);
+              if (!sessionStartIso) {
+                throw new Error('Invalid session start date/time.');
+              }
+              await client.updateSession(auth.token, selectedClubId, selectedSession.id, {
+                session_start_time: sessionStartIso,
+              });
+              setSuccess('Session date/time updated.');
+              await refresh();
             }}
           />
         ) : null}
@@ -1361,6 +1490,7 @@ function UsersPanel(props: {
     },
   ) => Promise<void>;
   onResetClubUserPassword: (userId: number, newPassword: string, confirmPassword: string) => Promise<void>;
+  onDeleteClubUser: (userId: number) => Promise<void>;
 }) {
   const {
     canManage,
@@ -1386,6 +1516,7 @@ function UsersPanel(props: {
     onLoadClubUser,
     onSaveClubUser,
     onResetClubUserPassword,
+    onDeleteClubUser,
   } = props;
 
   const selectedClub = clubs.find((c) => c.id === selectedClubId);
@@ -1406,6 +1537,21 @@ function UsersPanel(props: {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordResetNotice, setPasswordResetNotice] = useState<null | { email: string; password: string }>(null);
+  const actionIconBtn: React.CSSProperties = {
+    ...outlineBtn,
+    minWidth: 34,
+    padding: '8px 10px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 16,
+    lineHeight: 1,
+  };
+  const deleteIconBtn: React.CSSProperties = {
+    ...actionIconBtn,
+    color: '#b91c1c',
+    borderColor: '#fca5a5',
+  };
 
   async function openDetail(userId: number) {
     try {
@@ -1476,9 +1622,22 @@ function UsersPanel(props: {
                   clubMembership?.role || '-',
                   u.is_active ? 'Enabled' : 'Disabled',
                   canManage ? (
-                    <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
-                      {u.is_active ? 'Disable' : 'Enable'}
-                    </button>
+                    <div key={`actions-${u.id}`} style={{ display: 'flex', gap: 8 }}>
+                      <button key={`toggle-${u.id}`} style={outlineBtn} onClick={() => void onToggleStatus(u)}>
+                        {u.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        key={`delete-${u.id}`}
+                        style={deleteIconBtn}
+                        title={`Remove ${u.email} from club`}
+                        aria-label={`Remove ${u.email} from club`}
+                        onClick={() => {
+                          if (window.confirm(`Remove ${u.email} from this club?`)) void onDeleteClubUser(u.id);
+                        }}
+                      >
+                        🗑
+                      </button>
+                    </div>
                   ) : '-',
                 ];
               })}
@@ -1490,7 +1649,7 @@ function UsersPanel(props: {
         ) : (
           <>
             <AdminTable
-              columns={['User Name', 'Email', 'Role in Club', 'Status']}
+              columns={['User Name', 'Email', 'Role in Club', 'Status', 'Action']}
               rows={clubUsers.map((u) => [
                 <button
                   key={`name-${u.id}`}
@@ -1502,6 +1661,17 @@ function UsersPanel(props: {
                 u.email,
                 u.role_in_club,
                 u.is_active ? 'Enabled' : 'Disabled',
+                <button
+                  key={`delete-${u.id}`}
+                  style={deleteIconBtn}
+                  title={`Remove ${u.email} from club`}
+                  aria-label={`Remove ${u.email} from club`}
+                  onClick={() => {
+                    if (window.confirm(`Remove ${u.email} from this club?`)) void onDeleteClubUser(u.id);
+                  }}
+                >
+                  🗑
+                </button>,
               ])}
             />
             {!clubUsers.length ? <div style={{ marginTop: 10, color: '#64748b', fontSize: 13 }}>No users in this club.</div> : null}
@@ -1639,6 +1809,17 @@ function UsersPanel(props: {
                   if (!selectedUserId) return;
                   try {
                     setDetailError(null);
+                    const wantsPasswordUpdate = Boolean(newPassword || confirmPassword);
+                    if (wantsPasswordUpdate) {
+                      if (newPassword.length < 8) {
+                        setDetailError('Password must be at least 8 characters.');
+                        return;
+                      }
+                      if (newPassword !== confirmPassword) {
+                        setDetailError('New password and confirm password must match.');
+                        return;
+                      }
+                    }
                     await onSaveClubUser(selectedUserId, {
                       full_name: detailName.trim(),
                       email: detailEmail.trim(),
@@ -1650,6 +1831,15 @@ function UsersPanel(props: {
                       elo_initial_mixed: Number(detailEloMixed) || 0,
                       is_active: detailActive,
                     });
+
+                    if (wantsPasswordUpdate) {
+                      await onResetClubUserPassword(selectedUserId, newPassword, confirmPassword);
+                      setPasswordResetNotice({ email: detailEmail.trim(), password: newPassword });
+                    }
+
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowUserDetailModal(false);
                   } catch (e) {
                     setDetailError(getMessage(e, 'Failed to save user.'));
                   }
@@ -1684,6 +1874,8 @@ function PlayersPanel(props: {
   setNewPlayerEloDoubles: (v: string) => void;
   newPlayerEloMixed: string;
   setNewPlayerEloMixed: (v: string) => void;
+  newPlayerShowOnLeaderboard: boolean;
+  setNewPlayerShowOnLeaderboard: (v: boolean) => void;
   showAddPlayerModal: boolean;
   setShowAddPlayerModal: (v: boolean) => void;
   newPlayerType: 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1';
@@ -1691,6 +1883,7 @@ function PlayersPanel(props: {
   lastPlayerInvite: null | { email: string; temporary_password?: string | null; invite_link: string; status: string };
   setLastPlayerInvite: (v: null | { email: string; temporary_password?: string | null; invite_link: string; status: string }) => void;
   onCreate: () => Promise<void>;
+  onUpsertExisting: (playerId: number) => Promise<void>;
   onInviteFromPlayer: (p: Player) => Promise<void>;
   onToggle: (p: Player) => Promise<void>;
   onDelete: (p: Player) => Promise<void>;
@@ -1714,6 +1907,8 @@ function PlayersPanel(props: {
     setNewPlayerEloDoubles,
     newPlayerEloMixed,
     setNewPlayerEloMixed,
+    newPlayerShowOnLeaderboard,
+    setNewPlayerShowOnLeaderboard,
     showAddPlayerModal,
     setShowAddPlayerModal,
     newPlayerType,
@@ -1721,10 +1916,48 @@ function PlayersPanel(props: {
     lastPlayerInvite,
     setLastPlayerInvite,
     onCreate,
+    onUpsertExisting,
     onInviteFromPlayer,
     onToggle,
     onDelete,
   } = props;
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const emailValue = newPlayerEmail.trim();
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const hasInvalidEmail = emailValue.length > 0 && !emailPattern.test(emailValue);
+
+  const closeOnboardingModal = () => {
+    setEditingPlayer(null);
+    setShowAddPlayerModal(false);
+  };
+
+  const openOnboardingForExistingPlayer = (p: Player) => {
+    setNewPlayerName(p.display_name || '');
+    setNewPlayerEmail(p.email || '');
+    setNewPlayerPhone(p.phone || '');
+    setNewPlayerAddress('');
+    setNewPlayerSex((p.sex === 'F' ? 'F' : 'M'));
+    setNewPlayerType((p.player_type as 'ROSTER' | 'DROP_IN' | 'DROP_IN_A1') || 'ROSTER');
+    setNewPlayerEloSingles(String(p.elo_initial_singles ?? 1000));
+    setNewPlayerEloDoubles(String(p.elo_initial_doubles ?? 1000));
+    setNewPlayerEloMixed(String(p.elo_initial_mixed ?? 1000));
+    setNewPlayerShowOnLeaderboard(p.show_on_leaderboard ?? true);
+    setEditingPlayer(p);
+    setShowAddPlayerModal(true);
+  };
+
+  const iconActionBtn: React.CSSProperties = {
+    ...outlineBtn,
+    width: 40,
+    minWidth: 40,
+    padding: '8px 0',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 16,
+    lineHeight: 1,
+  };
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <AdminCard title="Player Onboarding" action={<button style={primaryBtn} onClick={() => setShowAddPlayerModal(true)}>Add Player</button>}>
@@ -1733,7 +1966,9 @@ function PlayersPanel(props: {
       {showAddPlayerModal ? (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ width: 'min(860px, 100%)', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 20px 60px rgba(2,6,23,.25)', padding: 16, display: 'grid', gap: 12 }}>
-            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>Add Player</div>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 18 }}>
+              {editingPlayer ? `Update Player: ${editingPlayer.display_name}` : 'Add Player'}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Player Name</label>
@@ -1741,7 +1976,15 @@ function PlayersPanel(props: {
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Email</label>
-                <input value={newPlayerEmail} onChange={(e) => setNewPlayerEmail(e.target.value)} placeholder="email@example.com" style={field} />
+                <input
+                  value={newPlayerEmail}
+                  onChange={(e) => setNewPlayerEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  style={{ ...field, borderColor: hasInvalidEmail ? '#dc2626' : field.borderColor }}
+                />
+                {hasInvalidEmail ? (
+                  <div style={{ fontSize: 12, color: '#dc2626' }}>Please enter a valid email address.</div>
+                ) : null}
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Phone Number</label>
@@ -1778,10 +2021,23 @@ function PlayersPanel(props: {
                 <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Initial ELO Mixed Doubles</label>
                 <input type="number" min={0} value={newPlayerEloMixed} onChange={(e) => setNewPlayerEloMixed(e.target.value)} style={field} />
               </div>
+              <div style={{ display: 'grid', gap: 6, alignContent: 'end' }}>
+                <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Visible on leaderboard</label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#334155' }}>
+                  <input type="checkbox" checked={newPlayerShowOnLeaderboard} onChange={(e) => setNewPlayerShowOnLeaderboard(e.target.checked)} />
+                  Visible on leaderboard
+                </label>
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button style={outlineBtn} onClick={() => setShowAddPlayerModal(false)}>Cancel</button>
-              <button style={primaryBtn} onClick={() => void onCreate()} disabled={!newPlayerName.trim()}>Save</button>
+              <button style={outlineBtn} onClick={closeOnboardingModal}>Cancel</button>
+              <button
+                style={primaryBtn}
+                onClick={() => void (editingPlayer ? onUpsertExisting(editingPlayer.id) : onCreate())}
+                disabled={!newPlayerName.trim() || hasInvalidEmail}
+              >
+                {editingPlayer ? 'Update' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
@@ -1820,13 +2076,34 @@ function PlayersPanel(props: {
             <div key={`actions-${p.id}`} style={{ display: 'flex', gap: 8 }}>
               <button
                 style={outlineBtn}
-                disabled={!p.email || clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase())}
-                onClick={() => void onInviteFromPlayer(p)}
+                disabled={clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase())}
+                onClick={() => {
+                  if (!p.email) {
+                    openOnboardingForExistingPlayer(p);
+                    return;
+                  }
+                  void onInviteFromPlayer(p);
+                }}
               >
                 {!p.email ? 'Email Required' : clubUsers.some((u) => u.email.toLowerCase() === (p.email || '').toLowerCase()) ? 'User Linked' : 'Create/Link User'}
               </button>
+              <button
+                style={iconActionBtn}
+                title={`Edit ${p.display_name}`}
+                aria-label={`Edit ${p.display_name}`}
+                onClick={() => openOnboardingForExistingPlayer(p)}
+              >
+                ✎
+              </button>
               <button style={outlineBtn} onClick={() => void onToggle(p)}>{p.is_active ? 'Deactivate' : 'Activate'}</button>
-              <button style={outlineBtn} onClick={() => { if (window.confirm(`Delete ${p.display_name}?`)) void onDelete(p); }}>Delete</button>
+              <button
+                style={iconActionBtn}
+                title={`Delete ${p.display_name}`}
+                aria-label={`Delete ${p.display_name}`}
+                onClick={() => { if (window.confirm(`Delete ${p.display_name}?`)) void onDelete(p); }}
+              >
+                🗑
+              </button>
             </div>,
           ])}
         />
@@ -1873,6 +2150,7 @@ function CourtsPanel(props: {
 function SeasonsPanel(props: {
   seasons: Season[];
   sessions: Session[];
+  games: Game[];
   players: Player[];
   newSeasonName: string;
   setNewSeasonName: (v: string) => void;
@@ -1880,9 +2158,10 @@ function SeasonsPanel(props: {
   setNewSeasonFormat: (v: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES') => void;
   onCreate: () => Promise<void>;
   onToggle: (s: Season) => Promise<void>;
+  onDelete: (s: Season) => Promise<void>;
 }) {
   const {
-    seasons, sessions, players, newSeasonName, setNewSeasonName, newSeasonFormat, setNewSeasonFormat, onCreate, onToggle,
+    seasons, sessions, games, players, newSeasonName, setNewSeasonName, newSeasonFormat, setNewSeasonFormat, onCreate, onToggle, onDelete,
   } = props;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -1899,9 +2178,12 @@ function SeasonsPanel(props: {
       </AdminCard>
       <AdminCard title="Seasons">
         <AdminTable
-          columns={['Season Name', 'Start Date', 'End Date', '# Players', 'Status', '# Sessions', 'Actions']}
+          columns={['Season Name', 'Start Date', 'End Date', '# Players', 'Status', '# Sessions', '# Games', 'Actions']}
           rows={seasons.map((s) => {
             const seasonSessions = sessions.filter((x) => x.season_id === s.id).sort((a, b) => a.session_date.localeCompare(b.session_date));
+            const seasonSessionIds = new Set(seasonSessions.map((x) => x.id));
+            const seasonGamesCount = games.filter((g) => seasonSessionIds.has(g.session_id)).length;
+            const canDeleteSeason = seasonSessions.length === 0 && seasonGamesCount === 0;
             const startDate = seasonSessions[0]?.session_date ?? '-';
             const endDate = seasonSessions[seasonSessions.length - 1]?.session_date ?? '-';
             return [
@@ -1911,7 +2193,18 @@ function SeasonsPanel(props: {
               players.length,
               s.is_active ? 'Active' : 'Closed',
               seasonSessions.length,
-              <button key="toggle" style={outlineBtn} onClick={() => void onToggle(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>,
+              seasonGamesCount,
+              <div key="actions" style={{ display: 'flex', gap: 8 }}>
+                <button style={outlineBtn} onClick={() => void onToggle(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>
+                <button
+                  style={outlineBtn}
+                  onClick={() => { if (window.confirm(`Delete ${s.name}?`)) void onDelete(s); }}
+                  disabled={!canDeleteSeason}
+                  title={canDeleteSeason ? 'Delete season' : 'Can delete only when season has no sessions and no games'}
+                >
+                  Delete
+                </button>
+              </div>,
             ];
           })}
         />
@@ -1938,6 +2231,8 @@ function SeasonDetailPanel(props: {
   loading: boolean;
   leaderboardRows: LeaderboardEntry[];
   leaderboardSession: Session | null;
+  onRenameSeason: (newName: string) => Promise<void>;
+  onRenameSession: (sessionId: number, newName: string) => Promise<void>;
 }) {
   const {
     season,
@@ -1957,9 +2252,15 @@ function SeasonDetailPanel(props: {
     loading,
     leaderboardRows,
     leaderboardSession,
+    onRenameSeason,
+    onRenameSession,
   } = props;
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
   const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
+  const [renamingSeasonName, setRenamingSeasonName] = useState(false);
+  const [renameSeasonNameValue, setRenameSeasonNameValue] = useState('');
+  const [renamingSessionId, setRenamingSessionId] = useState<number | null>(null);
+  const [renameSessionValue, setRenameSessionValue] = useState('');
   const openCreateSessionModal = () => {
     const defaults = defaultSessionTimes();
     setNewSessionDate(defaults.date);
@@ -1970,11 +2271,48 @@ function SeasonDetailPanel(props: {
   if (!season) return <AdminEmptyState title="Season not found" description="Select a valid season from the Seasons page." />;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <AdminCard title={`Season Info: ${season.name}`}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
-          <Info label="Format" value={season.format} />
-          <Info label="Timezone" value={season.timezone} />
-          <Info label="Status" value={season.is_active ? 'Active' : 'Closed'} />
+      <AdminCard title="Season Info">
+        <div style={{ display: 'grid', gap: 10 }}>
+          {renamingSeasonName ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                autoFocus
+                value={renameSeasonNameValue}
+                onChange={(e) => setRenameSeasonNameValue(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && renameSeasonNameValue.trim()) {
+                    await onRenameSeason(renameSeasonNameValue.trim());
+                    setRenamingSeasonName(false);
+                  }
+                  if (e.key === 'Escape') setRenamingSeasonName(false);
+                }}
+                style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', border: '1.5px solid #0d9488', borderRadius: 6, padding: '4px 8px', minWidth: 220 }}
+              />
+              <button
+                style={{ ...primaryBtn, padding: '4px 14px', fontSize: 13 }}
+                onClick={async () => {
+                  if (!renameSeasonNameValue.trim()) return;
+                  await onRenameSeason(renameSeasonNameValue.trim());
+                  setRenamingSeasonName(false);
+                }}
+              >Save</button>
+              <button style={{ ...outlineBtn, padding: '4px 10px', fontSize: 13 }} onClick={() => setRenamingSeasonName(false)}>Cancel</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{season.name}</span>
+              <button
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: '#64748b', fontSize: 13, borderRadius: 4 }}
+                title="Rename season"
+                onClick={() => { setRenameSeasonNameValue(season.name); setRenamingSeasonName(true); }}
+              >✏ Rename</button>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
+            <Info label="Format" value={season.format} />
+            <Info label="Timezone" value={season.timezone} />
+            <Info label="Status" value={season.is_active ? 'Active' : 'Closed'} />
+          </div>
         </div>
       </AdminCard>
 
@@ -1982,7 +2320,34 @@ function SeasonDetailPanel(props: {
         <AdminTable
           columns={['Session Name', 'Session Date', 'Start Time', 'Status', 'Matches', 'Players']}
           rows={sessions.map((s) => [
-            <Link key={`sess-link-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
+            renamingSessionId === s.id ? (
+              <span key={`sess-rename-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  value={renameSessionValue}
+                  onChange={(e) => setRenameSessionValue(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && renameSessionValue.trim()) {
+                      await onRenameSession(s.id, renameSessionValue.trim());
+                      setRenamingSessionId(null);
+                    }
+                    if (e.key === 'Escape') setRenamingSessionId(null);
+                  }}
+                  style={{ fontSize: 13, border: '1.5px solid #0d9488', borderRadius: 5, padding: '2px 7px', minWidth: 130 }}
+                />
+                <button style={{ ...primaryBtn, padding: '2px 10px', fontSize: 12 }} onClick={async () => {
+                  if (!renameSessionValue.trim()) return;
+                  await onRenameSession(s.id, renameSessionValue.trim());
+                  setRenamingSessionId(null);
+                }}>✓</button>
+                <button style={{ ...outlineBtn, padding: '2px 8px', fontSize: 12 }} onClick={() => setRenamingSessionId(null)}>✗</button>
+              </span>
+            ) : (
+              <span key={`sess-link-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Link href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, padding: '1px 4px' }} title="Rename" onClick={() => { setRenameSessionValue(s.location || ''); setRenamingSessionId(s.id); }}>✏</button>
+              </span>
+            ),
             fmtDate(s.session_date),
             s.start_time_local,
             s.status,
@@ -2099,6 +2464,7 @@ function SessionsPanel(props: {
   setNewSessionName: (v: string) => void;
   onCreate: () => Promise<void>;
   onDeleteSession: (sessionId: number) => Promise<void>;
+  onRenameSession: (sessionId: number, newName: string) => Promise<void>;
 }) {
   const {
     sessions,
@@ -2119,7 +2485,10 @@ function SessionsPanel(props: {
     setNewSessionName,
     onCreate,
     onDeleteSession,
+    onRenameSession,
   } = props;
+  const [renamingSessionId, setRenamingSessionId] = useState<number | null>(null);
+  const [renameSessionValue, setRenameSessionValue] = useState('');
   const seasonById = new Map(seasons.map((s) => [s.id, s]));
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
   const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
@@ -2130,6 +2499,7 @@ function SessionsPanel(props: {
     setNewSessionDate(defaults.date);
     setNewSessionStartTime(defaults.startTimeHHMMSS);
     setNewSessionEndTime(defaults.endTimeHHMM);
+    setPanelError(null);
     setShowCreateSessionModal(true);
   };
   return (
@@ -2193,11 +2563,24 @@ function SessionsPanel(props: {
               <button
                 style={primaryBtn}
                 onClick={async () => {
+                  if (!newSessionSeasonId) {
+                    setPanelError('Select a season before creating a session.');
+                    return;
+                  }
+                  if (!newSessionName.trim()) {
+                    setPanelError('Enter a session name.');
+                    return;
+                  }
+                  if (!newSessionDate) {
+                    setPanelError('Select a session date.');
+                    return;
+                  }
+                  setPanelError(null);
                   try {
                     await onCreate();
                     setShowCreateSessionModal(false);
-                  } catch {
-                    // parent handler surfaces error banner
+                  } catch (e) {
+                    setPanelError(getMessage(e, 'Failed to create session.'));
                   }
                 }}
                 disabled={!newSessionSeasonId || !newSessionName.trim() || !newSessionDate}
@@ -2246,7 +2629,34 @@ function SessionsPanel(props: {
               const sessionGames = games.filter((g) => g.session_id === s.id);
               const playerCount = countUniquePlayersInSessionGames(sessionGames, participantsByGame);
               return [
-                <Link key={`sd-${s.id}`} href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>,
+                renamingSessionId === s.id ? (
+                  <span key={`sess-rename-sp-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      value={renameSessionValue}
+                      onChange={(e) => setRenameSessionValue(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter' && renameSessionValue.trim()) {
+                          await onRenameSession(s.id, renameSessionValue.trim());
+                          setRenamingSessionId(null);
+                        }
+                        if (e.key === 'Escape') setRenamingSessionId(null);
+                      }}
+                      style={{ fontSize: 13, border: '1.5px solid #0d9488', borderRadius: 5, padding: '2px 7px', minWidth: 130 }}
+                    />
+                    <button style={{ ...primaryBtn, padding: '2px 10px', fontSize: 12 }} onClick={async () => {
+                      if (!renameSessionValue.trim()) return;
+                      await onRenameSession(s.id, renameSessionValue.trim());
+                      setRenamingSessionId(null);
+                    }}>✓</button>
+                    <button style={{ ...outlineBtn, padding: '2px 8px', fontSize: 12 }} onClick={() => setRenamingSessionId(null)}>✗</button>
+                  </span>
+                ) : (
+                  <span key={`sd-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Link href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, padding: '1px 4px' }} title="Rename" onClick={() => { setRenameSessionValue(s.location || ''); setRenamingSessionId(s.id); }}>✏</button>
+                  </span>
+                ),
                 fmtDate(s.session_date),
                 s.start_time_local || '-',
                 s.status,
@@ -2289,8 +2699,25 @@ function SessionDetailPanel(props: {
   onDeleteMatch: (gameId: number) => Promise<void>;
   onEditMatch: (gameId: number, payload: AddMatchPayload) => Promise<void>;
   onStatusChange: (status: 'UPCOMING' | 'OPEN' | 'CLOSED' | 'CANCELLED') => Promise<void>;
+  onUpdateSchedule: (sessionDate: string, startTimeHHmm: string) => Promise<void>;
 }) {
-  const { session, season, sessionMatches, participantsByGame, players, courts, onAddMatch, onClose, onOpen, onFinalize, onRevert, onDeleteMatch, onEditMatch, onStatusChange } = props;
+  const {
+    session,
+    season,
+    sessionMatches,
+    participantsByGame,
+    players,
+    courts,
+    onAddMatch,
+    onClose,
+    onOpen,
+    onFinalize,
+    onRevert,
+    onDeleteMatch,
+    onEditMatch,
+    onStatusChange,
+    onUpdateSchedule,
+  } = props;
   type MatchSortKey = 'serial' | 'player1' | 'player2' | 'player3' | 'player4' | 'court' | 'startTime' | 'scoreA' | 'scoreB' | 'status';
   const [statusSaving, setStatusSaving] = useState(false);
   const [showAddMatchModal, setShowAddMatchModal] = useState(false);
@@ -2346,6 +2773,19 @@ function SessionDetailPanel(props: {
     const hour12 = hh % 12 === 0 ? 12 : hh % 12;
     return `${hour12}:${String(mm).padStart(2, '0')} ${suffix}`;
   };
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleDate, setScheduleDate] = useState(() => session?.session_date ?? '');
+  const [scheduleTime, setScheduleTime] = useState(() => (session?.start_time_local ? session.start_time_local.slice(0, 5) : '19:00'));
+
+  useEffect(() => {
+    if (!session) return;
+    setEditingSchedule(false);
+    setScheduleError(null);
+    setScheduleDate(session.session_date);
+    setScheduleTime(session.start_time_local ? session.start_time_local.slice(0, 5) : '19:00');
+  }, [session?.id, session?.session_date, session?.start_time_local]);
   const isSoftDuplicate = (payload: AddMatchPayload): boolean => {
     if (!session) return false;
     const targetSessionId = session.id;
@@ -2390,7 +2830,7 @@ function SessionDetailPanel(props: {
         startTimeTs: Number.isNaN(startTs) ? Number.NEGATIVE_INFINITY : startTs,
         scoreA: g.score_a,
         scoreB: g.score_b,
-        status: 'Created',
+        status: gameStatusDisplay(g),
       };
     });
 
@@ -2528,7 +2968,95 @@ function SessionDetailPanel(props: {
         </div>
       }>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gap: 10 }}>
-          <Info label="Session Date" value={fmtDate(session.session_date)} />
+          <div style={{ gridColumn: 'span 2', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
+            <div style={{ color: '#64748b', fontSize: 12 }}>Session Date &amp; Time</div>
+            {session.status !== 'UPCOMING' ? (
+              <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>
+                {fmtDate(session.session_date)} · {fmtLocalTimeLabel(session.start_time_local)}
+              </div>
+            ) : !editingSchedule ? (
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ color: '#0f172a', fontWeight: 700 }}>
+                  {fmtDate(session.session_date)} · {fmtLocalTimeLabel(session.start_time_local)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleError(null);
+                    setEditingSchedule(true);
+                  }}
+                  title="Edit Date & Time"
+                  aria-label="Edit Date & Time"
+                  style={{ ...outlineBtn, padding: 6, minWidth: 32, minHeight: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 6 }}>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    style={field}
+                  />
+                  <input
+                    type="time"
+                    step={300}
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    style={field}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingSchedule(false);
+                      setScheduleError(null);
+                      setScheduleDate(session.session_date);
+                      setScheduleTime(session.start_time_local ? session.start_time_local.slice(0, 5) : '19:00');
+                    }}
+                    style={{ ...outlineBtn, padding: '6px 10px', fontSize: 12 }}
+                    disabled={scheduleSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!scheduleDate) {
+                        setScheduleError('Select a session date.');
+                        return;
+                      }
+                      if (!scheduleTime) {
+                        setScheduleError('Select a start time.');
+                        return;
+                      }
+                      setScheduleError(null);
+                      setScheduleSaving(true);
+                      try {
+                        await onUpdateSchedule(scheduleDate, scheduleTime);
+                        setEditingSchedule(false);
+                      } catch (e) {
+                        setScheduleError(getMessage(e, 'Failed to update session date/time.'));
+                      } finally {
+                        setScheduleSaving(false);
+                      }
+                    }}
+                    style={{ ...primaryBtn, padding: '6px 10px', fontSize: 12 }}
+                    disabled={scheduleSaving}
+                  >
+                    {scheduleSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+                {scheduleError ? <div style={{ fontSize: 11, color: 'var(--bad)' }}>{scheduleError}</div> : null}
+              </div>
+            )}
+          </div>
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}>
             <div style={{ color: '#64748b', fontSize: 12 }}>Status</div>
             {session.status === 'FINALIZED' ? (
@@ -2575,7 +3103,6 @@ function SessionDetailPanel(props: {
             )}
           </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
-          <Info label="Start Time" value={session.start_time_local || '-'} />
           <Info label="Opened" value={fmtDateTime(session.opened_at)} />
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>
@@ -2710,17 +3237,7 @@ function SessionDetailPanel(props: {
               </div>
             </div>
             {editMatchError ? <div style={adminAlertError}>{editMatchError}</div> : null}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                style={outlineBtn}
-                disabled={editMatchBusy}
-                onClick={() => {
-                  setEditGameTarget(null);
-                  setEditMatchError(null);
-                }}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <button
                 style={primaryBtn}
                 disabled={editMatchBusy}
@@ -2770,6 +3287,16 @@ function SessionDetailPanel(props: {
                 }}
               >
                 {editMatchBusy ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                style={outlineBtn}
+                disabled={editMatchBusy}
+                onClick={() => {
+                  setEditGameTarget(null);
+                  setEditMatchError(null);
+                }}
+              >
+                Cancel
               </button>
             </div>
           </div>
@@ -2959,5 +3486,53 @@ function Info({ label, value }: { label: string; value: string }) {
       <div style={{ color: '#64748b', fontSize: 12 }}>{label}</div>
       <div style={{ marginTop: 4, color: '#0f172a', fontWeight: 700 }}>{value}</div>
     </div>
+  );
+}
+
+function ConfigPanel({
+  featureFlags,
+  loading,
+  onToggle,
+}: {
+  featureFlags: FeatureFlag[];
+  loading: boolean;
+  onToggle: (flag: FeatureFlag, enabled: boolean) => Promise<void>;
+}) {
+  const rows = featureFlags.map((flag) => ([
+    <div key={`${flag.key}-meta`} style={{ display: 'grid', gap: 4 }}>
+      <div style={{ color: '#0f172a', fontWeight: 700 }}>{flag.name}</div>
+      <div style={{ color: '#64748b', fontSize: 13 }}>{flag.key}</div>
+    </div>,
+    <span key={`${flag.key}-desc`} style={{ color: '#475569' }}>{flag.description || '-'}</span>,
+    <span key={`${flag.key}-status`} style={{ fontWeight: 700, color: flag.enabled ? '#047857' : '#64748b' }}>
+      {flag.enabled ? 'Enabled' : 'Disabled'}
+    </span>,
+    <button
+      key={`${flag.key}-toggle`}
+      style={flag.enabled ? outlineBtn : primaryBtn}
+      disabled={loading}
+      onClick={() => void onToggle(flag, !flag.enabled)}
+    >
+      {flag.enabled ? 'Disable' : 'Enable'}
+    </button>,
+  ]));
+
+  return (
+    <AdminCard title="Feature Flags">
+      <p style={{ margin: '0 0 12px', color: '#475569' }}>
+        Centralized runtime feature switches. These values are stored in the API database and used by both the UI and backend.
+      </p>
+      {featureFlags.length ? (
+        <AdminTable
+          columns={['Feature', 'Description', 'Status', 'Action']}
+          rows={rows}
+        />
+      ) : (
+        <AdminEmptyState
+          title="No feature flags found"
+          description="Seed or migrate feature flags in the API to manage them here."
+        />
+      )}
+    </AdminCard>
   );
 }

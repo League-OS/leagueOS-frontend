@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { SEEDED_USERS } from '@leagueos/config';
 
 type Props = {
   onLogin: (args: { email: string; password: string }) => Promise<void>;
@@ -10,8 +9,6 @@ type Props = {
   subtitle?: string;
   buttonLabel?: string;
   infoMessage?: string | null;
-  initialEmail?: string;
-  initialPassword?: string;
 };
 
 export function LoginView({
@@ -21,11 +18,9 @@ export function LoginView({
   subtitle = 'Sign in to view season leaderboard',
   buttonLabel = 'Sign In',
   infoMessage = null,
-  initialEmail = SEEDED_USERS?.clubAdmin?.email ?? '',
-  initialPassword = SEEDED_USERS?.clubAdmin?.password ?? '',
 }: Props) {
-  const [email, setEmail] = useState(initialEmail);
-  const [password, setPassword] = useState(initialPassword);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -64,6 +59,7 @@ export function LoginView({
             e.preventDefault();
             await onLogin({ email, password });
           }}
+          autoComplete="off"
           style={{ display: 'grid', gap: 12 }}
         >
           <label style={{ display: 'grid', gap: 6 }}>
@@ -73,7 +69,8 @@ export function LoginView({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@example.com"
+              placeholder="Enter your email"
+              autoComplete="off"
               style={inputStyle}
             />
           </label>
@@ -87,11 +84,14 @@ export function LoginView({
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="Enter your password"
+                autoComplete="new-password"
                 style={{ ...inputStyle, paddingRight: 64 }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
                 style={{
                   position: 'absolute',
                   right: 10,
@@ -100,12 +100,27 @@ export function LoginView({
                   border: 0,
                   background: 'transparent',
                   color: '#64748b',
-                  fontSize: 13,
-                  fontWeight: 600,
                   cursor: 'pointer',
+                  width: 28,
+                  height: 28,
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: 0,
                 }}
               >
-                {showPassword ? 'Hide' : 'Show'}
+                {showPassword ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 3L21 21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M10.58 10.58A2 2 0 0 0 12 14a2 2 0 0 0 1.42-.58" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M9.88 5.08A11.84 11.84 0 0 1 12 4.9c4.5 0 8.27 2.61 10 6.35a11.9 11.9 0 0 1-3.11 4.14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M6.11 6.11A11.88 11.88 0 0 0 2 11.25C3.73 14.99 7.5 17.6 12 17.6c1.35 0 2.64-.24 3.82-.67" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke="currentColor" strokeWidth="1.8" />
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                )}
               </button>
             </div>
           </label>
