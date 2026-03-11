@@ -1,70 +1,92 @@
 import { defaultStageRule, isKoStage } from './config';
 import { Metric, SaveRow } from './shared';
-import { editFieldset, field, grid2, grid4, insightCard, labelCol, subCard } from './styles';
+import { editFieldset, field, grid4, insightCard, labelCol, subCard } from './styles';
 import type { FormatConfig, PlanningMetrics, SchedulingModel, StageDef, StageRule, WinCondition } from './types';
 
 type ConfigTabProps = {
   configDirty: boolean;
   saveConfig: () => void;
   configDraft: FormatConfig;
-  formatNameDraft: string;
-  setFormatNameDraft: (value: string) => void;
-  setConfigDirty: (value: boolean) => void;
   updateConfig: (next: Partial<FormatConfig>) => void;
   stageDefs: StageDef[];
   updateStageRule: (stageId: string, patch: Partial<StageRule>) => void;
   planningMetrics: PlanningMetrics;
 };
 
+function schedulingModelDescription(model: SchedulingModel): string {
+  if (model === 'RR') {
+    return 'Round Robin where each entrant plays all others. You can optionally add a knockout phase after RR.';
+  }
+  if (model === 'GROUPS_KO') {
+    return 'Entrants are split into groups first, then top performers from each group advance into knockout rounds.';
+  }
+  if (model === 'MATCH_COUNT_KO') {
+    return 'Each entrant gets a controlled number of matches first, then selected entrants progress into knockout rounds.';
+  }
+  if (model === 'DIRECT_KNOCKOUT') {
+    return 'Direct elimination bracket from the start. Losing a match eliminates the entrant.';
+  }
+  return 'Select a scheduling model to define stage flow and stage-specific match rules.';
+}
+
 export function ConfigTab({
   configDirty,
   saveConfig,
   configDraft,
-  formatNameDraft,
-  setFormatNameDraft,
-  setConfigDirty,
   updateConfig,
   stageDefs,
   updateStageRule,
   planningMetrics,
 }: ConfigTabProps) {
+  const compactGrid2 = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 320px))',
+    gap: 10,
+    justifyContent: 'start',
+  } as const;
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      {!!configDraft.schedulingModel ? (
+        <section style={insightCard}>
+          <strong>Format Insights</strong>
+          <div style={{ ...grid4, marginTop: 8 }}>
+            <Metric label="Entrants" value={String(configDraft.maxTeamsAllowed)} />
+            <Metric label="Estimated Matches" value={String(planningMetrics.matches)} />
+            <Metric label="Estimated Sets" value={String(planningMetrics.sets)} />
+            <Metric label="Estimated Duration (hh:mm)" value={planningMetrics.duration} />
+          </div>
+          {planningMetrics.warnings.length ? (
+            <p style={{ marginBottom: 0, color: '#b45309' }}>{planningMetrics.warnings.join(' · ')}</p>
+          ) : null}
+        </section>
+      ) : null}
+
       <fieldset style={editFieldset}>
         <section style={subCard}>
-          <label style={labelCol}>
-            Format Name <span style={{ color: '#b91c1c' }}>*</span>
-            <input
-              value={formatNameDraft}
-              onChange={(event) => {
-                setFormatNameDraft(event.target.value);
-                setConfigDirty(true);
-              }}
-              placeholder="Format Name"
-              style={field}
-            />
-          </label>
-        </section>
-
-        <section style={subCard}>
           <strong>Scheduling Model</strong>
-          <select
-            value={configDraft.schedulingModel}
-            onChange={(event) => {
-              updateConfig({ schedulingModel: event.target.value as SchedulingModel });
-            }}
-            style={{ ...field, marginTop: 8 }}
-          >
-            <option value="">Select model</option>
-            <option value="RR">RR</option>
-            <option value="GROUPS_KO">GROUPS_KO</option>
-            <option value="MATCH_COUNT_KO">MATCH_COUNT_KO</option>
-            <option value="DIRECT_KNOCKOUT">DIRECT_KNOCKOUT</option>
-          </select>
+          <div style={{ maxWidth: 360, marginTop: 8 }}>
+            <select
+              value={configDraft.schedulingModel}
+              onChange={(event) => {
+                updateConfig({ schedulingModel: event.target.value as SchedulingModel });
+              }}
+              style={field}
+            >
+              <option value="">Select model</option>
+              <option value="RR">RR</option>
+              <option value="GROUPS_KO">GROUPS_KO</option>
+              <option value="MATCH_COUNT_KO">MATCH_COUNT_KO</option>
+              <option value="DIRECT_KNOCKOUT">DIRECT_KNOCKOUT</option>
+            </select>
+          </div>
+          <p style={{ margin: '8px 0 0', color: '#52605b', maxWidth: 760 }}>
+            {schedulingModelDescription(configDraft.schedulingModel)}
+          </p>
         </section>
 
         <section style={subCard}>
-          <div style={grid2}>
+          <div style={compactGrid2}>
             <label style={labelCol}>
               Max Number of Teams Allowed
               <input
@@ -94,7 +116,7 @@ export function ConfigTab({
 
         {configDraft.schedulingModel === 'RR' ? (
           <section style={subCard}>
-            <div style={grid2}>
+            <div style={compactGrid2}>
               <label style={labelCol}>
                 RR Type
                 <select
@@ -123,25 +145,27 @@ export function ConfigTab({
               </label>
             </div>
             {configDraft.rrIncludeKo === 'yes' ? (
-              <label style={labelCol}>
-                Teams Advancing to KO
-                <input
-                  type="number"
-                  min={2}
-                  value={configDraft.rrTeamsToKo}
-                  onChange={(event) => {
-                    updateConfig({ rrTeamsToKo: Number(event.target.value) || 2 });
-                  }}
-                  style={field}
-                />
-              </label>
+              <div style={{ marginTop: 8, maxWidth: 320 }}>
+                <label style={labelCol}>
+                  Teams Advancing to KO
+                  <input
+                    type="number"
+                    min={2}
+                    value={configDraft.rrTeamsToKo}
+                    onChange={(event) => {
+                      updateConfig({ rrTeamsToKo: Number(event.target.value) || 2 });
+                    }}
+                    style={field}
+                  />
+                </label>
+              </div>
             ) : null}
           </section>
         ) : null}
 
         {configDraft.schedulingModel === 'GROUPS_KO' ? (
           <section style={subCard}>
-            <div style={grid2}>
+            <div style={compactGrid2}>
               <label style={labelCol}>
                 Group Count
                 <input
@@ -172,7 +196,7 @@ export function ConfigTab({
 
         {configDraft.schedulingModel === 'MATCH_COUNT_KO' ? (
           <section style={subCard}>
-            <div style={grid2}>
+            <div style={compactGrid2}>
               <label style={labelCol}>
                 Matches Per Entrant
                 <input
@@ -198,24 +222,6 @@ export function ConfigTab({
                 />
               </label>
             </div>
-          </section>
-        ) : null}
-
-        {configDraft.schedulingModel === 'DIRECT_KNOCKOUT' ? (
-          <section style={subCard}>
-            <label style={labelCol}>
-              Seed Source
-              <select
-                value={configDraft.seedSource}
-                onChange={(event) => {
-                  updateConfig({ seedSource: event.target.value as 'ELO' | 'MANUAL' });
-                }}
-                style={field}
-              >
-                <option value="ELO">ELO</option>
-                <option value="MANUAL">MANUAL</option>
-              </select>
-            </label>
           </section>
         ) : null}
 
@@ -340,22 +346,8 @@ export function ConfigTab({
             </div>
           </section>
         ) : null}
-      </fieldset>
 
-      {!!configDraft.schedulingModel ? (
-        <section style={insightCard}>
-          <strong>Format Insights</strong>
-          <div style={{ ...grid4, marginTop: 8 }}>
-            <Metric label="Entrants" value={String(configDraft.maxTeamsAllowed)} />
-            <Metric label="Estimated Matches" value={String(planningMetrics.matches)} />
-            <Metric label="Estimated Sets" value={String(planningMetrics.sets)} />
-            <Metric label="Estimated Duration (hh:mm)" value={planningMetrics.duration} />
-          </div>
-          {planningMetrics.warnings.length ? (
-            <p style={{ marginBottom: 0, color: '#b45309' }}>{planningMetrics.warnings.join(' · ')}</p>
-          ) : null}
-        </section>
-      ) : null}
+      </fieldset>
 
       <SaveRow enabled={configDirty} onSave={saveConfig} />
     </div>

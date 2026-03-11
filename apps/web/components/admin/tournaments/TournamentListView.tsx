@@ -1,5 +1,3 @@
-import type { Season } from '@leagueos/schemas';
-
 import { card, field, labelCol, outlineBtn, primaryBtn, saveEnabledStyle, td, th } from './styles';
 import type { TournamentRecord } from './types';
 
@@ -10,15 +8,9 @@ type TournamentListViewProps = {
   setTournamentName: (value: string) => void;
   tournamentTimezone: string;
   setTournamentTimezone: (value: string) => void;
-  tournamentSeasonId: string;
-  setTournamentSeasonId: (value: string) => void;
   tournamentAdminNotes: string;
   setTournamentAdminNotes: (value: string) => void;
   timezoneOptions: string[];
-  clubSeasons: Season[];
-  seasonLoading: boolean;
-  seasonSource: 'api' | 'fallback';
-  seasonLoadError: string;
   tournamentFormError: string;
   setTournamentFormError: (value: string) => void;
   createTournament: () => void;
@@ -33,15 +25,9 @@ export function TournamentListView({
   setTournamentName,
   tournamentTimezone,
   setTournamentTimezone,
-  tournamentSeasonId,
-  setTournamentSeasonId,
   tournamentAdminNotes,
   setTournamentAdminNotes,
   timezoneOptions,
-  clubSeasons,
-  seasonLoading,
-  seasonSource,
-  seasonLoadError,
   tournamentFormError,
   setTournamentFormError,
   createTournament,
@@ -72,28 +58,6 @@ export function TournamentListView({
                 <option key={zone} value={zone}>{zone}</option>
               ))}
             </select>
-          </label>
-          <label style={labelCol}>
-            Season
-            <select
-              value={tournamentSeasonId}
-              onChange={(event) => setTournamentSeasonId(event.target.value)}
-              style={field}
-              disabled={seasonLoading || !clubSeasons.length}
-            >
-              {!clubSeasons.length ? (
-                <option value="">{seasonLoading ? 'Loading seasons...' : 'No club seasons available'}</option>
-              ) : null}
-              {clubSeasons.map((season) => (
-                <option key={season.id} value={String(season.id)}>{season.name}</option>
-              ))}
-            </select>
-            {!seasonLoading ? (
-              <span style={{ color: '#64748b' }}>
-                {seasonSource === 'api' ? 'Loaded from club seasons.' : 'Using local fallback seasons (log in to Admin for live club seasons).'}
-              </span>
-            ) : null}
-            {seasonLoadError ? <span style={{ color: '#b91c1c' }}>{seasonLoadError}</span> : null}
           </label>
           <label style={labelCol}>
             Admin Notes
@@ -132,7 +96,7 @@ export function TournamentListView({
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
           <thead>
             <tr>
-              {['Tournament', 'Season', 'Timezone', 'Status', 'Formats', 'Actions'].map((header) => (
+              {['Tournament', 'Timezone', 'Status', 'Formats', 'Actions'].map((header) => (
                 <th key={header} style={th}>{header}</th>
               ))}
             </tr>
@@ -141,7 +105,6 @@ export function TournamentListView({
             {tournaments.map((item) => (
               <tr key={item.id}>
                 <td style={td}>{item.name}</td>
-                <td style={td}>{item.seasonName || '-'}</td>
                 <td style={td}>{item.timezone}</td>
                 <td style={td}>{item.status}</td>
                 <td style={td}>{item.formats.length}</td>

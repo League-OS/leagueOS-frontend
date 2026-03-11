@@ -70,12 +70,12 @@ export const defaultFormatConfig = (): FormatConfig => ({
   groupKoTeamsPerGroup: 2,
   matchCountPerEntrant: 4,
   matchCountKoTeamsToKo: 4,
-  seedSource: 'ELO',
   stageRules: {},
 });
 
 export const defaultPoolConfig = (): PoolConfig => ({
   groupCount: 2,
+  seasonId: '',
   poolPlayers: [],
   generatedTeams: [],
   groups: [],

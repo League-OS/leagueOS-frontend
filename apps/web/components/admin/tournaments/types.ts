@@ -27,11 +27,16 @@ export type FormatConfig = {
   groupKoTeamsPerGroup: number;
   matchCountPerEntrant: number;
   matchCountKoTeamsToKo: number;
-  seedSource: 'ELO' | 'MANUAL';
   stageRules: Record<string, StageRule>;
 };
 
-export type PoolPlayer = { playerId: string; registeredAt: string; regRoute?: 'ADMIN' | 'SELF' };
+export type PoolPlayer = {
+  playerId: string;
+  registeredAt: string;
+  regRoute?: 'ADMIN' | 'SELF';
+  seededElo?: number;
+  eloSeasonId?: string;
+};
 export type GeneratedTeam = { id: string; name: string; playerIds: string[]; elo: number };
 export type Group = { id: string; name: string };
 
@@ -50,6 +55,7 @@ export type CourtConfig = {
 
 export type PoolConfig = {
   groupCount: number;
+  seasonId: string;
   poolPlayers: PoolPlayer[];
   generatedTeams: GeneratedTeam[];
   groups: Group[];

@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 
 import { AddCourtModal } from './tournaments/AddCourtModal';
 import { AddFormatPanel } from './tournaments/AddFormatPanel';
@@ -24,6 +24,11 @@ import { useTournamentWorkspaceState } from './tournaments/useTournamentWorkspac
 
 export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean }) {
   const state = useTournamentWorkspaceState();
+  const tournamentSignupLink = state.activeTournamentId
+    ? `${
+      typeof window !== 'undefined' ? window.location.origin : ''
+    }/tournaments/${state.activeTournamentId}?signup=one_click`
+    : '';
   const topSaveByTab = state.activeTab === 'config'
     ? { enabled: state.configDirty, onSave: state.saveConfig }
     : state.activeTab === 'pool'
@@ -46,6 +51,17 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
   const innerStyle: CSSProperties = embedded
     ? { display: 'grid', gap: 10 }
     : { maxWidth: 1360, margin: '0 auto', display: 'grid', gap: 10 };
+
+  useEffect(() => {
+    const onSidebarReselect = () => {
+      if (!state.activeTournamentId) return;
+      state.closeTournament();
+    };
+    window.addEventListener('leagueos:tournaments:sidebar-reselect', onSidebarReselect);
+    return () => {
+      window.removeEventListener('leagueos:tournaments:sidebar-reselect', onSidebarReselect);
+    };
+  }, [state.activeTournamentId, state.closeTournament]);
 
   return (
     <main style={outerStyle}>
@@ -72,15 +88,9 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
             setTournamentName={state.setTournamentName}
             tournamentTimezone={state.tournamentTimezone}
             setTournamentTimezone={state.setTournamentTimezone}
-            tournamentSeasonId={state.tournamentSeasonId}
-            setTournamentSeasonId={state.setTournamentSeasonId}
             tournamentAdminNotes={state.tournamentAdminNotes}
             setTournamentAdminNotes={state.setTournamentAdminNotes}
             timezoneOptions={state.timezoneOptions}
-            clubSeasons={state.clubSeasons}
-            seasonLoading={state.seasonLoading}
-            seasonSource={state.seasonSource}
-            seasonLoadError={state.seasonLoadError}
             tournamentFormError={state.tournamentFormError}
             setTournamentFormError={state.setTournamentFormError}
             createTournament={state.createTournament}
@@ -99,6 +109,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 requestEditFormat={state.requestEditFormat}
                 requestDeleteFormat={state.requestDeleteFormat}
                 openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
+                tournamentSignupLink={tournamentSignupLink}
               />
             </div>
 
@@ -140,9 +151,6 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       configDirty={state.configDirty}
                       saveConfig={state.saveConfig}
                       configDraft={state.configDraft}
-                      formatNameDraft={state.formatNameDraft}
-                      setFormatNameDraft={state.setFormatNameDraft}
-                      setConfigDirty={state.setConfigDirty}
                       updateConfig={state.updateConfig}
                       stageDefs={state.stageDefs}
                       updateStageRule={state.updateStageRule}
@@ -170,6 +178,11 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       unitLabel={state.unitLabel}
                       unitLabelPlural={state.unitLabelPlural}
                       clubPlayers={state.clubPlayersForActiveFormat}
+                      clubSeasons={state.clubSeasons}
+                      seasonLoading={state.seasonLoading}
+                      seasonSource={state.seasonSource}
+                      seasonLoadError={state.seasonLoadError}
+                      setPoolSeasonId={state.setPoolSeasonId}
                       poolPlayersOpen={state.poolPlayersOpen}
                       setPoolPlayersOpen={state.setPoolPlayersOpen}
                       poolGroupsOpen={state.poolGroupsOpen}

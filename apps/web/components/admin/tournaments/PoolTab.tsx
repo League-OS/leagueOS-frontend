@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { Season } from '@leagueos/schemas';
 
 import { SaveRow } from './shared';
 import { collapseBtn, field, grid2, labelCol, outlineBtn, pill, subCard, td, th } from './styles';
@@ -23,6 +24,11 @@ type PoolTabProps = {
   unitLabel: string;
   unitLabelPlural: string;
   clubPlayers: ClubPlayer[];
+  clubSeasons: Season[];
+  seasonLoading: boolean;
+  seasonSource: 'api' | 'fallback';
+  seasonLoadError: string;
+  setPoolSeasonId: (seasonId: string) => void;
   poolPlayersOpen: boolean;
   setPoolPlayersOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   poolGroupsOpen: boolean;
@@ -48,6 +54,11 @@ export function PoolTab({
   unitLabel,
   unitLabelPlural,
   clubPlayers,
+  clubSeasons,
+  seasonLoading,
+  seasonSource,
+  seasonLoadError,
+  setPoolSeasonId,
   poolPlayersOpen,
   setPoolPlayersOpen,
   poolGroupsOpen,
@@ -58,9 +69,44 @@ export function PoolTab({
   const canGenerateGroups = poolDraft.pairsValidated;
   const [showGenerateGroupsTooltip, setShowGenerateGroupsTooltip] = useState(false);
   const playersById = new Map(clubPlayers.map((player) => [player.id, player]));
+  const poolPlayersById = new Map(poolDraft.poolPlayers.map((entry) => [entry.playerId, entry]));
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      <section style={subCard}>
+        <div style={{ ...grid2, alignItems: 'end' }}>
+          <label style={labelCol}>
+            ELO Source Season
+            <select
+              value={poolDraft.seasonId}
+              onChange={(event) => setPoolSeasonId(event.target.value)}
+              style={field}
+              disabled={seasonLoading || !clubSeasons.length}
+            >
+              {!clubSeasons.length ? (
+                <option value="">{seasonLoading ? 'Loading seasons...' : 'No club seasons available'}</option>
+              ) : null}
+              {clubSeasons.map((season) => (
+                <option key={season.id} value={String(season.id)}>{season.name}</option>
+              ))}
+            </select>
+            {!seasonLoading ? (
+              <span style={{ color: '#64748b' }}>
+                {seasonSource === 'api'
+                  ? 'ELO snapshots are taken from this season at player add/signup time.'
+                  : 'Using fallback seasons. ELO snapshots are still one-time at player add/signup.'}
+              </span>
+            ) : null}
+            {seasonLoadError ? <span style={{ color: '#b91c1c' }}>{seasonLoadError}</span> : null}
+            {poolDraft.poolPlayers.length ? (
+              <span style={{ color: '#64748b' }}>
+                Changing season affects only players added after this change.
+              </span>
+            ) : null}
+          </label>
+        </div>
+      </section>
+
       <section style={subCard}>
         <button type="button" style={collapseBtn} onClick={() => setPoolPlayersOpen((value) => !value)}>
           <strong>Pool Players ({poolDraft.poolPlayers.length})</strong>
@@ -122,7 +168,7 @@ export function PoolTab({
                         <td style={td}>{player.phone}</td>
                         <td style={td}>{poolPlayer.registeredAt}</td>
                         <td style={td}>{poolPlayer.regRoute || 'ADMIN'}</td>
-                        <td style={td}>{player.elo}</td>
+                        <td style={td}>{poolPlayer.seededElo ?? player.elo}</td>
                         <td style={td}>
                           <button
                             style={outlineBtn}
@@ -208,6 +254,8 @@ export function PoolTab({
                 const player2Id = team.playerIds[1] || '';
                 const player1 = playersById.get(player1Id);
                 const player2 = playersById.get(player2Id);
+                const player1Elo = poolPlayersById.get(player1Id)?.seededElo ?? player1?.elo ?? 0;
+                const player2Elo = poolPlayersById.get(player2Id)?.seededElo ?? player2?.elo ?? 0;
                 return (
                   <tr key={team.id}>
                     <td style={td}>{index + 1}</td>
@@ -223,7 +271,7 @@ export function PoolTab({
                           if (!player) return null;
                           return (
                             <option key={player.id} value={player.id}>
-                              {player.name} ({player.elo})
+                              {player.name} ({poolPlayer.seededElo ?? player.elo})
                             </option>
                           );
                         })}
@@ -241,14 +289,14 @@ export function PoolTab({
                           if (!player) return null;
                           return (
                             <option key={player.id} value={player.id}>
-                              {player.name} ({player.elo})
+                              {player.name} ({poolPlayer.seededElo ?? player.elo})
                             </option>
                           );
                         })}
                       </select>
                     </td>
                     <td style={td}>
-                      {Math.round((((player1?.elo || 0) + (player2?.elo || 0)) / 2) || 0)}
+                      {Math.round(((player1Elo + player2Elo) / 2) || 0)}
                     </td>
                   </tr>
                 );

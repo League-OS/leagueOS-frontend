@@ -110,7 +110,6 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     matchCountPerEntrant: row.matches_per_team || config.matchCountPerEntrant,
     groupCount: row.group_count || config.groupCount,
     groupKoTeamsPerGroup: row.group_ko_teams_per_group || config.groupKoTeamsPerGroup,
-    seedSource: row.seed_source,
   };
   const mergedPool: PoolConfig = {
     ...(persistedPool ?? defaultPoolConfig()),
@@ -182,10 +181,14 @@ function normalizePoolFromConfigJson(value: unknown): PoolConfig | null {
       const playerId = typeof item.playerId === 'string' ? item.playerId : String(item.playerId ?? '');
       if (!playerId) return null;
       const regRoute: 'ADMIN' | 'SELF' = item.regRoute === 'SELF' ? 'SELF' : 'ADMIN';
+      const seededEloRaw = Number(item.seededElo);
+      const seededElo = Number.isFinite(seededEloRaw) ? seededEloRaw : undefined;
       return {
         playerId,
         registeredAt: typeof item.registeredAt === 'string' ? item.registeredAt : '',
         regRoute,
+        seededElo,
+        eloSeasonId: typeof item.eloSeasonId === 'string' ? item.eloSeasonId : '',
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);
@@ -229,12 +232,14 @@ function normalizePoolFromConfigJson(value: unknown): PoolConfig | null {
 
   const groupCountRaw = Number(obj.groupCount);
   const groupCount = Number.isInteger(groupCountRaw) && groupCountRaw >= 1 ? groupCountRaw : 2;
+  const seasonId = typeof obj.seasonId === 'string' ? obj.seasonId : '';
   const teamsGenerated = Boolean(obj.teamsGenerated);
   const pairsValidated = Boolean(obj.pairsValidated || teamsGenerated);
   const pairValidationMessage = typeof obj.pairValidationMessage === 'string' ? obj.pairValidationMessage : '';
 
   return {
     groupCount,
+    seasonId,
     poolPlayers,
     generatedTeams,
     groups,
@@ -304,7 +309,6 @@ function extractAllowedCourtIds(assignments: Record<string, string[]>): number[]
 export function useTournamentWorkspaceState() {
   const [tournamentName, setTournamentName] = useState('');
   const [tournamentTimezone, setTournamentTimezone] = useState('America/Vancouver');
-  const [tournamentSeasonId, setTournamentSeasonId] = useState('');
   const [tournamentAdminNotes, setTournamentAdminNotes] = useState('');
   const [clubSeasons, setClubSeasons] = useState(fallbackSeasons);
   const [seasonLoading, setSeasonLoading] = useState(false);
@@ -371,11 +375,6 @@ export function useTournamentWorkspaceState() {
   }, [configDraft]);
   const timezoneOptions = useMemo(() => getTimezoneOptions(), []);
 
-  const selectedSeasonName = useMemo(() => {
-    const selected = clubSeasons.find((season) => String(season.id) === tournamentSeasonId);
-    return selected?.name || '';
-  }, [clubSeasons, tournamentSeasonId]);
-
   const activeTournament = useMemo(
     () => tournaments.find((item) => item.id === activeTournamentId) || null,
     [tournaments, activeTournamentId],
@@ -429,9 +428,6 @@ export function useTournamentWorkspaceState() {
         if (!auth) {
           setClubSeasons(fallbackSeasons);
           setSeasonSource('fallback');
-          if (fallbackSeasons.length && !tournamentSeasonId) {
-            setTournamentSeasonId(String(fallbackSeasons[0].id));
-          }
           return;
         }
 
@@ -440,21 +436,12 @@ export function useTournamentWorkspaceState() {
 
         setClubSeasons(seasons.length ? seasons : fallbackSeasons);
         setSeasonSource(seasons.length ? 'api' : 'fallback');
-        if (seasons.length && !tournamentSeasonId) {
-          setTournamentSeasonId(String(seasons[0].id));
-        }
-        if (!seasons.length && fallbackSeasons.length && !tournamentSeasonId) {
-          setTournamentSeasonId(String(fallbackSeasons[0].id));
-        }
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : 'Failed to load seasons.';
         setSeasonLoadError(`Live season load failed (${message}). Using local list.`);
         setClubSeasons(fallbackSeasons);
         setSeasonSource('fallback');
-        if (fallbackSeasons.length && !tournamentSeasonId) {
-          setTournamentSeasonId(String(fallbackSeasons[0].id));
-        }
       } finally {
         if (!cancelled) setSeasonLoading(false);
       }
@@ -465,6 +452,14 @@ export function useTournamentWorkspaceState() {
       cancelled = true;
     };
   }, [client]);
+
+  useEffect(() => {
+    if (!poolDraft || poolDraft.seasonId || !clubSeasons.length) return;
+    setPoolDraft((prev) => {
+      if (!prev || prev.seasonId) return prev;
+      return { ...prev, seasonId: String(clubSeasons[0].id) };
+    });
+  }, [poolDraft, clubSeasons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -561,12 +556,17 @@ export function useTournamentWorkspaceState() {
     resetDirtyFlags();
   }
 
+  function defaultPoolSeasonId(): string {
+    return clubSeasons.length ? String(clubSeasons[0].id) : '';
+  }
+
   function loadDrafts(format: Format) {
     setFormatNameDraft(format.name);
     setConfigDraft(clone(format.config));
     const nextPool = {
       ...clone(format.pool),
       groupCount: format.config.groupCount,
+      seasonId: format.pool.seasonId || defaultPoolSeasonId(),
     };
     const hasGeneratedPairsOrGroups = nextPool.generatedTeams.length > 0 || nextPool.teamsGenerated;
     setPoolDraft(nextPool);
@@ -687,8 +687,8 @@ export function useTournamentWorkspaceState() {
         id,
         name,
         timezone: tournamentTimezone,
-        seasonId: tournamentSeasonId,
-        seasonName: selectedSeasonName || 'No season',
+        seasonId: '',
+        seasonName: 'No season',
         adminNotes: tournamentAdminNotes.trim(),
         status: 'Draft',
         formats: [],
@@ -702,10 +702,9 @@ export function useTournamentWorkspaceState() {
       const created = await client.createTournament(auth.token, auth.clubId, {
         name,
         timezone: tournamentTimezone,
-        season_id: tournamentSeasonId ? Number.parseInt(tournamentSeasonId, 10) : undefined,
         admin_notes: tournamentAdminNotes.trim() || undefined,
       });
-      const seasonName = clubSeasons.find((season) => season.id === created.season_id)?.name ?? selectedSeasonName;
+      const seasonName = clubSeasons.find((season) => season.id === created.season_id)?.name ?? '';
       applyCreatedTournament(mapApiTournamentToRecord(created, seasonName));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create tournament.';
@@ -754,12 +753,15 @@ export function useTournamentWorkspaceState() {
         const parsedFormatId = Number.parseInt(editingTarget.id, 10);
         if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
           try {
-            const updated = await client.updateTournamentFormat(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
+            await client.updateTournamentFormat(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
               name: formDraft.name.trim(),
               format_type: formDraft.type,
               registration_open_at: toUtcIsoFromInput(formDraft.regOpen),
               registration_close_at: toUtcIsoFromInput(formDraft.regClose),
               auto_registration_close: formDraft.autoClose,
+            });
+            const updated = await client.updateTournamentFormat(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
+              seed_source: 'ELO',
             });
             const mapped = mapApiFormatToLocal(updated);
             setFormats((prev) => {
@@ -830,7 +832,16 @@ export function useTournamentWorkspaceState() {
             registration_close_at: toUtcIsoFromInput(formDraft.regClose),
             auto_registration_close: formDraft.autoClose,
           });
-          const next = mapApiFormatToLocal(created);
+          const enforced = await client.updateTournamentFormat(
+            auth.token,
+            auth.clubId,
+            parsedTournamentId,
+            created.id,
+            {
+              seed_source: 'ELO',
+            },
+          );
+          const next = mapApiFormatToLocal(enforced);
           setFormats((prev) => {
             const updated = prev.some((format) => format.id === next.id)
               ? prev.map((format) => (format.id === next.id ? next : format))
@@ -1047,7 +1058,7 @@ export function useTournamentWorkspaceState() {
               matches_per_team: merged.matchCountPerEntrant,
               group_count: merged.groupCount,
               group_ko_teams_per_group: merged.groupKoTeamsPerGroup,
-              seed_source: merged.seedSource,
+              seed_source: 'ELO',
               scheduling_model: backendSchedulingModel,
               config_json: mergedConfigJson,
             },
@@ -1545,6 +1556,20 @@ export function useTournamentWorkspaceState() {
     return { groups, assignments };
   }
 
+  function buildPoolPlayerLookup(pool: PoolConfig, basePlayers: ClubPlayer[]): Map<string, ClubPlayer> {
+    const base = new Map(basePlayers.map((player) => [player.id, player]));
+    const lookup = new Map<string, ClubPlayer>();
+    pool.poolPlayers.forEach((entry) => {
+      const player = base.get(entry.playerId);
+      if (!player) return;
+      lookup.set(entry.playerId, {
+        ...player,
+        elo: typeof entry.seededElo === 'number' ? entry.seededElo : player.elo,
+      });
+    });
+    return lookup;
+  }
+
   function buildSinglesEntries(
     poolPlayers: PoolConfig['poolPlayers'],
     playersById: Map<string, ClubPlayer>,
@@ -1577,17 +1602,32 @@ export function useTournamentWorkspaceState() {
     };
   }
 
+  function setPoolSeasonId(seasonId: string) {
+    if (!poolDraft) return;
+    if (poolDraft.seasonId === seasonId) return;
+    setPoolDraft({
+      ...poolDraft,
+      seasonId,
+    });
+    setPoolDirty(true);
+  }
+
   function addPlayerToPool() {
     if (!poolDraft || !addPlayerId || !activeFormat) return;
     if (poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated) return;
     if (poolDraft.poolPlayers.some((entry) => entry.playerId === addPlayerId)) return;
 
     const next = clone(poolDraft);
+    const player = clubPlayersForActiveFormat.find((item) => item.id === addPlayerId);
+    const resolvedSeasonId = next.seasonId || defaultPoolSeasonId();
     next.poolPlayers.push({
       playerId: addPlayerId,
       registeredAt: new Date().toISOString().slice(0, 10),
       regRoute: 'ADMIN',
+      seededElo: player?.elo,
+      eloSeasonId: resolvedSeasonId,
     });
+    if (!next.seasonId) next.seasonId = resolvedSeasonId;
 
     setPoolDraft(next);
     setAddPlayerId('');
@@ -1615,7 +1655,7 @@ export function useTournamentWorkspaceState() {
       currentTeam.playerIds[1] || '',
     ];
     playerIds[playerIndex] = playerId;
-    const playersById = new Map(clubPlayersForActiveFormat.map((player) => [player.id, player]));
+    const playersById = buildPoolPlayerLookup(next, clubPlayersForActiveFormat);
     next.generatedTeams[teamIdx] = hydrateTeam(teamId, playerIds, playersById);
     next.pairsValidated = false;
     next.pairValidationMessage = '';
@@ -1635,7 +1675,7 @@ export function useTournamentWorkspaceState() {
     const counts = new Map<string, number>();
     const playerToRows = new Map<string, number[]>();
     const rowIssues = new Set<number>();
-    const playersById = new Map(clubPlayersForActiveFormat.map((player) => [player.id, player]));
+    const playersById = buildPoolPlayerLookup(next, clubPlayersForActiveFormat);
 
     next.generatedTeams.forEach((team, index) => {
       const row = index + 1;
@@ -1781,7 +1821,7 @@ export function useTournamentWorkspaceState() {
         }
       }
 
-      const playersById = new Map(clubPlayersForActiveFormat.map((player) => [player.id, player]));
+      const playersById = buildPoolPlayerLookup(poolDraft, clubPlayersForActiveFormat);
       const players = poolDraft.poolPlayers
         .map((entry) => playersById.get(entry.playerId))
         .filter(Boolean) as ClubPlayer[];
@@ -1883,8 +1923,6 @@ export function useTournamentWorkspaceState() {
     setTournamentName,
     tournamentTimezone,
     setTournamentTimezone,
-    tournamentSeasonId,
-    setTournamentSeasonId,
     tournamentAdminNotes,
     setTournamentAdminNotes,
     clubSeasons,
@@ -1931,6 +1969,7 @@ export function useTournamentWorkspaceState() {
     setConfigDirty,
     poolDirty,
     setPoolDirty,
+    setPoolSeasonId,
     scheduleDirty,
     setScheduleDirty,
     courtDirty,
