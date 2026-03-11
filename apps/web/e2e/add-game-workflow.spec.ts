@@ -307,11 +307,10 @@ test('TC-12: entering a future time shows "Time cannot be in the future"', async
     midnight.setHours(0, 0, 1, 0); // 00:00:01 today
     const OrigDate = globalThis.Date;
     class MockDate extends OrigDate {
-      constructor(...args: ConstructorParameters<typeof OrigDate>) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (args.length === 0) super(midnight.getTime() as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        else super(...(args as any));
+      constructor(...args: unknown[]) {
+        if (args.length === 0) super(midnight.getTime());
+        // @ts-expect-error -- variadic Date constructor overloads
+        else super(...args);
       }
       static override now() { return midnight.getTime(); }
     }
