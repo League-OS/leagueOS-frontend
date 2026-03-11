@@ -664,6 +664,15 @@ export class LeagueOsApiClient {
     return data.map((d) => leaderboardEntrySchema.parse(d));
   }
 
+  async seasonPlayerLeaderboard(token: string, clubId: number, seasonId: number): Promise<LeaderboardEntry[]> {
+    const data = await this.request<unknown[]>('/leaderboards/players', {
+      token,
+      clubId,
+      query: { club_id: clubId, season_id: seasonId },
+    });
+    return data.map((d) => leaderboardEntrySchema.parse(d));
+  }
+
   async finalizeSession(
     token: string,
     clubId: number,
@@ -831,7 +840,7 @@ export class LeagueOsApiClient {
     }
 
     const targetSession = finalized[0];
-    const leaderboard = await this.sessionLeaderboard(token, clubId, targetSession.id);
+    const leaderboard = await this.seasonPlayerLeaderboard(token, clubId, seasonId);
     return { session: targetSession, leaderboard };
   }
 }
