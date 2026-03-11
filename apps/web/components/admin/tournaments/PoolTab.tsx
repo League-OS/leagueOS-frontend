@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { SaveRow } from './shared';
 import { collapseBtn, field, grid2, labelCol, outlineBtn, pill, subCard, td, th } from './styles';
 import type { ClubPlayer, PoolConfig } from './types';
@@ -54,6 +56,7 @@ export function PoolTab({
   const poolLocked = poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated;
   const hasPendingPairs = !isSinglesFormat && poolDraft.generatedTeams.length > 0 && !poolDraft.teamsGenerated;
   const canGenerateGroups = poolDraft.pairsValidated;
+  const [showGenerateGroupsTooltip, setShowGenerateGroupsTooltip] = useState(false);
   const playersById = new Map(clubPlayers.map((player) => [player.id, player]));
 
   return (
@@ -151,7 +154,13 @@ export function PoolTab({
             <strong>Generated Pairs</strong>
             <div style={{ display: 'flex', gap: 8 }}>
               <button style={outlineBtn} onClick={validateGeneratedPairs}>Validate Pairs</button>
-              <span title={canGenerateGroups ? '' : 'validate pairs first'}>
+              <span
+                style={{ position: 'relative', display: 'inline-block' }}
+                onMouseEnter={() => {
+                  if (!canGenerateGroups) setShowGenerateGroupsTooltip(true);
+                }}
+                onMouseLeave={() => setShowGenerateGroupsTooltip(false)}
+              >
                 <button
                   style={canGenerateGroups ? outlineBtn : { ...outlineBtn, background: '#eef2ef', color: '#8b948f', cursor: 'not-allowed' }}
                   disabled={!canGenerateGroups}
@@ -159,6 +168,26 @@ export function PoolTab({
                 >
                   Generate Groups
                 </button>
+                {!canGenerateGroups && showGenerateGroupsTooltip ? (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 8px)',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      whiteSpace: 'nowrap',
+                      background: '#1f2937',
+                      color: '#fff',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      fontSize: 11,
+                      zIndex: 20,
+                      boxShadow: '0 6px 12px rgba(15, 23, 42, 0.2)',
+                    }}
+                  >
+                    validate pairs first
+                  </span>
+                ) : null}
               </span>
             </div>
           </div>

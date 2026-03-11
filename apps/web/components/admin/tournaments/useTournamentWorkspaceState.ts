@@ -564,10 +564,14 @@ export function useTournamentWorkspaceState() {
   function loadDrafts(format: Format) {
     setFormatNameDraft(format.name);
     setConfigDraft(clone(format.config));
-    setPoolDraft({
+    const nextPool = {
       ...clone(format.pool),
       groupCount: format.config.groupCount,
-    });
+    };
+    const hasGeneratedPairsOrGroups = nextPool.generatedTeams.length > 0 || nextPool.teamsGenerated;
+    setPoolDraft(nextPool);
+    setPoolPlayersOpen(!hasGeneratedPairsOrGroups);
+    setPoolGroupsOpen(true);
     setScheduleDraft(clone(format.courtAssignments));
     setCourtConfigDraft(clone(format.courtConfig || defaultCourtConfig()));
     setBracketMatches([]);
@@ -1682,6 +1686,7 @@ export function useTournamentWorkspaceState() {
             pairsValidated: false,
             pairValidationMessage: '',
           });
+          setPoolPlayersOpen(false);
           setPoolDirty(true);
           return;
         } catch (error) {
@@ -1729,6 +1734,7 @@ export function useTournamentWorkspaceState() {
           pairsValidated: false,
           pairValidationMessage: '',
         });
+        setPoolPlayersOpen(false);
         setPoolDirty(true);
         return;
       }
@@ -1762,6 +1768,7 @@ export function useTournamentWorkspaceState() {
       pairsValidated: false,
       pairValidationMessage: '',
     });
+    setPoolPlayersOpen(true);
     setPoolDirty(true);
   }
 
