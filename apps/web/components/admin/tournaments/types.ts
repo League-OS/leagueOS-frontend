@@ -55,6 +55,8 @@ export type PoolConfig = {
   groups: Group[];
   assignments: Record<string, string[]>;
   teamsGenerated: boolean;
+  pairsValidated: boolean;
+  pairValidationMessage: string;
 };
 
 export type Format = {

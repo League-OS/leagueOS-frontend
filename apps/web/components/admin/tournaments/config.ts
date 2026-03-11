@@ -81,6 +81,8 @@ export const defaultPoolConfig = (): PoolConfig => ({
   groups: [],
   assignments: {},
   teamsGenerated: false,
+  pairsValidated: false,
+  pairValidationMessage: '',
 });
 
 export const defaultCourtConfig = (): CourtConfig => ({

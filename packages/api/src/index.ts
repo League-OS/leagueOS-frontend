@@ -737,6 +737,7 @@ export class LeagueOsApiClient {
     formatInstanceId: number,
     payload: Partial<{
       name: string;
+      format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
       registration_open_at: string;
       registration_close_at: string;
       auto_registration_close: boolean;

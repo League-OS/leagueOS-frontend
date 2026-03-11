@@ -6,11 +6,11 @@ import { AddCourtModal } from './tournaments/AddCourtModal';
 import { AddFormatPanel } from './tournaments/AddFormatPanel';
 import { ConfigTab } from './tournaments/ConfigTab';
 import { CourtsTab } from './tournaments/CourtsTab';
+import { FormatDirectoryPanel } from './tournaments/FormatDirectoryPanel';
 import { FormatTabs } from './tournaments/FormatTabs';
 import { PoolTab } from './tournaments/PoolTab';
 import { ScheduleTab } from './tournaments/ScheduleTab';
 import { TournamentListView } from './tournaments/TournamentListView';
-import { TournamentSidebar } from './tournaments/TournamentSidebar';
 import {
   bodyFontStack,
   card,
@@ -80,31 +80,32 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
             openTournament={state.openTournament}
           />
         ) : (
-          <section style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+          <section style={{ display: 'grid', gap: 10, alignItems: 'start' }}>
             <div style={revealStyle(state.mounted, 90)}>
-              <TournamentSidebar
+              <FormatDirectoryPanel
                 activeTournament={state.activeTournament}
-                tournamentTimezone={state.tournamentTimezone}
                 formats={state.formats}
                 activeFormatId={state.activeFormatId}
-                requestShowAddFormat={state.requestShowAddFormat}
-                openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
                 closeTournament={state.closeTournament}
+                requestShowAddFormat={state.requestShowAddFormat}
+                requestEditFormat={state.requestEditFormat}
+                openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
               />
             </div>
 
             <section style={{ ...card, ...revealStyle(state.mounted, 170) }}>
               {state.showAddFormat ? (
                 <AddFormatPanel
+                  mode={state.editingFormatId ? 'edit' : 'create'}
                   formDraft={state.formDraft}
                   setFormDraft={state.setFormDraft}
                   formatFormError={state.formatFormError}
                   setFormatFormError={state.setFormatFormError}
-                  setShowAddFormat={state.setShowAddFormat}
+                  onCancel={state.cancelFormatEditor}
                   saveFormatBase={state.saveFormatBase}
                 />
               ) : !state.activeFormat || !state.configDraft || !state.poolDraft ? (
-                <p style={{ color: '#64748b' }}>Select a format to start configuring.</p>
+                <p style={{ color: '#64748b' }}>Select a format from the list above to configure.</p>
               ) : (
                 <>
                   <h1 style={{ margin: 0, fontFamily: displayFontStack, fontSize: 30, letterSpacing: '-0.018em', color: '#162722' }}>
@@ -134,11 +135,14 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       poolDirty={state.poolDirty}
                       savePool={state.savePool}
                       poolDraft={state.poolDraft}
-                      setPoolDraft={(value) => state.setPoolDraft(value)}
-                      setPoolDirty={state.setPoolDirty}
+                      groupCount={state.configDraft?.groupCount || state.poolDraft.groupCount}
                       addPlayerId={state.addPlayerId}
                       setAddPlayerId={state.setAddPlayerId}
                       addPlayerToPool={state.addPlayerToPool}
+                      removePlayerFromPool={state.removePlayerFromPool}
+                      updateGeneratedPairing={state.updateGeneratedPairing}
+                      validateGeneratedPairs={state.validateGeneratedPairs}
+                      generateGroupsFromPairs={state.generateGroupsFromPairs}
                       generateTeamsAndGroups={state.generateTeamsAndGroups}
                       resetTeams={state.resetTeams}
                       reassignTeam={state.reassignTeam}

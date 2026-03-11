@@ -71,27 +71,34 @@ export const outlineBtn: CSSProperties = {
 };
 
 export const tabBtn: CSSProperties = {
-  border: '1px solid #cad7d0',
-  borderRadius: 999,
-  background: '#f6faf8',
-  color: '#1c2f29',
-  padding: '8px 14px',
+  width: '100%',
+  border: '1px solid transparent',
+  borderBottom: '1px solid #bfd0c8',
+  borderRadius: '10px 10px 0 0',
+  background: 'linear-gradient(180deg, #f5faf7 0%, #edf3ef 100%)',
+  color: '#2b3f38',
+  padding: '9px 12px',
   fontWeight: 700,
   fontSize: 13,
   cursor: 'pointer',
   letterSpacing: '0.01em',
+  transition: 'transform 180ms ease, background 220ms ease, border-color 220ms ease, color 220ms ease',
 };
 
 export const tabBtnActive: CSSProperties = {
+  width: '100%',
   border: '1px solid #0f7c64',
-  borderRadius: 999,
-  background: 'linear-gradient(92deg, #0f7c64, #15916f)',
+  borderBottom: '1px solid #f9fcfa',
+  borderRadius: '10px 10px 0 0',
+  background: 'linear-gradient(105deg, #12856b, #1ba477)',
   color: '#fff',
-  padding: '8px 14px',
+  padding: '9px 12px',
   fontWeight: 700,
   fontSize: 13,
   letterSpacing: '0.01em',
   cursor: 'pointer',
+  transform: 'translateY(1px)',
+  boxShadow: '0 -3px 10px rgba(16, 126, 99, 0.25)',
 };
 
 export const pill: CSSProperties = {
