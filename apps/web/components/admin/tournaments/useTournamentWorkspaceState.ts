@@ -956,6 +956,42 @@ export function useTournamentWorkspaceState() {
     setShowAddFormat(true);
   }
 
+  function requestDeleteFormat(formatId: string) {
+    if (!canSwitch()) return;
+    const target = formats.find((format) => format.id === formatId);
+    if (!target) return;
+    if (!window.confirm(`Delete format "${target.name}"?`)) return;
+
+    void (async () => {
+      const auth = readAdminAuth();
+      const parsedTournamentId = activeTournamentId ? Number.parseInt(activeTournamentId, 10) : Number.NaN;
+      const parsedFormatId = Number.parseInt(target.id, 10);
+
+      if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
+        try {
+          await client.deleteTournamentFormat(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to delete format.';
+          window.alert(message);
+          return;
+        }
+      }
+
+      const nextFormats = formats.filter((format) => format.id !== formatId);
+      setFormats(nextFormats);
+      updateActiveTournamentFormats(nextFormats);
+
+      if (activeFormatId === formatId) {
+        setActiveFormatId(null);
+        clearActiveFormatDrafts();
+        setShowAddFormat(false);
+        setEditingFormatId(null);
+      }
+
+      showSavedNotice('Format deleted');
+    })();
+  }
+
   function cancelFormatEditor() {
     setShowAddFormat(false);
     setEditingFormatId(null);
@@ -1395,7 +1431,7 @@ export function useTournamentWorkspaceState() {
             updateActiveTournamentCourts(updated);
             return updated;
           });
-          if (!activeCourtId) setActiveCourtId(createdCourt.id);
+          setActiveCourtId(createdCourt.id);
           setCourtName('');
           setShowAddCourtModal(false);
         } catch (error) {
@@ -1412,9 +1448,58 @@ export function useTournamentWorkspaceState() {
       updateActiveTournamentCourts(updated);
       return updated;
     });
-    if (!activeCourtId) setActiveCourtId(courtId);
+    setActiveCourtId(courtId);
     setCourtName('');
     setShowAddCourtModal(false);
+  }
+
+  function renameCourt(courtId: string, nextNameRaw: string) {
+    const nextName = nextNameRaw.trim();
+    if (!nextName) return;
+    const target = courts.find((court) => court.id === courtId);
+    if (!target) return;
+    if (target.name === nextName) return;
+    if (courts.some((court) => court.id !== courtId && court.name.toLowerCase() === nextName.toLowerCase())) {
+      window.alert('Court with this name already exists.');
+      return;
+    }
+
+    const nextCourts = courts.map((court) => (
+      court.id === courtId ? { ...court, name: nextName } : court
+    ));
+    setCourts(nextCourts);
+    updateActiveTournamentCourts(nextCourts);
+    showSavedNotice('Court renamed');
+  }
+
+  function deleteCourt(courtId: string) {
+    const target = courts.find((court) => court.id === courtId);
+    if (!target) return;
+    if (!window.confirm(`Delete court \"${target.name}\"?`)) return;
+
+    const nextCourts = courts.filter((court) => court.id !== courtId);
+    setCourts(nextCourts);
+    updateActiveTournamentCourts(nextCourts);
+    if (activeCourtId === courtId) {
+      setActiveCourtId(nextCourts[0]?.id || null);
+    }
+
+    patchCourtConfigDraft((next) => {
+      if (next.availability[courtId]) {
+        delete next.availability[courtId];
+      }
+      return next;
+    });
+
+    setScheduleDraft((prev) => {
+      const next = clone(prev);
+      Object.keys(next).forEach((stageId) => {
+        next[stageId] = (next[stageId] || []).filter((id) => id !== courtId);
+      });
+      return next;
+    });
+    setScheduleDirty(true);
+    showSavedNotice('Court deleted');
   }
 
   function addCourtAvailabilitySlot() {
@@ -1893,6 +1978,7 @@ export function useTournamentWorkspaceState() {
     switchTab,
     requestShowAddFormat,
     requestEditFormat,
+    requestDeleteFormat,
     cancelFormatEditor,
     saveConfig,
     savePool,
@@ -1905,6 +1991,8 @@ export function useTournamentWorkspaceState() {
     updateStageRule,
     patchCourtConfigDraft,
     addCourt,
+    renameCourt,
+    deleteCourt,
     addCourtAvailabilitySlot,
     removeCourtAvailabilitySlot,
     addPlayerToPool,

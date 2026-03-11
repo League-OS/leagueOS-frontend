@@ -30,8 +30,6 @@ export function ConfigTab({
 }: ConfigTabProps) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <SaveRow enabled={configDirty} onSave={saveConfig} />
-
       <fieldset style={editFieldset}>
         <section style={subCard}>
           <label style={labelCol}>

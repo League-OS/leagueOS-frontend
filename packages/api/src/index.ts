@@ -760,6 +760,20 @@ export class LeagueOsApiClient {
     });
   }
 
+  async deleteTournamentFormat(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+  ): Promise<{ ok: boolean; format_instance_id: number }> {
+    return this.request<{ ok: boolean; format_instance_id: number }>(`/tournaments/${tournamentId}/formats/${formatInstanceId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
   async setTournamentFormatCourts(
     token: string,
     clubId: number,

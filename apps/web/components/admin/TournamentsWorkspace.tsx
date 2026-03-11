@@ -17,12 +17,20 @@ import {
   displayFontStack,
   heroBlock,
   revealStyle,
+  saveEnabledStyle,
   savedBadge,
 } from './tournaments/styles';
 import { useTournamentWorkspaceState } from './tournaments/useTournamentWorkspaceState';
 
 export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean }) {
   const state = useTournamentWorkspaceState();
+  const topSaveByTab = state.activeTab === 'config'
+    ? { enabled: state.configDirty, onSave: state.saveConfig }
+    : state.activeTab === 'pool'
+      ? { enabled: state.poolDirty, onSave: state.savePool }
+      : state.activeTab === 'schedules'
+        ? { enabled: state.scheduleDirty || state.courtDirty, onSave: state.saveSchedules }
+        : { enabled: state.courtDirty, onSave: state.saveCourtsConfig };
 
   const outerStyle: CSSProperties = embedded
     ? { display: 'grid', gap: 10, fontFamily: bodyFontStack }
@@ -89,6 +97,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 closeTournament={state.closeTournament}
                 requestShowAddFormat={state.requestShowAddFormat}
                 requestEditFormat={state.requestEditFormat}
+                requestDeleteFormat={state.requestDeleteFormat}
                 openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
               />
             </div>
@@ -108,10 +117,21 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 <p style={{ color: '#64748b' }}>Select a format from the list above to configure.</p>
               ) : (
                 <>
-                  <h1 style={{ margin: 0, fontFamily: displayFontStack, fontSize: 30, letterSpacing: '-0.018em', color: '#162722' }}>
-                    {state.activeFormat.name}
-                  </h1>
-                  <p style={{ margin: '4px 0 10px', color: '#57665f', fontSize: 13 }}>Format Configuration</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <div>
+                      <h1 style={{ margin: 0, fontFamily: displayFontStack, fontSize: 30, letterSpacing: '-0.018em', color: '#162722' }}>
+                        {state.activeFormat.name}
+                      </h1>
+                      <p style={{ margin: '4px 0 10px', color: '#57665f', fontSize: 13 }}>Format Configuration</p>
+                    </div>
+                    <button
+                      style={saveEnabledStyle(topSaveByTab.enabled)}
+                      disabled={!topSaveByTab.enabled}
+                      onClick={topSaveByTab.onSave}
+                    >
+                      Save
+                    </button>
+                  </div>
 
                   <FormatTabs activeTab={state.activeTab} switchTab={state.switchTab} />
 
@@ -187,6 +207,8 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                     <CourtsTab
                       courts={state.courts}
                       setShowAddCourtModal={state.setShowAddCourtModal}
+                      renameCourt={state.renameCourt}
+                      deleteCourt={state.deleteCourt}
                       activeCourtId={state.activeCourtId}
                       setActiveCourtId={state.setActiveCourtId}
                       courtConfigDraft={state.courtConfigDraft}

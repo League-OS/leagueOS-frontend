@@ -61,8 +61,6 @@ export function PoolTab({
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <SaveRow enabled={poolDirty} onSave={savePool} />
-
       <section style={subCard}>
         <button type="button" style={collapseBtn} onClick={() => setPoolPlayersOpen((value) => !value)}>
           <strong>Pool Players ({poolDraft.poolPlayers.length})</strong>
