@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 
 import { addIconBtn, card, field, subCard } from './styles';
-import { formatTimezoneWithOffset, lifecycleStatusBadgeStyle, lifecycleStatusLabel } from './lifecycleUi';
+import {
+  formatTimezoneWithOffset,
+  lifecycleStatusBadgeStyle,
+  lifecycleStatusLabel,
+  lifecycleStatusSelectStyle,
+} from './lifecycleUi';
 import type { Format, TournamentLifecycleStatus, TournamentRecord } from './types';
 
 type FormatDirectoryPanelProps = {
   activeTournament: TournamentRecord | null;
   formats: Format[];
   activeFormatId: string | null;
-  closeTournament: () => void;
   requestShowAddFormat: () => void;
   requestEditFormat: (formatId: string) => void;
   requestDeleteFormat: (formatId: string) => void;
@@ -24,7 +28,6 @@ export function FormatDirectoryPanel({
   activeTournament,
   formats,
   activeFormatId,
-  closeTournament,
   requestShowAddFormat,
   requestEditFormat,
   requestDeleteFormat,
@@ -101,35 +104,45 @@ export function FormatDirectoryPanel({
   return (
     <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>{activeTournament?.name || 'Tournament'}</h2>
+        <div style={{ display: 'grid', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>{activeTournament?.name || 'Tournament'}</h2>
+            {activeTournament ? (
+              <button
+                style={iconBtn}
+                title="Edit tournament"
+                aria-label="Edit tournament"
+                onClick={() => requestEditTournament(activeTournament.id)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="m12 6 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
           <p style={{ margin: '4px 0 0', color: '#5b6a64' }}>
             {formatTimezoneWithOffset(activeTournament?.timezone || '')}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {activeTournament ? (
-            <button
-              style={iconBtn}
-              title="Edit tournament"
-              aria-label="Edit tournament"
-              onClick={() => requestEditTournament(activeTournament.id)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="m12 6 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </button>
-          ) : null}
-          <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#30443d' }}>
+        <div style={{ display: 'grid', justifyItems: 'end', gap: 4 }}>
+          <label style={{ fontSize: 12, color: '#30443d' }}>
             Status
+          </label>
+          <div style={{ minWidth: 240 }}>
             <select
               value={activeTournament?.status || 'DRAFT'}
               onChange={(event) => {
                 if (!activeTournament) return;
                 updateTournamentStatus(activeTournament.id, event.target.value as TournamentLifecycleStatus);
               }}
-              style={{ ...field, minWidth: 210, minHeight: 32, padding: '4px 8px' }}
+              style={{
+                ...field,
+                ...lifecycleStatusSelectStyle(activeTournament?.status || 'DRAFT'),
+                minWidth: 240,
+                minHeight: 32,
+                padding: '4px 8px',
+              }}
             >
               {lifecycleStatusOptions.map((status) => (
                 <option
@@ -141,12 +154,7 @@ export function FormatDirectoryPanel({
                 </option>
               ))}
             </select>
-          </label>
-          <button style={iconBtn} title="Back" aria-label="Back" onClick={closeTournament}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          </div>
         </div>
       </div>
 
@@ -242,45 +250,47 @@ export function FormatDirectoryPanel({
                 cursor: 'pointer',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 16, lineHeight: 1.2 }}>{format.name}</div>
                   <div style={{ marginTop: 2, color: '#5a6b64', fontSize: 12 }}>
                     {format.type.replace('_', ' ')} · {format.config.schedulingModel || 'Model not set'}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div style={{ display: 'grid', justifyItems: 'end', gap: 6 }}>
                   <span style={lifecycleStatusBadgeStyle(format.status)}>{lifecycleStatusLabel[format.status]}</span>
-                  <button
-                    style={iconBtn}
-                    title="Edit format"
-                    aria-label={`Edit ${format.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      requestEditFormat(format.id);
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="m12 6 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                  <button
-                    style={{ ...iconBtn, border: '1px solid #f3c1c1', color: '#b42318', background: '#fff6f6' }}
-                    title="Delete format"
-                    aria-label={`Delete ${format.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      requestDeleteFormat(format.id);
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M3 6h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M6 6l1 14h10l1-14" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                      <path d="M10 10v7M14 10v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <button
+                      style={iconBtn}
+                      title="Edit format"
+                      aria-label={`Edit ${format.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        requestEditFormat(format.id);
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="m12 6 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                    <button
+                      style={{ ...iconBtn, border: '1px solid #f3c1c1', color: '#b42318', background: '#fff6f6' }}
+                      title="Delete format"
+                      aria-label={`Delete ${format.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        requestDeleteFormat(format.id);
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M3 6h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M6 6l1 14h10l1-14" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                        <path d="M10 10v7M14 10v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </article>

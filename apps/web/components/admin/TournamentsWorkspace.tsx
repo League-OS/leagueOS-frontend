@@ -15,7 +15,6 @@ import {
   bodyFontStack,
   card,
   displayFontStack,
-  heroBlock,
   revealStyle,
   saveEnabledStyle,
   savedBadge,
@@ -66,19 +65,11 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
   return (
     <main style={outerStyle}>
       <div style={innerStyle}>
-        <div style={{ ...heroBlock, ...revealStyle(state.mounted, 0) }}>
-          <h1 style={{ margin: 0, color: '#182521', fontFamily: displayFontStack, fontSize: 34, letterSpacing: '-0.02em' }}>
-            Tournament Configuration Workspace
-          </h1>
-          <p style={{ margin: '4px 0 0', color: '#52605b', fontSize: 14 }}>
-            Manage tournament setup, formats, pools, schedules, and courts.
-          </p>
-          {state.saveNotice ? (
-            <div style={{ marginTop: 8 }}>
-              <span style={savedBadge}>{state.saveNotice}</span>
-            </div>
-          ) : null}
-        </div>
+        {state.saveNotice ? (
+          <div style={{ ...revealStyle(state.mounted, 0), display: 'flex', justifyContent: 'flex-end' }}>
+            <span style={savedBadge}>{state.saveNotice}</span>
+          </div>
+        ) : null}
 
         {!state.activeTournamentId ? (
           <TournamentListView
@@ -114,7 +105,6 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 activeTournament={state.activeTournament}
                 formats={state.formats}
                 activeFormatId={state.activeFormatId}
-                closeTournament={state.closeTournament}
                 requestShowAddFormat={state.requestShowAddFormat}
                 requestEditFormat={state.requestEditFormat}
                 requestDeleteFormat={state.requestDeleteFormat}
