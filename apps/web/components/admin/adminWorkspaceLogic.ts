@@ -7,6 +7,7 @@ export type AdminPage =
   | 'players'
   | 'users'
   | 'courts'
+  | 'tournaments'
   | 'seasons'
   | 'sessions'
   | 'seasonDetail'
@@ -26,6 +27,7 @@ export function adminPageTitle(page: AdminPage): string {
     case 'players': return 'Club Players';
     case 'users': return 'Users';
     case 'courts': return 'Courts';
+    case 'tournaments': return 'Tournaments';
     case 'seasons': return 'Seasons';
     case 'sessions': return 'Sessions';
     case 'seasonDetail': return 'Season Detail';
@@ -56,6 +58,7 @@ export function buildAdminBreadcrumbs(args: {
     players: 'Club Players',
     users: 'Users',
     courts: 'Courts',
+    tournaments: 'Tournaments',
     seasons: 'Seasons',
     sessions: 'Sessions',
   };

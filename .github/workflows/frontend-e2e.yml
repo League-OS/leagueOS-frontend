@@ -1,0 +1,62 @@
+name: frontend-e2e
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm -C apps/web exec playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: pnpm -C apps/web build
+
+      - name: Start frontend
+        run: |
+          pnpm -C apps/web start &
+          echo $! > /tmp/web.pid
+
+      - name: Wait for frontend
+        run: |
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:3000 >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend did not start in time" >&2
+          exit 1
+
+      - name: Run frontend e2e smoke
+        run: pnpm -C apps/web exec playwright test -c playwright.tournaments.config.ts
+
+      - name: Stop frontend
+        if: always()
+        run: |
+          if [ -f /tmp/web.pid ]; then
+            kill $(cat /tmp/web.pid) || true
+          fi

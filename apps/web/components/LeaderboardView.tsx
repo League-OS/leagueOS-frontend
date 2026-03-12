@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '@leagueos/api';
 import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import { floorToFiveMinuteIncrement, validateAddGameInput, validateBadmintonEndScore } from './addGameLogic';
 
-type TabKey = 'home' | 'leaderboard' | 'profile';
+type TabKey = 'home' | 'leaderboard' | 'tournaments' | 'profile';
 type LeaderboardMode = 'player' | 'team';
 type HomeMode = 'main' | 'addGame' | 'allGames' | 'gameDetail' | 'allUpcoming' | 'upcomingDetail';
 
@@ -58,6 +59,17 @@ export type EloHistoryRow = {
   change: number;
 };
 
+export type PlayerTournamentRow = {
+  id: number;
+  name: string;
+  status: 'DRAFT' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  timezone: string;
+  startDate: string | null;
+  endDate: string | null;
+  formatsCount: number;
+  registrationLink: string;
+};
+
 type Props = {
   profile: Profile | null;
   clubs: Club[];
@@ -82,6 +94,7 @@ type Props = {
   eloHistory: EloHistoryRow[];
   recentGames: HomeGameRow[];
   allGames: HomeGameRow[];
+  openTournaments: PlayerTournamentRow[];
   recordExistingGames: HomeGameRow[];
   upcomingSessions: UpcomingRow[];
   allUpcomingSessions: UpcomingRow[];
@@ -163,6 +176,7 @@ export function LeaderboardView(props: Props) {
     eloHistory,
     recentGames,
     allGames,
+    openTournaments,
     recordExistingGames,
     upcomingSessions,
     allUpcomingSessions,
@@ -282,7 +296,7 @@ export function LeaderboardView(props: Props) {
       const stored = tabStorageProfileKey
         ? window.localStorage.getItem(tabStorageProfileKey) ?? window.localStorage.getItem(tabStorageGlobalKey)
         : window.localStorage.getItem(tabStorageGlobalKey);
-      if (stored === 'home' || stored === 'leaderboard' || stored === 'profile') {
+      if (stored === 'home' || stored === 'leaderboard' || stored === 'tournaments' || stored === 'profile') {
         setTab(stored);
       }
     } catch {
@@ -593,6 +607,86 @@ export function LeaderboardView(props: Props) {
                 )}
               </div>
             </div>
+          </section>
+        </section>
+      ) : null}
+
+      {tab === 'tournaments' ? (
+        <section>
+          <header style={{ background: 'linear-gradient(135deg, var(--teal-start), var(--teal-end))', color: 'white', padding: '20px 16px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: 22 }}>Tournaments</h1>
+                <p style={{ margin: '4px 0 0', opacity: 0.95, fontSize: 14 }}>Open tournaments for your club</p>
+              </div>
+              <button onClick={onLogout} style={ghostBtn}>Logout</button>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <select value={selectedClubId} onChange={(e) => void onClubChange(Number(e.target.value))} style={selectStyle}>
+                {!clubs.length ? <option value={selectedClubId}>Club {selectedClubId}</option> : null}
+                {clubs.map((club) => (
+                  <option key={club.id} value={club.id}>{club.name}</option>
+                ))}
+              </select>
+            </div>
+          </header>
+
+          <section style={{ maxWidth: 1100, margin: '16px auto 0', padding: '0 16px' }}>
+            {!openTournaments.length ? (
+              <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: 18, color: '#64748b' }}>
+                No open tournaments right now.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {openTournaments.map((row) => (
+                  <article
+                    key={row.id}
+                    style={{
+                      background: '#fff',
+                      border: '1px solid var(--border)',
+                      borderRadius: 16,
+                      padding: 14,
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto',
+                      gap: 12,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ margin: 0, fontSize: 20, lineHeight: 1.2 }}>{row.name}</h3>
+                      <div style={{ marginTop: 6, fontSize: 15, color: '#334155', fontWeight: 600 }}>
+                        {formatTournamentDate(row.startDate)}
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
+                      <span
+                        style={{
+                          border: '1px solid #9edabd',
+                          borderRadius: 999,
+                          padding: '3px 10px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#0f6b4e',
+                          background: '#e7f8ef',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Registration Open
+                      </span>
+                      {/^https?:\/\//i.test(row.registrationLink) ? (
+                        <a href={row.registrationLink} style={primaryBtn}>
+                          View
+                        </a>
+                      ) : (
+                        <Link href={row.registrationLink} style={primaryBtn}>
+                          View
+                        </Link>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </section>
       ) : null}
@@ -957,7 +1051,7 @@ export function LeaderboardView(props: Props) {
         </section>
       ) : null}
 
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', maxWidth: 1100, margin: '0 auto', zIndex: 90 }}>
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', maxWidth: 1100, margin: '0 auto', zIndex: 90 }}>
         <TabButton
           active={tab === 'home'}
           onClick={() => {
@@ -968,6 +1062,7 @@ export function LeaderboardView(props: Props) {
           label="Home"
         />
         <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon="🏆" label="Leaderboard" />
+        <TabButton active={tab === 'tournaments'} onClick={() => setTab('tournaments')} icon="🎟️" label="Tournaments" />
         <TabButton active={tab === 'profile'} onClick={() => setTab('profile')} icon="◉" label="Profile" />
       </nav>
 
@@ -1072,6 +1167,13 @@ export function LeaderboardView(props: Props) {
       ) : null}
     </main>
   );
+}
+
+function formatTournamentDate(value: string | null): string {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '-';
+  return parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
 }
 
 function HomeScreen({
@@ -2903,6 +3005,10 @@ const primaryBtn: React.CSSProperties = {
   padding: '8px 12px',
   cursor: 'pointer',
   fontWeight: 700,
+  textDecoration: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };
 
 const modalInput: React.CSSProperties = {

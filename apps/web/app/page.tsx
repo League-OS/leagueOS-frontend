@@ -21,6 +21,7 @@ import {
   LeaderboardView,
   type EloHistoryRow,
   type HomeGameRow,
+  type PlayerTournamentRow,
   type ProfileStatSummary,
   type UpcomingRow,
 } from '../components/LeaderboardView';
@@ -151,6 +152,7 @@ export default function Page() {
   const [eloHistory, setEloHistory] = useState<EloHistoryRow[]>([]);
   const [recentGames, setRecentGames] = useState<HomeGameRow[]>([]);
   const [allGames, setAllGames] = useState<HomeGameRow[]>([]);
+  const [openTournaments, setOpenTournaments] = useState<PlayerTournamentRow[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [allUpcomingSessions, setAllUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<number | null>(null);
@@ -158,6 +160,17 @@ export default function Page() {
   const [hydratingAuth, setHydratingAuth] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  function clearPlayerSessionAndShowLogin() {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
+      window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
+    }
+    setAuth(null);
+    setProfile(null);
+    setError(null);
+    setSuccessMessage(null);
+  }
 
   const enableTeamRanking = useMemo(
     () => featureFlags.some((flag) => flag.key === FEATURE_FLAGS.TEAM_RANKING && flag.enabled),
@@ -168,11 +181,12 @@ export default function Page() {
     setLoading(true);
     setError(null);
     try {
-      const [meRes, seasonsRes, playersRes, courtsRes] = await Promise.allSettled([
+      const [meRes, seasonsRes, playersRes, courtsRes, tournamentsRes] = await Promise.allSettled([
         client.profile(token),
         client.seasons(token, clubId),
         client.players(token, clubId),
         client.courts(token, clubId),
+        client.tournaments(token, clubId),
       ]);
 
       if (meRes.status === 'fulfilled') {
@@ -227,6 +241,29 @@ export default function Page() {
         updateRecord({ courts: [] });
       }
 
+      if (tournamentsRes.status === 'fulfilled') {
+        const openRows = tournamentsRes.value
+          .filter((row) => row.status === 'REGISTRATION_OPEN')
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        const mappedOpen = openRows.map((row): PlayerTournamentRow => {
+          const rowWithEnd = row as typeof row & { schedule_end_at?: string | null };
+          return {
+            id: row.id,
+            name: row.name,
+            status: row.status,
+            timezone: row.timezone,
+            startDate: row.schedule_start_at,
+            endDate: rowWithEnd.schedule_end_at ?? null,
+            formatsCount: row.formats_count ?? 0,
+            registrationLink: row.registration_link || `/tournaments/${row.id}?signup=one_click`,
+          };
+        });
+        setOpenTournaments(mappedOpen);
+      } else {
+        setOpenTournaments([]);
+      }
+
       const seasonList = seasonsRes.value;
       const seasonById = new Map<number, Season>(seasonList.map((season) => [season.id, season]));
       const activeSeasons = seasonList.filter((season) => season.is_active);
@@ -242,6 +279,7 @@ export default function Page() {
         setTeamLeaderboard([]);
         setRecentGames([]);
         setAllGames([]);
+        setOpenTournaments([]);
         updateRecord({ existingGames: [] });
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
@@ -436,6 +474,10 @@ export default function Page() {
       }));
       setEloHistory(eloRows);
     } catch (e) {
+      if (isUnauthorizedError(e)) {
+        clearPlayerSessionAndShowLogin();
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Unexpected error');
     } finally {
       setLoading(false);
@@ -471,10 +513,7 @@ export default function Page() {
         await loadDashboard(parsed.token, parsed.clubId);
       } catch (e) {
         if (isUnauthorizedError(e)) {
-          window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
-          window.localStorage.removeItem(PLAYER_STORAGE_PROFILE);
-          setAuth(null);
-          setProfile(null);
+          clearPlayerSessionAndShowLogin();
         }
       } finally {
         setHydratingAuth(false);
@@ -992,6 +1031,7 @@ export default function Page() {
       eloHistory={eloHistory}
       recentGames={recentGames}
       allGames={allGames}
+      openTournaments={openTournaments}
       recordExistingGames={record.existingGames}
       upcomingSessions={upcomingSessions}
       allUpcomingSessions={allUpcomingSessions}
@@ -1038,6 +1078,7 @@ export default function Page() {
         setEloHistory([]);
         setRecentGames([]);
         setAllGames([]);
+        setOpenTournaments([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setSelectedProfilePlayerId(null);

@@ -44,6 +44,118 @@ type RequestOptions = {
   body?: unknown;
 };
 
+export type Tournament = {
+  id: number;
+  club_id: number;
+  name: string;
+  status: 'DRAFT' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  tournament_type: 'INTERNAL';
+  season_id: number | null;
+  timezone: string;
+  admin_notes: string | null;
+  publication_link: string | null;
+  registration_link: string | null;
+  team_scoring_link: string | null;
+  venue_stream_link: string | null;
+  schedule_start_at: string | null;
+  formats_count?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type TournamentFormatInstance = {
+  id: number;
+  tournament_id: number;
+  name: string;
+  format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+  registration_open_at: string | null;
+  registration_close_at: string | null;
+  auto_registration_close: boolean;
+  scheduling_model: 'GROUPS_KO' | 'MATCH_COUNT_KO' | 'DIRECT_KNOCKOUT' | 'TRIPLE_TIER_PROGRESSIVE_KO_MULTI' | null;
+  average_set_duration_minutes: number;
+  max_teams_allowed: number | null;
+  matches_per_team: number | null;
+  group_count: number | null;
+  group_ko_teams_per_group: number | null;
+  seed_source: 'ELO' | 'MANUAL';
+  config_json: Record<string, unknown>;
+  schedule_generated_at: string | null;
+  schedule_locked: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type TournamentCourt = {
+  id: number;
+  tournament_id: number;
+  source_court_id: number | null;
+  name: string;
+  is_active: boolean;
+  created_at: string | null;
+};
+
+export type TournamentGeneratedPair = {
+  id: string;
+  name: string;
+  player_ids: number[];
+  player_names: string[];
+  team_elo: number;
+};
+
+export type TournamentGeneratedPairGroup = {
+  id: string;
+  name: string;
+};
+
+export type TournamentGeneratePairsResponse = {
+  format_instance_id: number;
+  format_type: 'DOUBLES' | 'MIXED_DOUBLES';
+  source: 'REQUEST' | 'REGISTRATION_POOL';
+  player_count: number;
+  team_count: number;
+  group_count: number;
+  generated_pairs: TournamentGeneratedPair[];
+  groups: TournamentGeneratedPairGroup[];
+  assignments: Record<string, string[]>;
+};
+
+export type TournamentFormatAllowedCourtsResponse = {
+  format_instance_id: number;
+  allowed_court_ids: number[];
+};
+
+export type TournamentScheduleGenerateResponse = {
+  artifact_id: number;
+  format_instance_id: number;
+  generation_hash: string;
+  planning: Record<string, unknown>;
+  generated_match_count: number;
+  schedule_start_at: string | null;
+  slot_minutes: number;
+  forced_overlap: boolean;
+  conflicts: unknown[];
+  status: string;
+};
+
+export type TournamentMatch = {
+  id: number;
+  match_number: number;
+  stage_code: string;
+  status: string;
+  court_id: number | null;
+  court_name: string | null;
+  home_registration_id: number | null;
+  away_registration_id: number | null;
+  winner_registration_id: number | null;
+  loser_registration_id: number | null;
+  start_at: string | null;
+  end_at: string | null;
+  tentative_start_at: string | null;
+  tentative_end_at: string | null;
+  row_version: number;
+  idempotency_key: string | null;
+};
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -501,6 +613,226 @@ export class LeagueOsApiClient {
   async deleteCourt(token: string, clubId: number, courtId: number): Promise<{ ok: boolean; court_id: number }> {
     return this.request<{ ok: boolean; court_id: number }>(`/courts/${courtId}`, {
       method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async tournaments(token: string, clubId: number): Promise<Tournament[]> {
+    return this.request<Tournament[]>('/tournaments', {
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async createTournament(
+    token: string,
+    clubId: number,
+    payload: {
+      name: string;
+      season_id?: number;
+      timezone: string;
+      admin_notes?: string;
+      schedule_start_at?: string;
+      publication_link?: string;
+      registration_link?: string;
+      team_scoring_link?: string;
+      venue_stream_link?: string;
+    },
+  ): Promise<Tournament> {
+    return this.request<Tournament>('/tournaments', {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async tournamentFormats(token: string, clubId: number, tournamentId: number): Promise<TournamentFormatInstance[]> {
+    return this.request<TournamentFormatInstance[]>(`/tournaments/${tournamentId}/formats`, {
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async createTournamentFormat(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    payload: {
+      name: string;
+      format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+      registration_open_at?: string;
+      registration_close_at?: string;
+      auto_registration_close?: boolean;
+    },
+  ): Promise<TournamentFormatInstance> {
+    return this.request<TournamentFormatInstance>(`/tournaments/${tournamentId}/formats`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async tournamentCourts(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+  ): Promise<TournamentCourt[]> {
+    return this.request<TournamentCourt[]>(`/tournaments/${tournamentId}/courts`, {
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async createTournamentCourt(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    payload: {
+      name: string;
+      source_court_id?: number;
+      is_active?: boolean;
+    },
+  ): Promise<TournamentCourt> {
+    return this.request<TournamentCourt>(`/tournaments/${tournamentId}/courts`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async generateTournamentPairs(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+    payload: {
+      player_ids: number[];
+      group_count?: number;
+    },
+  ): Promise<TournamentGeneratePairsResponse> {
+    return this.request<TournamentGeneratePairsResponse>(`/tournaments/${tournamentId}/formats/${formatInstanceId}/pairs/generate`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async updateTournamentFormat(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+    payload: Partial<{
+      name: string;
+      format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+      registration_open_at: string;
+      registration_close_at: string;
+      auto_registration_close: boolean;
+      scheduling_model: 'GROUPS_KO' | 'MATCH_COUNT_KO' | 'DIRECT_KNOCKOUT' | 'TRIPLE_TIER_PROGRESSIVE_KO_MULTI';
+      average_set_duration_minutes: number;
+      max_teams_allowed: number;
+      matches_per_team: number;
+      group_count: number;
+      group_ko_teams_per_group: number;
+      seed_source: 'ELO' | 'MANUAL';
+      config_json: Record<string, unknown>;
+    }>,
+  ): Promise<TournamentFormatInstance> {
+    return this.request<TournamentFormatInstance>(`/tournaments/${tournamentId}/formats/${formatInstanceId}`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async deleteTournamentFormat(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+  ): Promise<{ ok: boolean; format_instance_id: number }> {
+    return this.request<{ ok: boolean; format_instance_id: number }>(`/tournaments/${tournamentId}/formats/${formatInstanceId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async setTournamentFormatCourts(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+    payload: {
+      allowed_court_ids: number[];
+    },
+  ): Promise<TournamentFormatAllowedCourtsResponse> {
+    return this.request<TournamentFormatAllowedCourtsResponse>(`/tournaments/${tournamentId}/formats/${formatInstanceId}/courts`, {
+      method: 'PUT',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async generateTournamentSchedule(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+    payload: {
+      reset_existing?: boolean;
+      force_allow_overlap?: boolean;
+      override_reason?: string;
+    } = {},
+  ): Promise<TournamentScheduleGenerateResponse> {
+    return this.request<TournamentScheduleGenerateResponse>(`/tournaments/${tournamentId}/formats/${formatInstanceId}/schedule/generate`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+      body: payload,
+    });
+  }
+
+  async resetTournamentSchedule(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+  ): Promise<{ ok: boolean; format_instance_id: number }> {
+    return this.request<{ ok: boolean; format_instance_id: number }>(`/tournaments/${tournamentId}/formats/${formatInstanceId}/schedule/reset`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
+  async tournamentFormatMatches(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+  ): Promise<TournamentMatch[]> {
+    return this.request<TournamentMatch[]>(`/tournaments/${tournamentId}/formats/${formatInstanceId}/matches`, {
       token,
       clubId,
       query: { club_id: clubId },

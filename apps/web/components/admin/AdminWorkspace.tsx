@@ -28,6 +28,7 @@ import type { AdminNavKey } from './AdminShellParts';
 import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
+import { TournamentsWorkspace } from './TournamentsWorkspace';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 const STORAGE_AUTH = 'leagueos.admin.auth';
@@ -240,7 +241,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const pageAllowedForRole = !isGlobalAdmin || globalAdminAllowedPages.has(page);
   const visibleNavItems: AdminNavKey[] = isGlobalAdmin
     ? ['dashboard', 'clubs', 'config', 'users']
-    : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'players'];
+    : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'tournaments', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
 
@@ -968,6 +969,9 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
               await refresh();
             }}
           />
+        ) : null}
+        {page === 'tournaments' ? (
+          <TournamentsWorkspace />
         ) : null}
         {page === 'seasons' ? (
           <SeasonsPanel

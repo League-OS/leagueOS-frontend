@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-export type AdminNavKey = 'dashboard' | 'clubs' | 'config' | 'seasons' | 'sessions' | 'courts' | 'players' | 'users';
+export type AdminNavKey = 'dashboard' | 'clubs' | 'config' | 'seasons' | 'sessions' | 'courts' | 'tournaments' | 'players' | 'users';
 
 export function AdminSidebar({
   active,
@@ -19,6 +19,7 @@ export function AdminSidebar({
     { key: 'seasons', label: 'Seasons', href: '/admin/seasons' },
     { key: 'sessions', label: 'Sessions', href: '/admin/sessions' },
     { key: 'courts', label: 'Courts', href: '/admin/courts' },
+    { key: 'tournaments', label: 'Tournaments', href: '/admin/tournaments' },
     { key: 'players', label: 'Club Players', href: '/admin/players' },
     { key: 'users', label: 'Users', href: '/admin/users' },
   ];
@@ -34,6 +35,11 @@ export function AdminSidebar({
           <Link
             key={item.key}
             href={item.href}
+            onClick={() => {
+              if (item.key === 'tournaments' && active === 'tournaments' && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('leagueos:tournaments:sidebar-reselect'));
+              }
+            }}
             style={{
               ...navLink,
               ...(active === item.key ? navLinkActive : {}),
