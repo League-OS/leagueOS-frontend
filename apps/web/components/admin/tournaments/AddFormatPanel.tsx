@@ -1,5 +1,6 @@
 import { field, labelCol, outlineBtn, saveEnabledStyle, subCard } from './styles';
-import type { FormatFormDraft, FormatType } from './types';
+import { lifecycleStatusLabel } from './lifecycleUi';
+import type { FormatFormDraft, FormatType, TournamentLifecycleStatus } from './types';
 
 type AddFormatPanelProps = {
   mode: 'create' | 'edit';
@@ -7,6 +8,8 @@ type AddFormatPanelProps = {
   setFormDraft: (value: FormatFormDraft | ((prev: FormatFormDraft) => FormatFormDraft)) => void;
   formatFormError: string;
   setFormatFormError: (value: string) => void;
+  lifecycleStatusOptions: TournamentLifecycleStatus[];
+  allowedLifecycleStatuses: (current: TournamentLifecycleStatus) => TournamentLifecycleStatus[];
   onCancel: () => void;
   saveFormatBase: () => void;
 };
@@ -17,6 +20,8 @@ export function AddFormatPanel({
   setFormDraft,
   formatFormError,
   setFormatFormError,
+  lifecycleStatusOptions,
+  allowedLifecycleStatuses,
   onCancel,
   saveFormatBase,
 }: AddFormatPanelProps) {
@@ -43,6 +48,31 @@ export function AddFormatPanel({
             style={field}
           />
         </label>
+        {isEditMode ? (
+          <label style={labelCol}>
+            Status
+            <select
+              value={formDraft.status}
+              onChange={(event) => {
+                setFormDraft((draft) => ({
+                  ...draft,
+                  status: event.target.value as TournamentLifecycleStatus,
+                }));
+              }}
+              style={field}
+            >
+              {lifecycleStatusOptions.map((status) => (
+                <option
+                  key={status}
+                  value={status}
+                  disabled={!allowedLifecycleStatuses(formDraft.status).includes(status)}
+                >
+                  {lifecycleStatusLabel[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label style={labelCol}>
           Format Type
           <select

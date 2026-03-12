@@ -93,6 +93,7 @@ export const defaultCourtConfig = (): CourtConfig => ({
 
 export const defaultFormatFormDraft = (): FormatFormDraft => ({
   name: '',
+  status: 'DRAFT',
   type: 'DOUBLES',
   regOpen: '2026-03-20T09:00',
   regClose: '2026-04-02T20:00',

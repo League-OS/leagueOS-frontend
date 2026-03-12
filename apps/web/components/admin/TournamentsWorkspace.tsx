@@ -109,6 +109,9 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 requestEditFormat={state.requestEditFormat}
                 requestDeleteFormat={state.requestDeleteFormat}
                 openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
+                lifecycleStatusOptions={state.lifecycleStatusOptions}
+                allowedLifecycleStatuses={state.allowedLifecycleStatuses}
+                updateTournamentStatus={state.updateTournamentStatus}
                 tournamentSignupLink={tournamentSignupLink}
               />
             </div>
@@ -121,6 +124,8 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                   setFormDraft={state.setFormDraft}
                   formatFormError={state.formatFormError}
                   setFormatFormError={state.setFormatFormError}
+                  lifecycleStatusOptions={state.lifecycleStatusOptions}
+                  allowedLifecycleStatuses={state.allowedLifecycleStatuses}
                   onCancel={state.cancelFormatEditor}
                   saveFormatBase={state.saveFormatBase}
                 />

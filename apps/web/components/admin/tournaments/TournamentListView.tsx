@@ -1,4 +1,5 @@
 import { card, field, labelCol, outlineBtn, primaryBtn, saveEnabledStyle, td, th } from './styles';
+import { formatTimezoneWithOffset, lifecycleStatusBadgeStyle, lifecycleStatusLabel } from './lifecycleUi';
 import type { TournamentRecord } from './types';
 
 type TournamentListViewProps = {
@@ -55,7 +56,7 @@ export function TournamentListView({
             Timezone
             <select value={tournamentTimezone} onChange={(event) => setTournamentTimezone(event.target.value)} style={field}>
               {timezoneOptions.map((zone) => (
-                <option key={zone} value={zone}>{zone}</option>
+                <option key={zone} value={zone}>{formatTimezoneWithOffset(zone)}</option>
               ))}
             </select>
           </label>
@@ -105,8 +106,10 @@ export function TournamentListView({
             {tournaments.map((item) => (
               <tr key={item.id}>
                 <td style={td}>{item.name}</td>
-                <td style={td}>{item.timezone}</td>
-                <td style={td}>{item.status}</td>
+                <td style={td}>{formatTimezoneWithOffset(item.timezone)}</td>
+                <td style={td}>
+                  <span style={lifecycleStatusBadgeStyle(item.status)}>{lifecycleStatusLabel[item.status]}</span>
+                </td>
                 <td style={td}>{item.formats.length}</td>
                 <td style={td}>
                   <button style={outlineBtn} onClick={() => openTournament(item.id)}>Open</button>

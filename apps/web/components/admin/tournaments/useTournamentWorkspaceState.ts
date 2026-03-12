@@ -31,12 +31,14 @@ import type {
   FormatConfig,
   FormatFormDraft,
   FormatType,
+  FormatLifecycleStatus,
   GeneratedTeam,
   Group,
   PoolConfig,
   SchedulingModel,
   SlotDraft,
   StageRule,
+  TournamentLifecycleStatus,
   TournamentRecord,
   ViewTab,
 } from './types';
@@ -62,6 +64,39 @@ function readAdminAuth(): AdminAuth | null {
   }
 }
 
+async function postTournamentStatus(
+  token: string,
+  clubId: number,
+  tournamentId: number,
+  status: TournamentLifecycleStatus,
+): Promise<void> {
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const url = `${apiBase}/tournaments/${tournamentId}/status?club_id=${clubId}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+  if (response.ok) return;
+
+  let message = `Unable to update tournament status (HTTP ${response.status})`;
+  try {
+    const payload = await response.json() as { detail?: unknown };
+    if (payload && typeof payload === 'object' && payload.detail && typeof payload.detail === 'object') {
+      const detail = payload.detail as { message?: unknown };
+      if (typeof detail.message === 'string' && detail.message.trim()) {
+        message = detail.message;
+      }
+    }
+  } catch {
+    // keep fallback message
+  }
+  throw new Error(message);
+}
+
 function mapApiTournamentToRecord(row: ApiTournament, seasonName: string): TournamentRecord {
   return {
     id: String(row.id),
@@ -70,7 +105,7 @@ function mapApiTournamentToRecord(row: ApiTournament, seasonName: string): Tourn
     seasonId: row.season_id !== null ? String(row.season_id) : '',
     seasonName: seasonName || (row.season_id !== null ? `Season ${row.season_id}` : 'No season'),
     adminNotes: row.admin_notes ?? '',
-    status: row.status === 'DRAFT' ? 'Draft' : 'Configured',
+    status: row.status,
     formats: [],
     courts: [],
   };
@@ -115,9 +150,12 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     ...(persistedPool ?? defaultPoolConfig()),
     groupCount: mergedConfig.groupCount,
   };
+  const rawFormatStatus = typeof rawConfigJson.ui_format_status === 'string' ? rawConfigJson.ui_format_status : '';
+  const formatStatus: FormatLifecycleStatus = isTournamentLifecycleStatus(rawFormatStatus) ? rawFormatStatus : 'DRAFT';
   return {
     id: String(row.id),
     name: row.name,
+    status: formatStatus,
     type: row.format_type,
     regOpen: toDateTimeLocalInput(row.registration_open_at),
     regClose: toDateTimeLocalInput(row.registration_close_at),
@@ -130,6 +168,29 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     courtAssignments: persistedCourtAssignments ?? {},
     metaConfigJson: rawConfigJson,
   };
+}
+
+function isTournamentLifecycleStatus(value: string): value is TournamentLifecycleStatus {
+  return value === 'DRAFT'
+    || value === 'REGISTRATION_OPEN'
+    || value === 'REGISTRATION_CLOSED'
+    || value === 'IN_PROGRESS'
+    || value === 'COMPLETED'
+    || value === 'CANCELLED';
+}
+
+const LIFECYCLE_TRANSITIONS: Record<TournamentLifecycleStatus, TournamentLifecycleStatus[]> = {
+  DRAFT: ['REGISTRATION_OPEN', 'CANCELLED'],
+  REGISTRATION_OPEN: ['REGISTRATION_CLOSED', 'CANCELLED'],
+  REGISTRATION_CLOSED: ['REGISTRATION_OPEN', 'IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+
+function canTransitionLifecycleStatus(from: TournamentLifecycleStatus, to: TournamentLifecycleStatus): boolean {
+  if (from === to) return true;
+  return LIFECYCLE_TRANSITIONS[from].includes(to);
 }
 
 function mapApiPlayerToClubPlayer(row: ApiPlayer): ClubPlayer {
@@ -379,6 +440,10 @@ export function useTournamentWorkspaceState() {
     () => tournaments.find((item) => item.id === activeTournamentId) || null,
     [tournaments, activeTournamentId],
   );
+  const lifecycleStatusOptions = useMemo(
+    () => Object.keys(LIFECYCLE_TRANSITIONS) as TournamentLifecycleStatus[],
+    [],
+  );
 
   const isSinglesFormat = activeFormat?.type === 'SINGLES';
   const unitLabel = isSinglesFormat ? 'Player' : 'Team';
@@ -582,6 +647,7 @@ export function useTournamentWorkspaceState() {
   function toFormatFormDraft(format: Format): FormatFormDraft {
     return {
       name: format.name,
+      status: format.status,
       type: format.type,
       regOpen: format.regOpen,
       regClose: format.regClose,
@@ -595,8 +661,8 @@ export function useTournamentWorkspaceState() {
     return window.confirm('Unsaved changes detected. Continue without saving?');
   }
 
-  function setActiveTournamentConfiguredStatus(tournamentId: string) {
-    setTournaments((items) => items.map((item) => (item.id === tournamentId ? { ...item, status: 'Configured' } : item)));
+  function allowedLifecycleStatuses(current: TournamentLifecycleStatus): TournamentLifecycleStatus[] {
+    return [current, ...LIFECYCLE_TRANSITIONS[current]];
   }
 
   function loadTournamentFormatsFromApi(tournamentId: string, preferredFormatId?: string | null) {
@@ -672,6 +738,40 @@ export function useTournamentWorkspaceState() {
     setShowAddCourtModal(false);
   }
 
+  function updateTournamentStatus(tournamentId: string, nextStatus: TournamentLifecycleStatus) {
+    const target = tournaments.find((item) => item.id === tournamentId);
+    if (!target) return;
+    if (target.status === nextStatus) return;
+    if (!canTransitionLifecycleStatus(target.status, nextStatus)) {
+      window.alert(`Invalid transition: ${target.status} -> ${nextStatus}`);
+      return;
+    }
+
+    void (async () => {
+      const auth = readAdminAuth();
+      const parsedTournamentId = Number.parseInt(tournamentId, 10);
+      if (auth && Number.isInteger(parsedTournamentId)) {
+        try {
+          await postTournamentStatus(auth.token, auth.clubId, parsedTournamentId, nextStatus);
+        } catch (error) {
+          // Frontend fallback to keep UI testable while backend rollout catches up.
+          const message = error instanceof Error ? error.message : 'Unable to update tournament status.';
+          console.warn('Tournament status API unavailable. Applying local fallback update.', message);
+          setTournaments((items) => items.map((item) => (
+            item.id === tournamentId ? { ...item, status: nextStatus } : item
+          )));
+          showSavedNotice('Tournament status updated locally (API pending)');
+          return;
+        }
+      }
+
+      setTournaments((items) => items.map((item) => (
+        item.id === tournamentId ? { ...item, status: nextStatus } : item
+      )));
+      showSavedNotice('Tournament status updated');
+    })();
+  }
+
   async function createTournament() {
     const name = tournamentName.trim();
     if (!name) {
@@ -690,7 +790,7 @@ export function useTournamentWorkspaceState() {
         seasonId: '',
         seasonName: 'No season',
         adminNotes: tournamentAdminNotes.trim(),
-        status: 'Draft',
+        status: 'DRAFT',
         formats: [],
         courts: [],
       };
@@ -751,6 +851,10 @@ export function useTournamentWorkspaceState() {
 
       if (editingTarget) {
         const parsedFormatId = Number.parseInt(editingTarget.id, 10);
+        if (!canTransitionLifecycleStatus(editingTarget.status, formDraft.status)) {
+          setFormatFormError(`Invalid status transition: ${editingTarget.status} -> ${formDraft.status}`);
+          return;
+        }
         if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
           try {
             await client.updateTournamentFormat(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
@@ -762,6 +866,10 @@ export function useTournamentWorkspaceState() {
             });
             const updated = await client.updateTournamentFormat(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
               seed_source: 'ELO',
+              config_json: {
+                ...(editingTarget.metaConfigJson || {}),
+                ui_format_status: formDraft.status,
+              },
             });
             const mapped = mapApiFormatToLocal(updated);
             setFormats((prev) => {
@@ -790,10 +898,15 @@ export function useTournamentWorkspaceState() {
         const nextLocal: Format = {
           ...editingTarget,
           name: formDraft.name.trim(),
+          status: formDraft.status,
           type: formDraft.type,
           regOpen: formDraft.regOpen,
           regClose: formDraft.regClose,
           autoClose: formDraft.autoClose,
+          metaConfigJson: {
+            ...(editingTarget.metaConfigJson || {}),
+            ui_format_status: formDraft.status,
+          },
           pool: typeChanged
             ? {
               ...editingTarget.pool,
@@ -839,6 +952,9 @@ export function useTournamentWorkspaceState() {
             created.id,
             {
               seed_source: 'ELO',
+              config_json: {
+                ui_format_status: formDraft.status,
+              },
             },
           );
           const next = mapApiFormatToLocal(enforced);
@@ -852,7 +968,6 @@ export function useTournamentWorkspaceState() {
             return updated;
           });
 
-          if (activeTournamentId) setActiveTournamentConfiguredStatus(activeTournamentId);
           setActiveFormatId(next.id);
           setActiveTab('config');
           setShowAddFormat(false);
@@ -871,6 +986,7 @@ export function useTournamentWorkspaceState() {
       const next: Format = {
         id,
         name: formDraft.name.trim(),
+        status: formDraft.status,
         type: formDraft.type,
         regOpen: formDraft.regOpen,
         regClose: formDraft.regClose,
@@ -881,7 +997,7 @@ export function useTournamentWorkspaceState() {
         pool: defaultPoolConfig(),
         courtConfig: defaultCourtConfig(),
         courtAssignments: {},
-        metaConfigJson: {},
+        metaConfigJson: { ui_format_status: formDraft.status },
       };
 
       setFormats((prev) => {
@@ -892,7 +1008,6 @@ export function useTournamentWorkspaceState() {
         return updated;
       });
 
-      if (activeTournamentId) setActiveTournamentConfiguredStatus(activeTournamentId);
       setActiveFormatId(id);
       setActiveTab('config');
       setShowAddFormat(false);
@@ -2032,6 +2147,7 @@ export function useTournamentWorkspaceState() {
     stageDefs,
     timezoneOptions,
     activeTournament,
+    lifecycleStatusOptions,
     effectiveEntrantCount,
     planningMetrics,
     scheduleStatusLabel,
@@ -2041,11 +2157,13 @@ export function useTournamentWorkspaceState() {
     clubPlayersForActiveFormat,
 
     canSwitch,
+    allowedLifecycleStatuses,
     createTournament,
     saveFormatBase,
     openTournament,
     closeTournament,
     openFormat,
+    updateTournamentStatus,
     switchTab,
     requestShowAddFormat,
     requestEditFormat,

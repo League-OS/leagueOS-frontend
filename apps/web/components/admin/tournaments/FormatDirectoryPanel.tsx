@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { card, field, subCard } from './styles';
-import type { Format, TournamentRecord } from './types';
+import { formatTimezoneWithOffset, lifecycleStatusBadgeStyle, lifecycleStatusLabel } from './lifecycleUi';
+import type { Format, TournamentLifecycleStatus, TournamentRecord } from './types';
 
 type FormatDirectoryPanelProps = {
   activeTournament: TournamentRecord | null;
@@ -12,6 +13,9 @@ type FormatDirectoryPanelProps = {
   requestEditFormat: (formatId: string) => void;
   requestDeleteFormat: (formatId: string) => void;
   openFormatConfig: (formatId: string) => void;
+  lifecycleStatusOptions: TournamentLifecycleStatus[];
+  allowedLifecycleStatuses: (current: TournamentLifecycleStatus) => TournamentLifecycleStatus[];
+  updateTournamentStatus: (tournamentId: string, status: TournamentLifecycleStatus) => void;
   tournamentSignupLink: string;
 };
 
@@ -24,6 +28,9 @@ export function FormatDirectoryPanel({
   requestEditFormat,
   requestDeleteFormat,
   openFormatConfig,
+  lifecycleStatusOptions,
+  allowedLifecycleStatuses,
+  updateTournamentStatus,
   tournamentSignupLink,
 }: FormatDirectoryPanelProps) {
   const [copyStatus, setCopyStatus] = useState('');
@@ -43,7 +50,6 @@ export function FormatDirectoryPanel({
     padding: 0,
     cursor: 'pointer',
   } as const;
-
   useEffect(() => {
     let cancelled = false;
     if (!tournamentSignupLink) {
@@ -96,14 +102,37 @@ export function FormatDirectoryPanel({
         <div>
           <h2 style={{ margin: 0 }}>{activeTournament?.name || 'Tournament'}</h2>
           <p style={{ margin: '4px 0 0', color: '#5b6a64' }}>
-            Status: {activeTournament?.status || 'Draft'} · {activeTournament?.timezone || '-'}
+            {formatTimezoneWithOffset(activeTournament?.timezone || '')}
           </p>
         </div>
-        <button style={iconBtn} title="Back" aria-label="Back" onClick={closeTournament}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#30443d' }}>
+            Status
+            <select
+              value={activeTournament?.status || 'DRAFT'}
+              onChange={(event) => {
+                if (!activeTournament) return;
+                updateTournamentStatus(activeTournament.id, event.target.value as TournamentLifecycleStatus);
+              }}
+              style={{ ...field, minWidth: 210, minHeight: 32, padding: '4px 8px' }}
+            >
+              {lifecycleStatusOptions.map((status) => (
+                <option
+                  key={status}
+                  value={status}
+                  disabled={!activeTournament || !allowedLifecycleStatuses(activeTournament.status).includes(status)}
+                >
+                  {lifecycleStatusLabel[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button style={iconBtn} title="Back" aria-label="Back" onClick={closeTournament}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <section style={{ ...subCard, marginTop: 10 }}>
@@ -205,7 +234,8 @@ export function FormatDirectoryPanel({
                     {format.type.replace('_', ' ')} · {format.config.schedulingModel || 'Model not set'}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={lifecycleStatusBadgeStyle(format.status)}>{lifecycleStatusLabel[format.status]}</span>
                   <button
                     style={iconBtn}
                     title="Edit format"

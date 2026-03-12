@@ -4,6 +4,8 @@ export type FormatType = 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
 export type SchedulingModel = '' | 'RR' | 'GROUPS_KO' | 'MATCH_COUNT_KO' | 'DIRECT_KNOCKOUT';
 export type WinCondition = 'FIRST_TO_POINTS' | 'WIN_BY_2';
 export type ViewTab = 'config' | 'pool' | 'schedules' | 'courts';
+export type TournamentLifecycleStatus = 'DRAFT' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type FormatLifecycleStatus = TournamentLifecycleStatus;
 
 export type StageRule = {
   setsToWin: 1 | 2 | 3;
@@ -68,6 +70,7 @@ export type PoolConfig = {
 export type Format = {
   id: string;
   name: string;
+  status: FormatLifecycleStatus;
   type: FormatType;
   regOpen: string;
   regClose: string;
@@ -90,7 +93,7 @@ export type TournamentRecord = {
   seasonId: string;
   seasonName: string;
   adminNotes: string;
-  status: 'Draft' | 'Configured';
+  status: TournamentLifecycleStatus;
   formats: Format[];
   courts: CourtItem[];
 };
@@ -121,6 +124,7 @@ export type SeasonList = Season[];
 
 export type FormatFormDraft = {
   name: string;
+  status: FormatLifecycleStatus;
   type: FormatType;
   regOpen: string;
   regClose: string;

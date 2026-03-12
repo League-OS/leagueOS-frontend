@@ -47,12 +47,48 @@ export function CourtsTab({
     cursor: 'pointer',
     background: '#fff',
   } as const;
+  const iconBtn = {
+    width: 28,
+    height: 28,
+    border: '1px solid #c3d2ca',
+    borderRadius: 8,
+    background: '#fff',
+    color: '#17302a',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    cursor: 'pointer',
+  } as const;
+
+  function formatDuration(startTime: string, endTime: string): string {
+    const parseMinutes = (value: string): number | null => {
+      const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+      if (!match) return null;
+      const hh = Number(match[1]);
+      const mm = Number(match[2]);
+      if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+      return hh * 60 + mm;
+    };
+    const start = parseMinutes(startTime);
+    const end = parseMinutes(endTime);
+    if (start === null || end === null) return '--:--';
+    let diff = end - start;
+    if (diff < 0) diff += 24 * 60;
+    const hours = String(Math.floor(diff / 60)).padStart(2, '0');
+    const mins = String(diff % 60).padStart(2, '0');
+    return `${hours}:${mins}`;
+  }
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <strong>Tournament Courts</strong>
-        <button style={outlineBtn} onClick={() => setShowAddCourtModal(true)}>+ Add Court</button>
+        <button style={iconBtn} title="Add court" aria-label="Add court" onClick={() => setShowAddCourtModal(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
 
       {!courts.length ? (
@@ -215,7 +251,7 @@ export function CourtsTab({
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
               <thead>
                 <tr>
-                  {['Date', 'Start', 'End', 'Actions'].map((header) => (
+                  {['Date', 'Start', 'End', 'Duration', 'Actions'].map((header) => (
                     <th key={header} style={th}>{header}</th>
                   ))}
                 </tr>
@@ -227,6 +263,7 @@ export function CourtsTab({
                       <td style={td}>{slot.date}</td>
                       <td style={td}>{slot.startTime}</td>
                       <td style={td}>{slot.endTime}</td>
+                      <td style={td}>{formatDuration(slot.startTime, slot.endTime)}</td>
                       <td style={td}>
                         <button style={outlineBtn} onClick={() => removeCourtAvailabilitySlot(slot.id)}>
                           Remove
@@ -236,7 +273,7 @@ export function CourtsTab({
                   ))
                 ) : (
                   <tr>
-                    <td style={td} colSpan={4}>No availability slots added.</td>
+                    <td style={td} colSpan={5}>No availability slots added.</td>
                   </tr>
                 )}
               </tbody>
