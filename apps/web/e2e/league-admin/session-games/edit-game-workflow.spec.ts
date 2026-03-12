@@ -14,6 +14,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { waitForPostLoginReady } from '../../readiness';
 
 // Auth state reused via storageState; no per-test logins
 
@@ -24,7 +25,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function loginAs(page: Page) {
   // Auth state is pre-loaded via Playwright storageState (global setup).
   await page.goto('/');
-  await expect(page.getByRole('button', { name: '+' })).toBeVisible({ timeout: 20_000 });
+  await waitForPostLoginReady(page);
 }
 
 /**

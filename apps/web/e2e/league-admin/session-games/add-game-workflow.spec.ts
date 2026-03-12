@@ -15,6 +15,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { waitForPostLoginReady } from '../../readiness';
 
 // Credentials used by global setup (login happens once; auth state reused here)
 
@@ -24,13 +25,13 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function loginAs(page: Page) {
   // Auth state is pre-loaded via Playwright storageState (global setup).
-  // Just navigate home and wait for the dashboard.
+  // Just navigate home and wait for dashboard shell readiness.
   await page.goto('/');
-  await expect(page.getByRole('button', { name: '+' })).toBeVisible({ timeout: 20_000 });
+  await waitForPostLoginReady(page);
 }
 
 async function openNewGame(page: Page) {
-  await page.getByRole('button', { name: '+' }).click();
+  await page.getByRole('button', { name: /^(\+|Add Game)$/i }).first().click();
   await expect(page.getByRole('heading', { name: 'New Game', level: 2 })).toBeVisible();
 }
 
