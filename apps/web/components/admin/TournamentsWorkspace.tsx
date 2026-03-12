@@ -83,17 +83,26 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
         {!state.activeTournamentId ? (
           <TournamentListView
             showCreateTournament={state.showCreateTournament}
-            setShowCreateTournament={state.setShowCreateTournament}
+            requestShowCreateTournament={state.requestShowCreateTournament}
+            requestEditTournament={state.requestEditTournament}
+            cancelTournamentEditor={state.cancelTournamentEditor}
+            editingTournamentId={state.editingTournamentId}
+            editingTournamentStatus={state.editingTournamentStatus}
+            tournamentFieldEditability={state.tournamentFieldEditability}
             tournamentName={state.tournamentName}
             setTournamentName={state.setTournamentName}
             tournamentTimezone={state.tournamentTimezone}
             setTournamentTimezone={state.setTournamentTimezone}
+            tournamentStartAt={state.tournamentStartAt}
+            setTournamentStartAt={state.setTournamentStartAt}
+            tournamentEndAt={state.tournamentEndAt}
+            setTournamentEndAt={state.setTournamentEndAt}
             tournamentAdminNotes={state.tournamentAdminNotes}
             setTournamentAdminNotes={state.setTournamentAdminNotes}
             timezoneOptions={state.timezoneOptions}
             tournamentFormError={state.tournamentFormError}
             setTournamentFormError={state.setTournamentFormError}
-            createTournament={state.createTournament}
+            saveTournament={state.saveTournament}
             tournaments={state.tournaments}
             openTournament={state.openTournament}
           />
@@ -113,6 +122,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 allowedLifecycleStatuses={state.allowedLifecycleStatuses}
                 updateTournamentStatus={state.updateTournamentStatus}
                 tournamentSignupLink={tournamentSignupLink}
+                requestEditTournament={state.requestEditTournament}
               />
             </div>
 

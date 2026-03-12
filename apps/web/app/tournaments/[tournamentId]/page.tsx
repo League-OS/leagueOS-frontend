@@ -1,0 +1,508 @@
+'use client';
+
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { LeagueOsApiClient, type Tournament, type TournamentFormatInstance } from '@leagueos/api';
+import { DEFAULT_API_BASE_URL } from '@leagueos/config';
+
+type PlayerAuth = { token: string; clubId: number };
+type FormatLifecycleStatus = 'DRAFT' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+type FormatViewModel = { format: TournamentFormatInstance; status: FormatLifecycleStatus };
+
+const PLAYER_STORAGE_AUTH = 'leagueos.player.auth';
+const LOCAL_SIGNUP_MARKS_KEY = 'leagueos.tournament.signup.local';
+const PLAYER_TAB_STORAGE_KEY = 'leagueos.player.selectedTab';
+
+function parsePlayerAuth(raw: string | null): PlayerAuth | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { token?: unknown; clubId?: unknown };
+    const token = typeof parsed.token === 'string' ? parsed.token : '';
+    const clubId =
+      typeof parsed.clubId === 'number'
+        ? parsed.clubId
+        : typeof parsed.clubId === 'string'
+          ? Number.parseInt(parsed.clubId, 10)
+          : Number.NaN;
+    if (!token || !Number.isInteger(clubId)) return null;
+    return { token, clubId };
+  } catch {
+    return null;
+  }
+}
+
+function fmtDateTime(value: string | null | undefined): string {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '-';
+  return parsed.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function lifecycleLabel(value: string): string {
+  return String(value || '')
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function isFormatLifecycleStatus(value: string): value is FormatLifecycleStatus {
+  return value === 'DRAFT'
+    || value === 'REGISTRATION_OPEN'
+    || value === 'REGISTRATION_CLOSED'
+    || value === 'IN_PROGRESS'
+    || value === 'COMPLETED'
+    || value === 'CANCELLED';
+}
+
+function formatLifecycleStatus(format: TournamentFormatInstance): FormatLifecycleStatus {
+  const configJson = format.config_json;
+  const rawStatus = configJson && typeof configJson === 'object' && typeof configJson.ui_format_status === 'string'
+    ? configJson.ui_format_status.toUpperCase()
+    : '';
+  if (isFormatLifecycleStatus(rawStatus)) return rawStatus;
+
+  if (isRegistrationOpen(format)) return 'REGISTRATION_OPEN';
+  const now = Date.now();
+  const closeAt = format.registration_close_at ? new Date(format.registration_close_at).getTime() : Number.NaN;
+  if (!Number.isNaN(closeAt) && now > closeAt) return 'REGISTRATION_CLOSED';
+  return 'DRAFT';
+}
+
+function statusPill(status: string): CSSProperties {
+  const key = String(status || '').toUpperCase();
+  if (key === 'REGISTRATION_OPEN') {
+    return { ...pill, color: '#0f6b4e', borderColor: '#9edabd', background: '#e7f8ef' };
+  }
+  if (key === 'REGISTRATION_CLOSED') {
+    return { ...pill, color: '#915214', borderColor: '#efcd96', background: '#fff5e5' };
+  }
+  if (key === 'IN_PROGRESS') {
+    return { ...pill, color: '#1f4ea3', borderColor: '#b8ccf3', background: '#ebf1ff' };
+  }
+  if (key === 'COMPLETED') {
+    return { ...pill, color: '#155f61', borderColor: '#add3d6', background: '#e8f6f7' };
+  }
+  if (key === 'CANCELLED') {
+    return { ...pill, color: '#b42318', borderColor: '#efb6b2', background: '#feeceb' };
+  }
+  return { ...pill, color: '#445467', borderColor: '#ccd6e0', background: '#edf2f7' };
+}
+
+function isRegistrationOpen(format: TournamentFormatInstance): boolean {
+  const now = Date.now();
+  const openAt = format.registration_open_at ? new Date(format.registration_open_at).getTime() : Number.NaN;
+  const closeAt = format.registration_close_at ? new Date(format.registration_close_at).getTime() : Number.NaN;
+  const afterOpen = Number.isNaN(openAt) || now >= openAt;
+  const beforeClose = Number.isNaN(closeAt) || now <= closeAt;
+  return afterOpen && beforeClose;
+}
+
+function isTournamentRegistrationOpen(status: string): boolean {
+  return String(status || '').toUpperCase() === 'REGISTRATION_OPEN';
+}
+
+function tournamentEndAt(tournament: Tournament | null): string | null {
+  if (!tournament) return null;
+  const withEnd = tournament as Tournament & { schedule_end_at?: string | null };
+  return withEnd.schedule_end_at ?? null;
+}
+
+function readLocalSignupMarks(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  const raw = window.localStorage.getItem(LOCAL_SIGNUP_MARKS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, boolean>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalSignupMarks(next: Record<string, boolean>) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(LOCAL_SIGNUP_MARKS_KEY, JSON.stringify(next));
+}
+
+function formatSignupKey(tournamentId: number, formatId: number): string {
+  return `${tournamentId}:${formatId}`;
+}
+
+async function postFormatSignup(
+  token: string,
+  clubId: number,
+  tournamentId: number,
+  formatId: number,
+): Promise<void> {
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
+  const response = await fetch(
+    `${apiBase}/tournaments/${tournamentId}/formats/${formatId}/signup?club_id=${clubId}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Signup endpoint unavailable (${response.status})`);
+  }
+}
+
+export default function TournamentSignupPage() {
+  const params = useParams<{ tournamentId: string }>();
+  const client = useMemo(
+    () =>
+      new LeagueOsApiClient({
+        apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL,
+      }),
+    [],
+  );
+  const tournamentId = Number.parseInt(params?.tournamentId || '', 10);
+  const [auth, setAuth] = useState<PlayerAuth | null>(null);
+  const [authHydrated, setAuthHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [formats, setFormats] = useState<TournamentFormatInstance[]>([]);
+  const [saved, setSaved] = useState('');
+  const [signedFormatIds, setSignedFormatIds] = useState<Record<number, boolean>>({});
+  const [signingFormatId, setSigningFormatId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const stored = parsePlayerAuth(typeof window !== 'undefined' ? window.localStorage.getItem(PLAYER_STORAGE_AUTH) : null);
+    setAuth(stored);
+    setAuthHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!Number.isInteger(tournamentId)) return;
+    const marks = readLocalSignupMarks();
+    const initial: Record<number, boolean> = {};
+    Object.keys(marks).forEach((key) => {
+      const [tIdText, fIdText] = key.split(':');
+      const tId = Number.parseInt(tIdText || '', 10);
+      const fId = Number.parseInt(fIdText || '', 10);
+      if (tId === tournamentId && Number.isInteger(fId) && marks[key]) {
+        initial[fId] = true;
+      }
+    });
+    setSignedFormatIds(initial);
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!Number.isInteger(tournamentId)) {
+      setLoading(false);
+      setError('Invalid tournament link.');
+      return;
+    }
+    if (!authHydrated) {
+      return;
+    }
+    if (!auth) {
+      setLoading(false);
+      setError('Please login to continue tournament signup.');
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const tournaments = await client.tournaments(auth.token, auth.clubId);
+        if (cancelled) return;
+        const selected = tournaments.find((item) => item.id === tournamentId) || null;
+        if (!selected) {
+          setError('Tournament not found for your club access.');
+          setTournament(null);
+          setFormats([]);
+          setLoading(false);
+          return;
+        }
+        setTournament(selected);
+        const rows = await client.tournamentFormats(auth.token, auth.clubId, tournamentId);
+        if (cancelled) return;
+        setFormats(rows);
+      } catch (loadError) {
+        if (cancelled) return;
+        const message = loadError instanceof Error ? loadError.message : 'Unable to load tournament signup details.';
+        setError(message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auth, authHydrated, client, tournamentId]);
+
+  function markSignedLocal(formatId: number) {
+    if (!Number.isInteger(tournamentId)) return;
+    const key = formatSignupKey(tournamentId, formatId);
+    const marks = readLocalSignupMarks();
+    const next = { ...marks, [key]: true };
+    writeLocalSignupMarks(next);
+    setSignedFormatIds((prev) => ({ ...prev, [formatId]: true }));
+  }
+
+  async function signupFormat(formatId: number) {
+    if (!auth || !Number.isInteger(tournamentId)) return;
+    setSigningFormatId(formatId);
+    setSaved('');
+    try {
+      await postFormatSignup(auth.token, auth.clubId, tournamentId, formatId);
+      markSignedLocal(formatId);
+      setSaved('Signup completed.');
+    } catch {
+      // Keep player-flow testable until signup endpoint is finalized server-side.
+      markSignedLocal(formatId);
+      setSaved('Signup saved locally (API pending).');
+    } finally {
+      setSigningFormatId(null);
+    }
+  }
+
+  const tournamentAllowsSignup = tournament ? isTournamentRegistrationOpen(tournament.status) : false;
+  const visibleFormats = useMemo<FormatViewModel[]>(
+    () =>
+      formats
+        .map((format) => ({ format, status: formatLifecycleStatus(format) }))
+        .filter((item) => item.status !== 'DRAFT' && item.status !== 'CANCELLED'),
+    [formats],
+  );
+
+  function setPlayerTab(tab: 'home' | 'leaderboard' | 'tournaments' | 'profile') {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(PLAYER_TAB_STORAGE_KEY, tab);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  return (
+    <main style={page}>
+      <section style={panel}>
+        {loading ? <p style={{ margin: 0 }}>Loading tournament...</p> : null}
+        {!loading && error ? (
+          <div>
+            <p style={{ margin: 0, color: '#b42318', fontWeight: 700 }}>{error}</p>
+            <p style={{ margin: '6px 0 0', color: '#5a6b7a' }}>
+              If you are not logged in, sign in on the home page and reopen this link.
+            </p>
+          </div>
+        ) : null}
+
+        {!loading && !error && tournament ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <h2 style={{ margin: 0, fontSize: 30, lineHeight: 1.05 }}>{tournament.name}</h2>
+                <div style={{ color: '#475569', fontSize: 13, display: 'grid', gap: 2 }}>
+                  <div>Start: {fmtDateTime(tournament.schedule_start_at)}</div>
+                  <div>End: {fmtDateTime(tournamentEndAt(tournament))}</div>
+                </div>
+              </div>
+              <Link
+                href="/"
+                onClick={() => setPlayerTab('tournaments')}
+                style={ghostBtn}
+              >
+                Back
+              </Link>
+            </div>
+            <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={statusPill(tournament.status)}>{lifecycleLabel(tournament.status)}</span>
+                <span style={{ color: '#57697b', fontSize: 13 }}>{tournament.timezone}</span>
+                {!tournamentAllowsSignup ? (
+                  <span style={closedPill}>Tournament registration is not open</span>
+                ) : null}
+              </div>
+            </div>
+            {saved ? <div style={savedNote}>{saved}</div> : null}
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {visibleFormats.length ? (
+                visibleFormats.map(({ format, status }) => {
+                  const windowOpen = isRegistrationOpen(format);
+                  const formatOpenForSignup = status === 'REGISTRATION_OPEN' && windowOpen;
+                  const disabled = !tournamentAllowsSignup || !formatOpenForSignup || Boolean(signedFormatIds[format.id]) || signingFormatId === format.id;
+                  return (
+                    <article key={format.id} style={formatCard}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'grid', gap: 3 }}>
+                          <strong style={{ fontSize: 18 }}>{format.name}</strong>
+                          <div style={{ color: '#5a6b7a', fontSize: 13 }}>
+                            {lifecycleLabel(format.format_type)} · Opens {fmtDateTime(format.registration_open_at)} · Closes {fmtDateTime(format.registration_close_at)}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <span style={statusPill(status)}>{lifecycleLabel(status)}</span>
+                          <button
+                            style={disabled ? btnDisabled : btnPrimary}
+                            disabled={disabled}
+                            title={
+                              !tournamentAllowsSignup
+                                ? 'Tournament registration must be open.'
+                                : !formatOpenForSignup
+                                  ? 'Format registration is not open.'
+                                  : undefined
+                            }
+                            onClick={() => signupFormat(format.id)}
+                          >
+                            {signedFormatIds[format.id] ? 'Signed Up' : signingFormatId === format.id ? 'Saving...' : 'Sign Up'}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })
+              ) : (
+                <p style={{ margin: 0, color: '#607284' }}>Registration not open yet.</p>
+              )}
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      <nav style={bottomNav}>
+        <Link href="/" onClick={() => setPlayerTab('home')} style={bottomTab}>⌂ Home</Link>
+        <Link href="/" onClick={() => setPlayerTab('leaderboard')} style={bottomTab}>🏆 Leaderboard</Link>
+        <Link href="/" onClick={() => setPlayerTab('tournaments')} style={bottomTabActive}>🎟️ Tournaments</Link>
+        <Link href="/" onClick={() => setPlayerTab('profile')} style={bottomTab}>◉ Profile</Link>
+      </nav>
+    </main>
+  );
+}
+
+const page: CSSProperties = {
+  minHeight: '100vh',
+  background:
+    'radial-gradient(circle at 12% 10%, #dceaf8 0%, rgba(220,234,248,0) 30%), radial-gradient(circle at 90% 16%, #f4ebd8 0%, rgba(244,235,216,0) 28%), linear-gradient(145deg, #f3f6f9 0%, #eef2f6 100%)',
+  padding: 16,
+  paddingBottom: 'calc(74px + env(safe-area-inset-bottom, 0px))',
+  color: '#132033',
+};
+
+const panel: CSSProperties = {
+  maxWidth: 1040,
+  margin: '0 auto',
+  border: '1px solid #d0dae5',
+  borderRadius: 12,
+  background: 'rgba(255,255,255,0.92)',
+  padding: 12,
+  display: 'grid',
+  gap: 10,
+};
+
+const formatCard: CSSProperties = {
+  border: '1px solid #d8e1ec',
+  borderRadius: 10,
+  background: '#f9fbfe',
+  padding: 11,
+};
+
+const pill: CSSProperties = {
+  border: '1px solid',
+  borderRadius: 999,
+  padding: '3px 9px',
+  fontSize: 11.5,
+  fontWeight: 700,
+  letterSpacing: '0.01em',
+  textTransform: 'capitalize',
+};
+
+const closedPill: CSSProperties = {
+  ...pill,
+  color: '#915214',
+  borderColor: '#efcd96',
+  background: '#fff5e5',
+};
+
+const btnPrimary: CSSProperties = {
+  border: 0,
+  borderRadius: 8,
+  background: 'linear-gradient(95deg, #0e8f6f, #14a07a)',
+  color: '#fff',
+  fontWeight: 700,
+  fontSize: 13,
+  padding: '8px 11px',
+  cursor: 'pointer',
+};
+
+const btnDisabled: CSSProperties = {
+  border: '1px solid #d2dbe5',
+  borderRadius: 8,
+  background: '#e5ebf2',
+  color: '#6c7d8e',
+  fontWeight: 700,
+  fontSize: 13,
+  padding: '8px 11px',
+  cursor: 'not-allowed',
+};
+
+const ghostBtn: CSSProperties = {
+  border: '1px solid #cbd5e1',
+  borderRadius: 8,
+  background: '#fff',
+  color: '#1f3348',
+  padding: '7px 10px',
+  textDecoration: 'none',
+  fontWeight: 600,
+  fontSize: 13,
+};
+
+const savedNote: CSSProperties = {
+  border: '1px solid #afdbc4',
+  borderRadius: 10,
+  background: '#ebf8f1',
+  color: '#0f6b4e',
+  fontWeight: 700,
+  padding: '8px 10px',
+  fontSize: 13,
+};
+
+const bottomNav: CSSProperties = {
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  borderTop: '1px solid #cfd8e3',
+  background: '#fff',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, 1fr)',
+  maxWidth: 1100,
+  margin: '0 auto',
+  zIndex: 90,
+};
+
+const bottomTab: CSSProperties = {
+  display: 'inline-flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  gap: 6,
+  textDecoration: 'none',
+  color: '#334155',
+  fontWeight: 700,
+  fontSize: 13,
+  padding: '10px 6px calc(10px + env(safe-area-inset-bottom, 0px))',
+  background: '#fff',
+};
+
+const bottomTabActive: CSSProperties = {
+  ...bottomTab,
+  color: '#0f766e',
+  background: '#f0fdfa',
+};

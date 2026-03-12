@@ -17,6 +17,7 @@ type FormatDirectoryPanelProps = {
   allowedLifecycleStatuses: (current: TournamentLifecycleStatus) => TournamentLifecycleStatus[];
   updateTournamentStatus: (tournamentId: string, status: TournamentLifecycleStatus) => void;
   tournamentSignupLink: string;
+  requestEditTournament: (tournamentId: string) => void;
 };
 
 export function FormatDirectoryPanel({
@@ -32,6 +33,7 @@ export function FormatDirectoryPanel({
   allowedLifecycleStatuses,
   updateTournamentStatus,
   tournamentSignupLink,
+  requestEditTournament,
 }: FormatDirectoryPanelProps) {
   const [copyStatus, setCopyStatus] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -106,6 +108,19 @@ export function FormatDirectoryPanel({
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {activeTournament ? (
+            <button
+              style={iconBtn}
+              title="Edit tournament"
+              aria-label="Edit tournament"
+              onClick={() => requestEditTournament(activeTournament.id)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="m12 6 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          ) : null}
           <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#30443d' }}>
             Status
             <select

@@ -90,6 +90,8 @@ export type TournamentRecord = {
   id: string;
   name: string;
   timezone: string;
+  startAt: string;
+  endAt: string;
   seasonId: string;
   seasonName: string;
   adminNotes: string;
