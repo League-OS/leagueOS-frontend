@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { card, field, subCard } from './styles';
+import { addIconBtn, card, field, subCard } from './styles';
 import { formatTimezoneWithOffset, lifecycleStatusBadgeStyle, lifecycleStatusLabel } from './lifecycleUi';
 import type { Format, TournamentLifecycleStatus, TournamentRecord } from './types';
 
@@ -213,7 +213,7 @@ export function FormatDirectoryPanel({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <strong>Formats</strong>
-        <button style={iconBtn} title="Add format" aria-label="Add format" onClick={requestShowAddFormat}>
+        <button style={addIconBtn} title="Add format" aria-label="Add format" onClick={requestShowAddFormat}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
           </svg>

@@ -105,6 +105,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
             saveTournament={state.saveTournament}
             tournaments={state.tournaments}
             openTournament={state.openTournament}
+            requestDeleteTournament={state.requestDeleteTournament}
           />
         ) : (
           <section style={{ display: 'grid', gap: 10, alignItems: 'start' }}>

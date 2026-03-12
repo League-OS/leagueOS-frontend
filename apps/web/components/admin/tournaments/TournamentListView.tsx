@@ -1,4 +1,4 @@
-import { card, field, labelCol, outlineBtn, primaryBtn, saveEnabledStyle, td, th } from './styles';
+import { addIconBtn, card, field, labelCol, outlineBtn, saveEnabledStyle, td, textLinkBtn, th } from './styles';
 import { formatTimezoneWithOffset, lifecycleStatusBadgeStyle, lifecycleStatusLabel } from './lifecycleUi';
 import type { TournamentLifecycleStatus, TournamentRecord } from './types';
 
@@ -31,6 +31,7 @@ type TournamentListViewProps = {
   saveTournament: () => void;
   tournaments: TournamentRecord[];
   openTournament: (id: string) => void;
+  requestDeleteTournament: (id: string) => void;
 };
 
 export function TournamentListView({
@@ -57,10 +58,36 @@ export function TournamentListView({
   saveTournament,
   tournaments,
   openTournament,
+  requestDeleteTournament,
 }: TournamentListViewProps) {
   const isEditMode = Boolean(editingTournamentId);
   const formTitle = isEditMode ? 'Edit Tournament' : 'Create Tournament';
   const submitLabel = isEditMode ? 'Save' : 'Create';
+  function fmtDateTime(value: string): string {
+    if (!value) return '-';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '-';
+    return parsed.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+  const iconBtn = {
+    width: 30,
+    height: 30,
+    border: '1px solid #c3d2ca',
+    borderRadius: 8,
+    background: '#fff',
+    color: '#17302a',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    cursor: 'pointer',
+  } as const;
 
   if (showCreateTournament) {
     return (
@@ -153,9 +180,19 @@ export function TournamentListView({
 
   return (
     <section style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <h2 style={{ margin: 0 }}>Tournaments</h2>
-        <button style={primaryBtn} onClick={requestShowCreateTournament}>Create New Tournament</button>
+        <button
+          type="button"
+          style={addIconBtn}
+          onClick={requestShowCreateTournament}
+          title="Create tournament"
+          aria-label="Create tournament"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
       {!tournaments.length ? (
         <p style={{ color: '#64748b' }}>No tournaments created yet.</p>
@@ -163,7 +200,7 @@ export function TournamentListView({
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
           <thead>
             <tr>
-              {['Tournament', 'Timezone', 'Status', 'Formats', 'Actions'].map((header) => (
+              {['Tournament', 'Timezone', 'Start', 'End', 'Status', 'Formats', 'Actions'].map((header) => (
                 <th key={header} style={th}>{header}</th>
               ))}
             </tr>
@@ -171,16 +208,52 @@ export function TournamentListView({
           <tbody>
             {tournaments.map((item) => (
               <tr key={item.id}>
-                <td style={td}>{item.name}</td>
+                <td style={td}>
+                  <button
+                    type="button"
+                    style={textLinkBtn}
+                    onClick={() => openTournament(item.id)}
+                    title={`Open ${item.name}`}
+                    aria-label={`Open ${item.name}`}
+                  >
+                    {item.name}
+                  </button>
+                </td>
                 <td style={td}>{formatTimezoneWithOffset(item.timezone)}</td>
+                <td style={td}>{fmtDateTime(item.startAt)}</td>
+                <td style={td}>{fmtDateTime(item.endAt)}</td>
                 <td style={td}>
                   <span style={lifecycleStatusBadgeStyle(item.status)}>{lifecycleStatusLabel[item.status]}</span>
                 </td>
-                <td style={td}>{item.formats.length}</td>
+                <td style={td}>{item.formats.length || item.formatCount}</td>
                 <td style={td}>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button style={outlineBtn} onClick={() => openTournament(item.id)}>Open</button>
-                    <button style={outlineBtn} onClick={() => requestEditTournament(item.id)}>Edit</button>
+                    <button
+                      type="button"
+                      style={iconBtn}
+                      onClick={() => requestEditTournament(item.id)}
+                      title={`Edit ${item.name}`}
+                      aria-label={`Edit ${item.name}`}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="m12 6 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...iconBtn, border: '1px solid #f3c1c1', color: '#b42318', background: '#fff6f6' }}
+                      onClick={() => requestDeleteTournament(item.id)}
+                      title={`Delete ${item.name}`}
+                      aria-label={`Delete ${item.name}`}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M3 6h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M6 6l1 14h10l1-14" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                        <path d="M10 10v7M14 10v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   </div>
                 </td>
               </tr>

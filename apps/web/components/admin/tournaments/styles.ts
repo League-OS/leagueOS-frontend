@@ -70,6 +70,21 @@ export const outlineBtn: CSSProperties = {
   cursor: 'pointer',
 };
 
+export const addIconBtn: CSSProperties = {
+  width: 28,
+  height: 28,
+  border: '1px solid #0f7c64',
+  borderRadius: 8,
+  background: 'linear-gradient(110deg, #12856b, #1b9f78)',
+  color: '#fff',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
+  cursor: 'pointer',
+  boxShadow: '0 5px 12px rgba(18, 133, 107, 0.25)',
+};
+
 export const tabBtn: CSSProperties = {
   width: '100%',
   border: '1px solid transparent',
@@ -159,6 +174,19 @@ export const td: CSSProperties = {
   padding: 7,
   fontSize: 12.5,
   color: '#1d2e29',
+};
+
+export const textLinkBtn: CSSProperties = {
+  border: 0,
+  background: 'transparent',
+  color: '#0f8c7a',
+  textDecoration: 'none',
+  padding: 0,
+  fontSize: 13,
+  fontWeight: 600,
+  lineHeight: 1.25,
+  cursor: 'pointer',
+  display: 'inline-block',
 };
 
 export const collapseBtn: CSSProperties = {
