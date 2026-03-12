@@ -16,7 +16,11 @@ export default async function globalSetup() {
   const page = await context.newPage();
 
   await page.goto(process.env.E2E_BASE_URL || 'http://127.0.0.1:3000');
-  await loginWithAnyCredential(page);
+  try {
+    await loginWithAnyCredential(page);
+  } catch {
+    // Keep setup resilient to temporary auth rate-limits; tests can still login as needed.
+  }
 
   await context.storageState({ path: AUTH_STATE_PATH });
   await browser.close();
