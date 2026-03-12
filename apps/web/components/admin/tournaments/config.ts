@@ -70,17 +70,19 @@ export const defaultFormatConfig = (): FormatConfig => ({
   groupKoTeamsPerGroup: 2,
   matchCountPerEntrant: 4,
   matchCountKoTeamsToKo: 4,
-  seedSource: 'ELO',
   stageRules: {},
 });
 
 export const defaultPoolConfig = (): PoolConfig => ({
   groupCount: 2,
+  seasonId: '',
   poolPlayers: [],
   generatedTeams: [],
   groups: [],
   assignments: {},
   teamsGenerated: false,
+  pairsValidated: false,
+  pairValidationMessage: '',
 });
 
 export const defaultCourtConfig = (): CourtConfig => ({
@@ -91,6 +93,7 @@ export const defaultCourtConfig = (): CourtConfig => ({
 
 export const defaultFormatFormDraft = (): FormatFormDraft => ({
   name: '',
+  status: 'DRAFT',
   type: 'DOUBLES',
   regOpen: '2026-03-20T09:00',
   regClose: '2026-04-02T20:00',

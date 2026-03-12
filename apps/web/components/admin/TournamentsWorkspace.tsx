@@ -1,28 +1,41 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 
 import { AddCourtModal } from './tournaments/AddCourtModal';
 import { AddFormatPanel } from './tournaments/AddFormatPanel';
 import { ConfigTab } from './tournaments/ConfigTab';
 import { CourtsTab } from './tournaments/CourtsTab';
+import { FormatDirectoryPanel } from './tournaments/FormatDirectoryPanel';
 import { FormatTabs } from './tournaments/FormatTabs';
 import { PoolTab } from './tournaments/PoolTab';
 import { ScheduleTab } from './tournaments/ScheduleTab';
 import { TournamentListView } from './tournaments/TournamentListView';
-import { TournamentSidebar } from './tournaments/TournamentSidebar';
 import {
   bodyFontStack,
   card,
   displayFontStack,
   heroBlock,
   revealStyle,
+  saveEnabledStyle,
   savedBadge,
 } from './tournaments/styles';
 import { useTournamentWorkspaceState } from './tournaments/useTournamentWorkspaceState';
 
 export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean }) {
   const state = useTournamentWorkspaceState();
+  const tournamentSignupLink = state.activeTournamentId
+    ? `${
+      typeof window !== 'undefined' ? window.location.origin : ''
+    }/tournaments/${state.activeTournamentId}?signup=one_click`
+    : '';
+  const topSaveByTab = state.activeTab === 'config'
+    ? { enabled: state.configDirty, onSave: state.saveConfig }
+    : state.activeTab === 'pool'
+      ? { enabled: state.poolDirty, onSave: state.savePool }
+      : state.activeTab === 'schedules'
+        ? { enabled: state.scheduleDirty || state.courtDirty, onSave: state.saveSchedules }
+        : { enabled: state.courtDirty, onSave: state.saveCourtsConfig };
 
   const outerStyle: CSSProperties = embedded
     ? { display: 'grid', gap: 10, fontFamily: bodyFontStack }
@@ -38,6 +51,17 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
   const innerStyle: CSSProperties = embedded
     ? { display: 'grid', gap: 10 }
     : { maxWidth: 1360, margin: '0 auto', display: 'grid', gap: 10 };
+
+  useEffect(() => {
+    const onSidebarReselect = () => {
+      if (!state.activeTournamentId) return;
+      state.closeTournament();
+    };
+    window.addEventListener('leagueos:tournaments:sidebar-reselect', onSidebarReselect);
+    return () => {
+      window.removeEventListener('leagueos:tournaments:sidebar-reselect', onSidebarReselect);
+    };
+  }, [state.activeTournamentId, state.closeTournament]);
 
   return (
     <main style={outerStyle}>
@@ -59,58 +83,81 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
         {!state.activeTournamentId ? (
           <TournamentListView
             showCreateTournament={state.showCreateTournament}
-            setShowCreateTournament={state.setShowCreateTournament}
+            requestShowCreateTournament={state.requestShowCreateTournament}
+            requestEditTournament={state.requestEditTournament}
+            cancelTournamentEditor={state.cancelTournamentEditor}
+            editingTournamentId={state.editingTournamentId}
+            editingTournamentStatus={state.editingTournamentStatus}
+            tournamentFieldEditability={state.tournamentFieldEditability}
             tournamentName={state.tournamentName}
             setTournamentName={state.setTournamentName}
             tournamentTimezone={state.tournamentTimezone}
             setTournamentTimezone={state.setTournamentTimezone}
-            tournamentSeasonId={state.tournamentSeasonId}
-            setTournamentSeasonId={state.setTournamentSeasonId}
+            tournamentStartAt={state.tournamentStartAt}
+            setTournamentStartAt={state.setTournamentStartAt}
+            tournamentEndAt={state.tournamentEndAt}
+            setTournamentEndAt={state.setTournamentEndAt}
             tournamentAdminNotes={state.tournamentAdminNotes}
             setTournamentAdminNotes={state.setTournamentAdminNotes}
             timezoneOptions={state.timezoneOptions}
-            clubSeasons={state.clubSeasons}
-            seasonLoading={state.seasonLoading}
-            seasonSource={state.seasonSource}
-            seasonLoadError={state.seasonLoadError}
             tournamentFormError={state.tournamentFormError}
             setTournamentFormError={state.setTournamentFormError}
-            createTournament={state.createTournament}
+            saveTournament={state.saveTournament}
             tournaments={state.tournaments}
             openTournament={state.openTournament}
           />
         ) : (
-          <section style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gap: 10, alignItems: 'start' }}>
+          <section style={{ display: 'grid', gap: 10, alignItems: 'start' }}>
             <div style={revealStyle(state.mounted, 90)}>
-              <TournamentSidebar
+              <FormatDirectoryPanel
                 activeTournament={state.activeTournament}
-                tournamentTimezone={state.tournamentTimezone}
                 formats={state.formats}
                 activeFormatId={state.activeFormatId}
-                requestShowAddFormat={state.requestShowAddFormat}
-                openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
                 closeTournament={state.closeTournament}
+                requestShowAddFormat={state.requestShowAddFormat}
+                requestEditFormat={state.requestEditFormat}
+                requestDeleteFormat={state.requestDeleteFormat}
+                openFormatConfig={(formatId) => state.openFormat(formatId, 'config')}
+                lifecycleStatusOptions={state.lifecycleStatusOptions}
+                allowedLifecycleStatuses={state.allowedLifecycleStatuses}
+                updateTournamentStatus={state.updateTournamentStatus}
+                tournamentSignupLink={tournamentSignupLink}
+                requestEditTournament={state.requestEditTournament}
               />
             </div>
 
             <section style={{ ...card, ...revealStyle(state.mounted, 170) }}>
               {state.showAddFormat ? (
                 <AddFormatPanel
+                  mode={state.editingFormatId ? 'edit' : 'create'}
                   formDraft={state.formDraft}
                   setFormDraft={state.setFormDraft}
                   formatFormError={state.formatFormError}
                   setFormatFormError={state.setFormatFormError}
-                  setShowAddFormat={state.setShowAddFormat}
+                  lifecycleStatusOptions={state.lifecycleStatusOptions}
+                  allowedLifecycleStatuses={state.allowedLifecycleStatuses}
+                  onCancel={state.cancelFormatEditor}
                   saveFormatBase={state.saveFormatBase}
                 />
               ) : !state.activeFormat || !state.configDraft || !state.poolDraft ? (
-                <p style={{ color: '#64748b' }}>Select a format to start configuring.</p>
+                <p style={{ color: '#64748b' }}>Select a format from the list above to configure.</p>
               ) : (
                 <>
-                  <h1 style={{ margin: 0, fontFamily: displayFontStack, fontSize: 30, letterSpacing: '-0.018em', color: '#162722' }}>
-                    {state.activeFormat.name}
-                  </h1>
-                  <p style={{ margin: '4px 0 10px', color: '#57665f', fontSize: 13 }}>Format Configuration</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <div>
+                      <h1 style={{ margin: 0, fontFamily: displayFontStack, fontSize: 30, letterSpacing: '-0.018em', color: '#162722' }}>
+                        {state.activeFormat.name}
+                      </h1>
+                      <p style={{ margin: '4px 0 10px', color: '#57665f', fontSize: 13 }}>Format Configuration</p>
+                    </div>
+                    <button
+                      style={saveEnabledStyle(topSaveByTab.enabled)}
+                      disabled={!topSaveByTab.enabled}
+                      onClick={topSaveByTab.onSave}
+                    >
+                      Save
+                    </button>
+                  </div>
 
                   <FormatTabs activeTab={state.activeTab} switchTab={state.switchTab} />
 
@@ -119,9 +166,6 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       configDirty={state.configDirty}
                       saveConfig={state.saveConfig}
                       configDraft={state.configDraft}
-                      formatNameDraft={state.formatNameDraft}
-                      setFormatNameDraft={state.setFormatNameDraft}
-                      setConfigDirty={state.setConfigDirty}
                       updateConfig={state.updateConfig}
                       stageDefs={state.stageDefs}
                       updateStageRule={state.updateStageRule}
@@ -134,11 +178,14 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       poolDirty={state.poolDirty}
                       savePool={state.savePool}
                       poolDraft={state.poolDraft}
-                      setPoolDraft={(value) => state.setPoolDraft(value)}
-                      setPoolDirty={state.setPoolDirty}
+                      groupCount={state.configDraft?.groupCount || state.poolDraft.groupCount}
                       addPlayerId={state.addPlayerId}
                       setAddPlayerId={state.setAddPlayerId}
                       addPlayerToPool={state.addPlayerToPool}
+                      removePlayerFromPool={state.removePlayerFromPool}
+                      updateGeneratedPairing={state.updateGeneratedPairing}
+                      validateGeneratedPairs={state.validateGeneratedPairs}
+                      generateGroupsFromPairs={state.generateGroupsFromPairs}
                       generateTeamsAndGroups={state.generateTeamsAndGroups}
                       resetTeams={state.resetTeams}
                       reassignTeam={state.reassignTeam}
@@ -146,6 +193,11 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       unitLabel={state.unitLabel}
                       unitLabelPlural={state.unitLabelPlural}
                       clubPlayers={state.clubPlayersForActiveFormat}
+                      clubSeasons={state.clubSeasons}
+                      seasonLoading={state.seasonLoading}
+                      seasonSource={state.seasonSource}
+                      seasonLoadError={state.seasonLoadError}
+                      setPoolSeasonId={state.setPoolSeasonId}
                       poolPlayersOpen={state.poolPlayersOpen}
                       setPoolPlayersOpen={state.setPoolPlayersOpen}
                       poolGroupsOpen={state.poolGroupsOpen}
@@ -183,6 +235,8 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                     <CourtsTab
                       courts={state.courts}
                       setShowAddCourtModal={state.setShowAddCourtModal}
+                      renameCourt={state.renameCourt}
+                      deleteCourt={state.deleteCourt}
                       activeCourtId={state.activeCourtId}
                       setActiveCourtId={state.setActiveCourtId}
                       courtConfigDraft={state.courtConfigDraft}

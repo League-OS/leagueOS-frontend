@@ -4,6 +4,8 @@ export type FormatType = 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
 export type SchedulingModel = '' | 'RR' | 'GROUPS_KO' | 'MATCH_COUNT_KO' | 'DIRECT_KNOCKOUT';
 export type WinCondition = 'FIRST_TO_POINTS' | 'WIN_BY_2';
 export type ViewTab = 'config' | 'pool' | 'schedules' | 'courts';
+export type TournamentLifecycleStatus = 'DRAFT' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type FormatLifecycleStatus = TournamentLifecycleStatus;
 
 export type StageRule = {
   setsToWin: 1 | 2 | 3;
@@ -27,11 +29,16 @@ export type FormatConfig = {
   groupKoTeamsPerGroup: number;
   matchCountPerEntrant: number;
   matchCountKoTeamsToKo: number;
-  seedSource: 'ELO' | 'MANUAL';
   stageRules: Record<string, StageRule>;
 };
 
-export type PoolPlayer = { playerId: string; registeredAt: string; regRoute?: 'ADMIN' | 'SELF' };
+export type PoolPlayer = {
+  playerId: string;
+  registeredAt: string;
+  regRoute?: 'ADMIN' | 'SELF';
+  seededElo?: number;
+  eloSeasonId?: string;
+};
 export type GeneratedTeam = { id: string; name: string; playerIds: string[]; elo: number };
 export type Group = { id: string; name: string };
 
@@ -50,16 +57,20 @@ export type CourtConfig = {
 
 export type PoolConfig = {
   groupCount: number;
+  seasonId: string;
   poolPlayers: PoolPlayer[];
   generatedTeams: GeneratedTeam[];
   groups: Group[];
   assignments: Record<string, string[]>;
   teamsGenerated: boolean;
+  pairsValidated: boolean;
+  pairValidationMessage: string;
 };
 
 export type Format = {
   id: string;
   name: string;
+  status: FormatLifecycleStatus;
   type: FormatType;
   regOpen: string;
   regClose: string;
@@ -79,10 +90,12 @@ export type TournamentRecord = {
   id: string;
   name: string;
   timezone: string;
+  startAt: string;
+  endAt: string;
   seasonId: string;
   seasonName: string;
   adminNotes: string;
-  status: 'Draft' | 'Configured';
+  status: TournamentLifecycleStatus;
   formats: Format[];
   courts: CourtItem[];
 };
@@ -113,6 +126,7 @@ export type SeasonList = Season[];
 
 export type FormatFormDraft = {
   name: string;
+  status: FormatLifecycleStatus;
   type: FormatType;
   regOpen: string;
   regClose: string;

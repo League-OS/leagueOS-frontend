@@ -1,27 +1,40 @@
 import { field, labelCol, outlineBtn, saveEnabledStyle, subCard } from './styles';
-import type { FormatFormDraft, FormatType } from './types';
+import { lifecycleStatusLabel } from './lifecycleUi';
+import type { FormatFormDraft, FormatType, TournamentLifecycleStatus } from './types';
 
 type AddFormatPanelProps = {
+  mode: 'create' | 'edit';
   formDraft: FormatFormDraft;
   setFormDraft: (value: FormatFormDraft | ((prev: FormatFormDraft) => FormatFormDraft)) => void;
   formatFormError: string;
   setFormatFormError: (value: string) => void;
-  setShowAddFormat: (value: boolean) => void;
+  lifecycleStatusOptions: TournamentLifecycleStatus[];
+  allowedLifecycleStatuses: (current: TournamentLifecycleStatus) => TournamentLifecycleStatus[];
+  onCancel: () => void;
   saveFormatBase: () => void;
 };
 
 export function AddFormatPanel({
+  mode,
   formDraft,
   setFormDraft,
   formatFormError,
   setFormatFormError,
-  setShowAddFormat,
+  lifecycleStatusOptions,
+  allowedLifecycleStatuses,
+  onCancel,
   saveFormatBase,
 }: AddFormatPanelProps) {
+  const isEditMode = mode === 'edit';
+
   return (
     <article style={subCard}>
-      <h3 style={{ marginTop: 0 }}>Add Format Instance</h3>
-      <p style={{ marginTop: 0, color: '#64748b' }}>Define format identity first. Save will open that format configuration.</p>
+      <h3 style={{ marginTop: 0 }}>{isEditMode ? 'Edit Format' : 'Add Format Instance'}</h3>
+      <p style={{ marginTop: 0, color: '#64748b' }}>
+        {isEditMode
+          ? 'Update format identity details. Save will reopen this format configuration.'
+          : 'Define format identity first. Save will open that format configuration.'}
+      </p>
       <div style={{ display: 'grid', gap: 8 }}>
         <label style={labelCol}>
           Format Name <span style={{ color: '#b91c1c' }}>*</span>
@@ -35,6 +48,31 @@ export function AddFormatPanel({
             style={field}
           />
         </label>
+        {isEditMode ? (
+          <label style={labelCol}>
+            Status
+            <select
+              value={formDraft.status}
+              onChange={(event) => {
+                setFormDraft((draft) => ({
+                  ...draft,
+                  status: event.target.value as TournamentLifecycleStatus,
+                }));
+              }}
+              style={field}
+            >
+              {lifecycleStatusOptions.map((status) => (
+                <option
+                  key={status}
+                  value={status}
+                  disabled={!allowedLifecycleStatuses(formDraft.status).includes(status)}
+                >
+                  {lifecycleStatusLabel[status]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label style={labelCol}>
           Format Type
           <select
@@ -86,13 +124,13 @@ export function AddFormatPanel({
         </label>
         {formatFormError ? <div style={{ color: '#b91c1c', fontWeight: 600 }}>{formatFormError}</div> : null}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={outlineBtn} onClick={() => setShowAddFormat(false)}>Cancel</button>
+          <button style={outlineBtn} onClick={onCancel}>Cancel</button>
           <button
             style={saveEnabledStyle(Boolean(formDraft.name.trim()))}
             disabled={!formDraft.name.trim()}
             onClick={saveFormatBase}
           >
-            Save Format
+            {isEditMode ? 'Save' : 'Save Format'}
           </button>
         </div>
       </div>

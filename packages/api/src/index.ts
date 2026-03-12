@@ -737,6 +737,7 @@ export class LeagueOsApiClient {
     formatInstanceId: number,
     payload: Partial<{
       name: string;
+      format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
       registration_open_at: string;
       registration_close_at: string;
       auto_registration_close: boolean;
@@ -756,6 +757,20 @@ export class LeagueOsApiClient {
       clubId,
       query: { club_id: clubId },
       body: payload,
+    });
+  }
+
+  async deleteTournamentFormat(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+  ): Promise<{ ok: boolean; format_instance_id: number }> {
+    return this.request<{ ok: boolean; format_instance_id: number }>(`/tournaments/${tournamentId}/formats/${formatInstanceId}`, {
+      method: 'DELETE',
+      token,
+      clubId,
+      query: { club_id: clubId },
     });
   }
 

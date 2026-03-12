@@ -62,8 +62,6 @@ export function ScheduleTab({
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <SaveRow enabled={scheduleDirty || courtDirty} onSave={saveSchedules} />
-
       <section style={subCard}>
         <strong>Schedule Status</strong>
         <div style={{ ...grid2, marginTop: 10 }}>

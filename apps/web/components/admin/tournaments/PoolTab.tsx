@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import type { Season } from '@leagueos/schemas';
+
 import { SaveRow } from './shared';
 import { collapseBtn, field, grid2, labelCol, outlineBtn, pill, subCard, td, th } from './styles';
 import type { ClubPlayer, PoolConfig } from './types';
@@ -6,11 +9,14 @@ type PoolTabProps = {
   poolDirty: boolean;
   savePool: () => void;
   poolDraft: PoolConfig;
-  setPoolDraft: (value: PoolConfig) => void;
-  setPoolDirty: (value: boolean) => void;
+  groupCount: number;
   addPlayerId: string;
   setAddPlayerId: (value: string) => void;
   addPlayerToPool: () => void;
+  removePlayerFromPool: (playerId: string) => void;
+  updateGeneratedPairing: (teamId: string, playerIndex: 0 | 1, playerId: string) => void;
+  validateGeneratedPairs: () => void;
+  generateGroupsFromPairs: () => void;
   generateTeamsAndGroups: () => void;
   resetTeams: () => void;
   reassignTeam: (teamId: string, toGroupId: string) => void;
@@ -18,6 +24,11 @@ type PoolTabProps = {
   unitLabel: string;
   unitLabelPlural: string;
   clubPlayers: ClubPlayer[];
+  clubSeasons: Season[];
+  seasonLoading: boolean;
+  seasonSource: 'api' | 'fallback';
+  seasonLoadError: string;
+  setPoolSeasonId: (seasonId: string) => void;
   poolPlayersOpen: boolean;
   setPoolPlayersOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   poolGroupsOpen: boolean;
@@ -28,11 +39,14 @@ export function PoolTab({
   poolDirty,
   savePool,
   poolDraft,
-  setPoolDraft,
-  setPoolDirty,
+  groupCount,
   addPlayerId,
   setAddPlayerId,
   addPlayerToPool,
+  removePlayerFromPool,
+  updateGeneratedPairing,
+  validateGeneratedPairs,
+  generateGroupsFromPairs,
   generateTeamsAndGroups,
   resetTeams,
   reassignTeam,
@@ -40,14 +54,58 @@ export function PoolTab({
   unitLabel,
   unitLabelPlural,
   clubPlayers,
+  clubSeasons,
+  seasonLoading,
+  seasonSource,
+  seasonLoadError,
+  setPoolSeasonId,
   poolPlayersOpen,
   setPoolPlayersOpen,
   poolGroupsOpen,
   setPoolGroupsOpen,
 }: PoolTabProps) {
+  const poolLocked = poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated;
+  const hasPendingPairs = !isSinglesFormat && poolDraft.generatedTeams.length > 0 && !poolDraft.teamsGenerated;
+  const canGenerateGroups = poolDraft.pairsValidated;
+  const [showGenerateGroupsTooltip, setShowGenerateGroupsTooltip] = useState(false);
+  const playersById = new Map(clubPlayers.map((player) => [player.id, player]));
+  const poolPlayersById = new Map(poolDraft.poolPlayers.map((entry) => [entry.playerId, entry]));
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <SaveRow enabled={poolDirty} onSave={savePool} />
+      <section style={subCard}>
+        <div style={{ ...grid2, alignItems: 'end' }}>
+          <label style={labelCol}>
+            ELO Source Season
+            <select
+              value={poolDraft.seasonId}
+              onChange={(event) => setPoolSeasonId(event.target.value)}
+              style={field}
+              disabled={seasonLoading || !clubSeasons.length}
+            >
+              {!clubSeasons.length ? (
+                <option value="">{seasonLoading ? 'Loading seasons...' : 'No club seasons available'}</option>
+              ) : null}
+              {clubSeasons.map((season) => (
+                <option key={season.id} value={String(season.id)}>{season.name}</option>
+              ))}
+            </select>
+            {!seasonLoading ? (
+              <span style={{ color: '#64748b' }}>
+                {seasonSource === 'api'
+                  ? 'ELO snapshots are taken from this season at player add/signup time.'
+                  : 'Using fallback seasons. ELO snapshots are still one-time at player add/signup.'}
+              </span>
+            ) : null}
+            {seasonLoadError ? <span style={{ color: '#b91c1c' }}>{seasonLoadError}</span> : null}
+            {poolDraft.poolPlayers.length ? (
+              <span style={{ color: '#64748b' }}>
+                Changing season will prompt to reload ELO snapshots for current pool players.
+              </span>
+            ) : null}
+          </label>
+        </div>
+      </section>
 
       <section style={subCard}>
         <button type="button" style={collapseBtn} onClick={() => setPoolPlayersOpen((value) => !value)}>
@@ -66,7 +124,7 @@ export function PoolTab({
                 value={addPlayerId}
                 onChange={(event) => setAddPlayerId(event.target.value)}
                 style={field}
-                disabled={poolDraft.teamsGenerated}
+                disabled={poolLocked}
               >
                 <option value="">Select club player</option>
                 {clubPlayers
@@ -76,12 +134,12 @@ export function PoolTab({
                   ))}
               </select>
               <div style={{ display: 'flex', gap: 8 }}>
-                {!poolDraft.teamsGenerated ? (
+                {!poolLocked ? (
                   <button style={outlineBtn} onClick={addPlayerToPool}>Add Player</button>
                 ) : (
                   <button style={outlineBtn} onClick={resetTeams}>Reset {unitLabelPlural}</button>
                 )}
-                {!poolDraft.teamsGenerated ? (
+                {!poolLocked ? (
                   <button style={outlineBtn} onClick={generateTeamsAndGroups}>
                     {isSinglesFormat ? 'Generate Groups' : 'Generate Pairs'}
                   </button>
@@ -92,7 +150,7 @@ export function PoolTab({
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
               <thead>
                 <tr>
-                  {['#', 'Name', 'Email', 'Phone', 'Reg Date', 'Reg Route', 'ELO'].map((header) => (
+                  {['#', 'Name', 'Email', 'Phone', 'Reg Date', 'Reg Route', 'ELO', 'Action'].map((header) => (
                     <th key={header} style={th}>{header}</th>
                   ))}
                 </tr>
@@ -110,13 +168,22 @@ export function PoolTab({
                         <td style={td}>{player.phone}</td>
                         <td style={td}>{poolPlayer.registeredAt}</td>
                         <td style={td}>{poolPlayer.regRoute || 'ADMIN'}</td>
-                        <td style={td}>{player.elo}</td>
+                        <td style={td}>{poolPlayer.seededElo ?? player.elo}</td>
+                        <td style={td}>
+                          <button
+                            style={outlineBtn}
+                            disabled={poolLocked}
+                            onClick={() => removePlayerFromPool(poolPlayer.playerId)}
+                          >
+                            Remove
+                          </button>
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td style={td} colSpan={7}>No players added to pool yet.</td>
+                    <td style={td} colSpan={8}>No players added to pool yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -124,6 +191,120 @@ export function PoolTab({
           </>
         ) : null}
       </section>
+
+      {hasPendingPairs ? (
+        <section style={subCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <strong>Generated Pairs</strong>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={outlineBtn} onClick={validateGeneratedPairs}>Validate Pairs</button>
+              <span
+                style={{ position: 'relative', display: 'inline-block' }}
+                onMouseEnter={() => {
+                  if (!canGenerateGroups) setShowGenerateGroupsTooltip(true);
+                }}
+                onMouseLeave={() => setShowGenerateGroupsTooltip(false)}
+              >
+                <button
+                  style={canGenerateGroups ? outlineBtn : { ...outlineBtn, background: '#eef2ef', color: '#8b948f', cursor: 'not-allowed' }}
+                  disabled={!canGenerateGroups}
+                  onClick={generateGroupsFromPairs}
+                >
+                  Generate Groups
+                </button>
+                {!canGenerateGroups && showGenerateGroupsTooltip ? (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 8px)',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      whiteSpace: 'nowrap',
+                      background: '#1f2937',
+                      color: '#fff',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      fontSize: 11,
+                      zIndex: 20,
+                      boxShadow: '0 6px 12px rgba(15, 23, 42, 0.2)',
+                    }}
+                  >
+                    validate pairs first
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          </div>
+          {poolDraft.pairValidationMessage ? (
+            <p style={{ margin: '8px 0 0', color: poolDraft.pairsValidated ? '#047857' : '#b45309' }}>
+              {poolDraft.pairValidationMessage}
+            </p>
+          ) : null}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
+            <thead>
+              <tr>
+                {['#', 'Player 1 (ELO)', 'Player 2 (ELO)', 'Team ELO'].map((header) => (
+                  <th key={header} style={th}>{header}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {poolDraft.generatedTeams.map((team, index) => {
+                const player1Id = team.playerIds[0] || '';
+                const player2Id = team.playerIds[1] || '';
+                const player1 = playersById.get(player1Id);
+                const player2 = playersById.get(player2Id);
+                const player1Elo = poolPlayersById.get(player1Id)?.seededElo ?? player1?.elo ?? 0;
+                const player2Elo = poolPlayersById.get(player2Id)?.seededElo ?? player2?.elo ?? 0;
+                return (
+                  <tr key={team.id}>
+                    <td style={td}>{index + 1}</td>
+                    <td style={td}>
+                      <select
+                        value={player1Id}
+                        onChange={(event) => updateGeneratedPairing(team.id, 0, event.target.value)}
+                        style={field}
+                      >
+                        <option value="">Select player</option>
+                        {poolDraft.poolPlayers.map((poolPlayer) => {
+                          const player = playersById.get(poolPlayer.playerId);
+                          if (!player) return null;
+                          return (
+                            <option key={player.id} value={player.id}>
+                              {player.name} ({poolPlayer.seededElo ?? player.elo})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </td>
+                    <td style={td}>
+                      <select
+                        value={player2Id}
+                        onChange={(event) => updateGeneratedPairing(team.id, 1, event.target.value)}
+                        style={field}
+                      >
+                        <option value="">Select player</option>
+                        {poolDraft.poolPlayers.map((poolPlayer) => {
+                          const player = playersById.get(poolPlayer.playerId);
+                          if (!player) return null;
+                          return (
+                            <option key={player.id} value={player.id}>
+                              {player.name} ({poolPlayer.seededElo ?? player.elo})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </td>
+                    <td style={td}>
+                      {Math.round(((player1Elo + player2Elo) / 2) || 0)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       <section style={subCard}>
         <button type="button" style={collapseBtn} onClick={() => setPoolGroupsOpen((value) => !value)}>
@@ -137,21 +318,15 @@ export function PoolTab({
               <label style={labelCol}>
                 Number of Groups
                 <input
-                  type="number"
-                  min={1}
-                  value={poolDraft.groupCount}
-                  onChange={(event) => {
-                    const nextGroupCount = Math.max(1, Number(event.target.value) || 1);
-                    setPoolDraft({ ...poolDraft, groupCount: nextGroupCount });
-                    setPoolDirty(true);
-                  }}
+                  value={String(groupCount)}
+                  disabled
                   style={field}
                 />
               </label>
               <label style={labelCol}>
                 {unitLabelPlural} Per Group (Derived)
                 <input
-                  value={poolDraft.generatedTeams.length ? String(Math.ceil(poolDraft.generatedTeams.length / poolDraft.groupCount)) : '-'}
+                  value={poolDraft.generatedTeams.length ? String(Math.ceil(poolDraft.generatedTeams.length / Math.max(1, groupCount))) : '-'}
                   disabled
                   style={field}
                 />
@@ -167,7 +342,9 @@ export function PoolTab({
               <p style={{ color: '#64748b' }}>
                 {isSinglesFormat
                   ? (poolDraft.poolPlayers.length ? 'Generate groups first.' : 'Add players first.')
-                  : (poolDraft.poolPlayers.length ? 'Generate pairs first.' : 'Add players first.')}
+                  : hasPendingPairs
+                    ? 'Validate pairs, then generate groups.'
+                    : (poolDraft.poolPlayers.length ? 'Generate pairs first.' : 'Add players first.')}
               </p>
             ) : (
               <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>

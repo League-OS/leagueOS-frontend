@@ -35,6 +35,11 @@ export function AdminSidebar({
           <Link
             key={item.key}
             href={item.href}
+            onClick={() => {
+              if (item.key === 'tournaments' && active === 'tournaments' && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('leagueos:tournaments:sidebar-reselect'));
+              }
+            }}
             style={{
               ...navLink,
               ...(active === item.key ? navLinkActive : {}),
