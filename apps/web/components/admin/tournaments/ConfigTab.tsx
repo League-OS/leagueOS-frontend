@@ -221,7 +221,23 @@ export function ConfigTab({
                   style={field}
                 />
               </label>
+              <label style={labelCol}>
+                Initial Pairing Strategy
+                <select
+                  value={configDraft.matchCountPairingMode}
+                  onChange={(event) => {
+                    updateConfig({ matchCountPairingMode: event.target.value as 'BALANCED' | 'SEEDED_SPREAD' });
+                  }}
+                  style={field}
+                >
+                  <option value="BALANCED">Balanced Matchups</option>
+                  <option value="SEEDED_SPREAD">Seeded Spread</option>
+                </select>
+              </label>
             </div>
+            <p style={{ margin: '8px 0 0', color: '#52605b', maxWidth: 760 }}>
+              Pairing strategy applies only to initial-round match-count fixtures.
+            </p>
           </section>
         ) : null}
 

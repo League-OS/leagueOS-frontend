@@ -38,6 +38,7 @@ function formatDateTime(value: string | null): string {
 }
 
 function formatRoundLabel(match: ApiTournamentMatch): string {
+  if (match.stage_code === 'MCKO_INITIAL') return match.round_label || 'Initial Round';
   if (match.group_code) return `Group(${match.group_code})`;
   return match.round_label || '-';
 }

@@ -34,6 +34,7 @@ import type {
   FormatLifecycleStatus,
   GeneratedTeam,
   Group,
+  MatchCountPairingMode,
   PoolConfig,
   SchedulingModel,
   SlotDraft,
@@ -379,6 +380,18 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
   const persistedCourtConfig = normalizeCourtConfigFromConfigJson(rawConfigJson.court_config);
   const uiSchedulingModelRaw = typeof rawConfigJson.ui_scheduling_model === 'string' ? rawConfigJson.ui_scheduling_model : '';
   const columnSchedulingModel = typeof row.scheduling_model === 'string' ? row.scheduling_model : '';
+  const matchCountKoTeamsRaw = Number(rawConfigJson.match_count_ko_teams_to_ko ?? rawConfigJson.matchCountKoTeamsToKo);
+  const matchCountKoTeamsToKo = Number.isFinite(matchCountKoTeamsRaw) && matchCountKoTeamsRaw >= 2
+    ? Math.floor(matchCountKoTeamsRaw)
+    : config.matchCountKoTeamsToKo;
+  const rawMatchCountPairingMode = (
+    typeof rawConfigJson.match_count_pairing_mode === 'string'
+      ? rawConfigJson.match_count_pairing_mode
+      : (typeof rawConfigJson.matchCountPairingMode === 'string' ? rawConfigJson.matchCountPairingMode : '')
+  ).toUpperCase();
+  const matchCountPairingMode: MatchCountPairingMode = isMatchCountPairingMode(rawMatchCountPairingMode)
+    ? rawMatchCountPairingMode
+    : config.matchCountPairingMode;
   const mappedSchedulingModel = isUiSchedulingModel(columnSchedulingModel) && columnSchedulingModel !== ''
     ? columnSchedulingModel
     : (isUiSchedulingModel(uiSchedulingModelRaw) && uiSchedulingModelRaw !== '' ? uiSchedulingModelRaw : 'DIRECT_KNOCKOUT');
@@ -388,6 +401,8 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     setDurationMinutes: row.average_set_duration_minutes || config.setDurationMinutes,
     maxTeamsAllowed: row.max_teams_allowed || config.maxTeamsAllowed,
     matchCountPerEntrant: row.matches_per_team || config.matchCountPerEntrant,
+    matchCountKoTeamsToKo,
+    matchCountPairingMode,
     groupCount: row.group_count || config.groupCount,
     groupKoTeamsPerGroup: row.group_ko_teams_per_group || config.groupKoTeamsPerGroup,
   };
@@ -463,6 +478,10 @@ function eloForFormat(player: ClubPlayer, formatType?: FormatType): number {
 
 function isUiSchedulingModel(value: string): value is SchedulingModel {
   return value === '' || value === 'RR' || value === 'GROUPS_KO' || value === 'MATCH_COUNT_KO' || value === 'DIRECT_KNOCKOUT';
+}
+
+function isMatchCountPairingMode(value: string): value is MatchCountPairingMode {
+  return value === 'BALANCED' || value === 'SEEDED_SPREAD';
 }
 
 function effectiveSchedulingModel(value: SchedulingModel | undefined | null): Exclude<SchedulingModel, ''> {
@@ -1735,6 +1754,8 @@ export function useTournamentWorkspaceState() {
             ...(activeFormat.metaConfigJson || {}),
             ui_scheduling_model: merged.schedulingModel,
             stage_rules: merged.stageRules,
+            match_count_pairing_mode: merged.matchCountPairingMode,
+            match_count_ko_teams_to_ko: merged.matchCountKoTeamsToKo,
           };
           const updated = await client.updateTournamentFormat(
             auth.token,
@@ -1974,6 +1995,13 @@ export function useTournamentWorkspaceState() {
       const poolError = validateGroupsKoPoolBeforeSchedule(poolDraft);
       if (poolError) {
         window.alert(poolError);
+        return;
+      }
+    }
+    if (effectiveSchedulingModel(activeFormat.config.schedulingModel) === 'MATCH_COUNT_KO') {
+      const generatedTeams = poolDraft?.generatedTeams || [];
+      if (!generatedTeams.length) {
+        window.alert('Generate teams in Pool and save before schedule generation.');
         return;
       }
     }

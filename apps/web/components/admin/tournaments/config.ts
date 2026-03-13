@@ -70,6 +70,7 @@ export const defaultFormatConfig = (): FormatConfig => ({
   groupKoTeamsPerGroup: 2,
   matchCountPerEntrant: 4,
   matchCountKoTeamsToKo: 4,
+  matchCountPairingMode: 'BALANCED',
   stageRules: {},
 });
 
