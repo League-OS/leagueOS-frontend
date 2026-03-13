@@ -838,41 +838,38 @@ export function useTournamentWorkspaceState() {
     return [current, ...LIFECYCLE_TRANSITIONS[current]];
   }
 
-  function loadTournamentFormatsFromApi(tournamentId: string, preferredFormatId?: string | null) {
+  async function loadTournamentFormatsFromApi(tournamentId: string, preferredFormatId?: string | null) {
     const auth = readAdminAuth();
     const parsedTournamentId = Number.parseInt(tournamentId, 10);
     if (!auth || !Number.isInteger(parsedTournamentId)) return;
-
-    void (async () => {
-      try {
-        const apiFormats = await client.tournamentFormats(auth.token, auth.clubId, parsedTournamentId);
-        const mappedFormats = apiFormats.map(mapApiFormatToLocal);
-        setTournaments((items) => items.map((item) => (
-          item.id === tournamentId
-            ? { ...item, formats: mappedFormats, formatCount: mappedFormats.length }
-            : item
-        )));
-        setFormats(mappedFormats);
-        if (!mappedFormats.length) {
-          setActiveFormatId(null);
-          clearActiveFormatDrafts();
-          setEditingFormatId(null);
-          return;
-        }
-        const selected = preferredFormatId
-          ? mappedFormats.find((format) => format.id === preferredFormatId) ?? null
-          : null;
-        if (selected) {
-          setActiveFormatId(selected.id);
-          loadDrafts(selected);
-          return;
-        }
+    try {
+      const apiFormats = await client.tournamentFormats(auth.token, auth.clubId, parsedTournamentId);
+      const mappedFormats = apiFormats.map(mapApiFormatToLocal);
+      setTournaments((items) => items.map((item) => (
+        item.id === tournamentId
+          ? { ...item, formats: mappedFormats, formatCount: mappedFormats.length }
+          : item
+      )));
+      setFormats(mappedFormats);
+      if (!mappedFormats.length) {
         setActiveFormatId(null);
         clearActiveFormatDrafts();
-      } catch {
-        // Keep local format list when API load fails.
+        setEditingFormatId(null);
+        return;
       }
-    })();
+      const selected = preferredFormatId
+        ? mappedFormats.find((format) => format.id === preferredFormatId) ?? null
+        : null;
+      if (selected) {
+        setActiveFormatId(selected.id);
+        loadDrafts(selected);
+        return;
+      }
+      setActiveFormatId(null);
+      clearActiveFormatDrafts();
+    } catch {
+      // Keep local format list when API load fails.
+    }
   }
 
   function loadTournamentCourtsFromApi(tournamentId: string, preferredCourtId?: string | null) {
@@ -1430,7 +1427,7 @@ export function useTournamentWorkspaceState() {
     clearActiveFormatDrafts();
     setFormDraft(defaultFormatFormDraft());
 
-    loadTournamentFormatsFromApi(tournamentId, null);
+    void loadTournamentFormatsFromApi(tournamentId, null);
     loadTournamentCourtsFromApi(tournamentId, target.courts[0]?.id ?? null);
   }
 
@@ -1793,7 +1790,10 @@ export function useTournamentWorkspaceState() {
       if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
         try {
           await client.generateTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {});
-          loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
+          await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
+          const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          setBracketMatches(rows);
+          setBracketMatchesOpen(true);
           showSavedNotice('Schedule generated');
           return;
         } catch (error) {
@@ -1862,7 +1862,7 @@ export function useTournamentWorkspaceState() {
           await client.resetTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           setBracketMatches([]);
           setBracketMatchesOpen(false);
-          loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
+          await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
           showSavedNotice('Schedule reset');
           return;
         } catch (error) {
@@ -2054,7 +2054,7 @@ export function useTournamentWorkspaceState() {
     const count = Math.max(1, groupCount);
     const groups: Group[] = Array.from({ length: count }).map((_, index) => {
       const letter = String.fromCharCode(65 + index);
-      return { id: `group_${letter}`, name: `Group ${letter}` };
+      return { id: `group_${letter}`, name: letter };
     });
 
     const assignments: Record<string, string[]> = {};

@@ -35,6 +35,34 @@ function formatDateTime(value: string | null): string {
   return parsed.toLocaleString();
 }
 
+function formatSlot(
+  match: ApiTournamentMatch,
+  side: 'home' | 'away',
+  matchNumberById: Map<number, number>,
+): string {
+  const registrationId = side === 'home' ? match.home_registration_id : match.away_registration_id;
+  const seed = side === 'home' ? match.home_seed : match.away_seed;
+  const source = side === 'home' ? match.home_slot_source : match.away_slot_source;
+  const groupCode = side === 'home' ? match.home_slot_group_code : match.away_slot_group_code;
+  const groupRank = side === 'home' ? match.home_slot_group_rank : match.away_slot_group_rank;
+  const dependencyId = side === 'home' ? match.dependency_match_a_id : match.dependency_match_b_id;
+
+  if (source === 'GROUP_RANK' && groupCode && groupRank) {
+    const suffix = registrationId ? ` -> R${registrationId}` : '';
+    return `${groupCode}${groupRank}${suffix}`;
+  }
+  if (source === 'MATCH_WINNER' && dependencyId) {
+    const depMatchNo = matchNumberById.get(dependencyId);
+    const depLabel = depMatchNo ? `M${depMatchNo}` : `#${dependencyId}`;
+    const suffix = registrationId ? ` -> R${registrationId}` : '';
+    return `W(${depLabel})${suffix}`;
+  }
+  if (registrationId) {
+    return seed ? `R${registrationId} (S${seed})` : `R${registrationId}`;
+  }
+  return '-';
+}
+
 export function ScheduleTab({
   scheduleDirty,
   courtDirty,
@@ -59,6 +87,7 @@ export function ScheduleTab({
   bracketMatches,
 }: ScheduleTabProps) {
   const busy = scheduleActionBusy !== null;
+  const matchNumberById = new Map(bracketMatches.map((row) => [row.id, row.match_number]));
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -183,7 +212,7 @@ export function ScheduleTab({
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
               <thead>
                 <tr>
-                  {['#', 'Stage', 'Status', 'Court', 'Start', 'End'].map((header) => (
+                  {['#', 'Stage', 'Round', 'Home Slot', 'Away Slot', 'Status', 'Court', 'Start', 'End'].map((header) => (
                     <th key={header} style={th}>{header}</th>
                   ))}
                 </tr>
@@ -192,7 +221,12 @@ export function ScheduleTab({
                 {bracketMatches.map((match) => (
                   <tr key={match.id}>
                     <td style={td}>{match.match_number}</td>
-                    <td style={td}>{match.stage_code}</td>
+                    <td style={td}>
+                      {match.group_code ? `${match.stage_code} (${match.group_code})` : match.stage_code}
+                    </td>
+                    <td style={td}>{match.round_label || '-'}</td>
+                    <td style={td}>{formatSlot(match, 'home', matchNumberById)}</td>
+                    <td style={td}>{formatSlot(match, 'away', matchNumberById)}</td>
                     <td style={td}>{match.status}</td>
                     <td style={td}>{match.court_name || '-'}</td>
                     <td style={td}>{formatDateTime(match.start_at)}</td>
