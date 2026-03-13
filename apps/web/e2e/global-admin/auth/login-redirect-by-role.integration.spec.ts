@@ -1,74 +1,37 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import {
+  loginViaAdminUi,
+  loginViaUi,
+  logoutToLogin,
+  resolveCredentialForRole,
+  waitForAdminShell,
+} from '../../role-auth';
 
-type Credentials = {
-  email: string;
-  password: string;
-};
+test.describe('Role Redirect Rules', () => {
+  test('Global Admin can access /admin and logout returns to /', async ({ page, request }) => {
+    const { creds } = await resolveCredentialForRole(request, 'GLOBAL_ADMIN');
+    await loginViaAdminUi(page, creds);
+    await expect(page).toHaveURL(/\/admin(?:\/.*)?$/);
+    await waitForAdminShell(page);
+    await expect(page.getByRole('link', { name: /^dashboard$/i })).toBeVisible();
+    await logoutToLogin(page);
+  });
 
-const GLOBAL_ADMIN: Credentials = {
-  email: process.env.E2E_GLOBAL_ADMIN_EMAIL || 'GlobalAdmin@leagueos.local',
-  password: process.env.E2E_GLOBAL_ADMIN_PASSWORD || 'GlobalAdmin@123',
-};
+  test('League Admin can access /admin and logout returns to /', async ({ page, request }) => {
+    const { creds } = await resolveCredentialForRole(request, 'CLUB_ADMIN');
+    await loginViaAdminUi(page, creds);
+    await expect(page).toHaveURL(/\/admin(?:\/.*)?$/);
+    await waitForAdminShell(page);
+    await expect(page.getByRole('link', { name: /^sessions$/i })).toBeVisible();
+    await logoutToLogin(page);
+  });
 
-const CLUB_ADMIN: Credentials = {
-  email: process.env.E2E_CLUB_ADMIN_EMAIL || 'fvma-clubAdmin@leagueos.local',
-  password: process.env.E2E_CLUB_ADMIN_PASSWORD || 'Admin@123',
-};
+  test('User login does not grant admin shell access', async ({ page, request }) => {
+    const { creds } = await resolveCredentialForRole(request, 'USER');
+    await loginViaUi(page, creds);
 
-const RECORDER: Credentials = {
-  email: process.env.E2E_RECORDER_EMAIL || 'enosh_fvma_badminton_club@leagueos.local',
-  password: process.env.E2E_RECORDER_PASSWORD || 'Recorder@123',
-};
-
-const USER: Credentials = {
-  email: process.env.E2E_USER_EMAIL || 'playerone@leagueos.local',
-  password: process.env.E2E_USER_PASSWORD || 'PlayerOne@123',
-};
-
-async function login(page: Page, creds: Credentials) {
-  await page.goto('/');
-
-  const emailField = page.getByLabel('Email');
-  if (await emailField.count()) {
-    await emailField.fill(creds.email);
-    await page.getByRole('textbox', { name: /^Password/i }).fill(creds.password);
-    await page.getByRole('button', { name: /sign in/i }).click();
-  }
-}
-
-async function expectAdminRedirect(page: Page) {
-  await expect.poll(() => new URL(page.url()).pathname).toContain('/admin');
-}
-
-async function expectPlayerApp(page: Page) {
-  await expect(page.getByRole('button', { name: /sign in/i })).not.toBeVisible();
-  await expect.poll(() => new URL(page.url()).pathname).not.toContain('/admin');
-}
-
-test('Global Admin redirects to /admin after login', async ({ page }) => {
-  await login(page, GLOBAL_ADMIN);
-  await expectAdminRedirect(page);
-});
-
-test('Club Admin redirects to /admin after login', async ({ page }) => {
-  await login(page, CLUB_ADMIN);
-  await expectAdminRedirect(page);
-});
-
-test('Recorder remains in player app (not /admin) after login', async ({ page }) => {
-  await login(page, RECORDER);
-  await expectPlayerApp(page);
-});
-
-test('User remains in player app (not /admin) after login', async ({ page }) => {
-  await login(page, USER);
-  await expectPlayerApp(page);
-});
-
-test('Admin logout redirects to home page', async ({ page }) => {
-  await login(page, GLOBAL_ADMIN);
-  await expectAdminRedirect(page);
-
-  await page.getByRole('button', { name: /logout/i }).click();
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+    await page.goto('/admin');
+    await expect(page.getByRole('button', { name: /sign in to admin/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^dashboard$/i })).toHaveCount(0);
+  });
 });

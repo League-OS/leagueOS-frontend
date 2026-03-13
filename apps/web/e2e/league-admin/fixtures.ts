@@ -1,5 +1,5 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-import { apiLoginWithAnyCredential } from '../auth';
+import { resolveCredentialForRole } from '../role-auth';
 
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
 
@@ -11,9 +11,19 @@ type Session = { id: number; status: string; season_id: number; session_start_ti
 type Court = { id: number; is_active?: boolean };
 type Player = { id: number; is_active?: boolean };
 
+function alignedIso(minutesOffset = 0) {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  const current = d.getMinutes();
+  const aligned = Math.ceil(current / 5) * 5 + minutesOffset;
+  d.setMinutes(aligned, 0, 0);
+  return d.toISOString();
+}
+
 export async function ensureAdminPrereqs(request: APIRequestContext) {
   if (!cachedAuth) {
-    cachedAuth = await apiLoginWithAnyCredential(request);
+    const { login } = await resolveCredentialForRole(request, 'CLUB_ADMIN');
+    cachedAuth = { token: login.token, club_id: login.club_id };
   }
   const auth = cachedAuth;
 
@@ -94,68 +104,79 @@ export async function ensureOpenSession(request: APIRequestContext) {
 
 export async function ensureFinalizedSessionWithGame(request: APIRequestContext) {
   const { auth, seasonId, courtId, playerIds } = await ensureAdminPrereqs(request);
+  const headers = { Authorization: `Bearer ${auth.token}` };
 
-  const sessionsRes = await request.get(`${API_BASE}/sessions?club_id=${auth.club_id}&season_id=${seasonId}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-  });
+  const sessionsRes = await request.get(`${API_BASE}/sessions?club_id=${auth.club_id}`, { headers });
   expect(sessionsRes.ok()).toBeTruthy();
   const sessions = (await sessionsRes.json()) as Session[];
-  let finalized = sessions.find((s) => s.status === 'FINALIZED');
+
+  const finalized = sessions.find((s) => s.status === 'FINALIZED');
   if (finalized) return { auth, session: finalized };
 
-  const create = await request.post(`${API_BASE}/sessions?club_id=${auth.club_id}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-    data: {
-      season_id: seasonId,
-      session_start_time: new Date(Date.now() - 86_400_000).toISOString(),
-      status: 'UPCOMING',
-      location: `E2E FINALIZE ${Date.now()}`,
-    },
-  });
-  expect(create.ok()).toBeTruthy();
-  const session = await create.json() as Session;
-  const openRes = await request.post(`${API_BASE}/sessions/${session.id}/open?club_id=${auth.club_id}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-  });
-  expect(openRes.ok()).toBeTruthy();
+  let target = sessions.find((s) => s.status === 'OPEN');
+  if (!target) {
+    const create = await request.post(`${API_BASE}/sessions?club_id=${auth.club_id}`, {
+      headers,
+      data: {
+        season_id: seasonId,
+        session_start_time: alignedIso(),
+        status: 'UPCOMING',
+        location: `E2E FINALIZE ${Date.now()}`,
+      },
+    });
+    expect(create.ok(), `Failed to create session: ${await create.text()}`).toBeTruthy();
+    const created = (await create.json()) as Session;
 
-  const game = await request.post(`${API_BASE}/games?club_id=${auth.club_id}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-    data: {
-      session_id: session.id,
-      court_id: courtId,
-      start_time: new Date(Date.now() - 80_000_000).toISOString(),
-      score_a: 21,
-      score_b: 18,
-    },
-  });
-  expect(game.ok()).toBeTruthy();
-  const gameJson = await game.json() as { id: number };
+    const openRes = await request.post(`${API_BASE}/sessions/${created.id}/open?club_id=${auth.club_id}`, { headers });
+    if (openRes.ok()) {
+      target = { ...created, status: 'OPEN' };
+    } else {
+      // If another open session exists, use it rather than failing fixture setup.
+      const retrySessions = await request.get(`${API_BASE}/sessions?club_id=${auth.club_id}`, { headers });
+      expect(retrySessions.ok(), `Failed to list sessions after open conflict: ${await retrySessions.text()}`).toBeTruthy();
+      target = ((await retrySessions.json()) as Session[]).find((s) => s.status === 'OPEN');
+      expect(target, `Unable to resolve an OPEN session: ${await openRes.text()}`).toBeTruthy();
+    }
+  }
 
-  const parts = await request.put(`${API_BASE}/games/${gameJson.id}/participants?club_id=${auth.club_id}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-    data: {
-      participants: [
-        { player_id: playerIds[0], side: 'A' },
-        { player_id: playerIds[1], side: 'A' },
-        { player_id: playerIds[2], side: 'B' },
-        { player_id: playerIds[3], side: 'B' },
-      ],
-    },
-  });
-  expect(parts.ok()).toBeTruthy();
+  const gamesRes = await request.get(`${API_BASE}/games?club_id=${auth.club_id}&session_id=${target!.id}`, { headers });
+  expect(gamesRes.ok()).toBeTruthy();
+  const games = (await gamesRes.json()) as Array<{ id: number }>;
+  if (!games.length) {
+    const game = await request.post(`${API_BASE}/games?club_id=${auth.club_id}`, {
+      headers,
+      data: {
+        session_id: target!.id,
+        court_id: courtId,
+        start_time: alignedIso(5),
+        score_a: 21,
+        score_b: 18,
+      },
+    });
+    expect(game.ok(), `Failed to create game: ${await game.text()}`).toBeTruthy();
+    const gameJson = (await game.json()) as { id: number };
 
-  const close = await request.post(`${API_BASE}/sessions/${session.id}/close?club_id=${auth.club_id}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-  });
-  expect(close.ok()).toBeTruthy();
+    const parts = await request.put(`${API_BASE}/games/${gameJson.id}/participants?club_id=${auth.club_id}`, {
+      headers,
+      data: {
+        participants: [
+          { player_id: playerIds[0], side: 'A' },
+          { player_id: playerIds[1], side: 'A' },
+          { player_id: playerIds[2], side: 'B' },
+          { player_id: playerIds[3], side: 'B' },
+        ],
+      },
+    });
+    expect(parts.ok(), `Failed to assign participants: ${await parts.text()}`).toBeTruthy();
+  }
 
-  const fin = await request.post(`${API_BASE}/sessions/${session.id}/finalize?club_id=${auth.club_id}`, {
-    headers: { Authorization: `Bearer ${auth.token}` },
-  });
-  expect(fin.ok()).toBeTruthy();
+  const close = await request.post(`${API_BASE}/sessions/${target!.id}/close?club_id=${auth.club_id}`, { headers });
+  expect(close.ok(), `Failed to close session: ${await close.text()}`).toBeTruthy();
 
-  return { auth, session: { ...session, status: 'FINALIZED' as const } };
+  const fin = await request.post(`${API_BASE}/sessions/${target!.id}/finalize?club_id=${auth.club_id}`, { headers });
+  expect(fin.ok(), `Failed to finalize session: ${await fin.text()}`).toBeTruthy();
+
+  return { auth, session: { ...target!, status: 'FINALIZED' as const } };
 }
 
 export async function ensureOpenSessionWithGame(request: APIRequestContext) {
@@ -174,7 +195,7 @@ export async function ensureOpenSessionWithGame(request: APIRequestContext) {
     data: {
       session_id: session.id,
       court_id: courtId,
-      start_time: new Date().toISOString(),
+      start_time: alignedIso(5),
       score_a: 21,
       score_b: 18,
     },

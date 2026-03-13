@@ -59,18 +59,20 @@ export function LoginView({
             e.preventDefault();
             await onLogin({ email, password });
           }}
-          autoComplete="off"
+          autoComplete="on"
           style={{ display: 'grid', gap: 12 }}
         >
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={labelStyle}>Email</span>
             <input
+              id="email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="Enter your email"
-              autoComplete="off"
+              autoComplete="username"
               style={inputStyle}
             />
           </label>
@@ -79,12 +81,14 @@ export function LoginView({
             <span style={labelStyle}>Password</span>
             <div style={{ position: 'relative' }}>
               <input
+                id="password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="Enter your password"
-                autoComplete="new-password"
+                autoComplete="current-password"
                 style={{ ...inputStyle, paddingRight: 64 }}
               />
               <button
