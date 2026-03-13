@@ -685,7 +685,10 @@ function extractAllowedCourtIds(assignments: Record<string, string[]>): number[]
   ).sort((a, b) => a - b);
 }
 
-function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
+function validateGroupsKoPoolBeforeSchedule(
+  pool: PoolConfig,
+  { isSinglesFormat }: { isSinglesFormat: boolean },
+): string | null {
   const assignedTeamIds = Object.values(pool.assignments || {})
     .flatMap((ids) => ids || [])
     .map((id) => String(id));
@@ -693,9 +696,23 @@ function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
     return 'Generate groups in Pool and save before schedule generation.';
   }
 
-  const knownTeamIds = new Set(pool.generatedTeams.map((team) => String(team.id)));
+  const knownTeamIds = new Set<string>();
+  if (isSinglesFormat) {
+    pool.poolPlayers.forEach((entry) => {
+      const playerId = String(entry.playerId || '').trim();
+      if (!playerId) return;
+      knownTeamIds.add(playerId);
+      knownTeamIds.add(`player_${playerId}`);
+    });
+  } else {
+    pool.generatedTeams.forEach((team) => {
+      knownTeamIds.add(String(team.id));
+    });
+  }
   if (!knownTeamIds.size) {
-    return 'Pool teams are missing. Regenerate pairs/groups in Pool and save before schedule generation.';
+    return isSinglesFormat
+      ? 'Pool players are missing. Add players and generate groups in Pool before schedule generation.'
+      : 'Pool teams are missing. Regenerate pairs/groups in Pool and save before schedule generation.';
   }
 
   for (const teamId of assignedTeamIds) {
@@ -704,6 +721,22 @@ function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
     }
   }
   return null;
+}
+
+function poolArtifactsGenerated(pool: PoolConfig | null | undefined): boolean {
+  if (!pool) return false;
+  if (pool.teamsGenerated) return true;
+  if (pool.generatedTeams.length > 0) return true;
+  if (pool.groups.length > 0) return true;
+  return Object.values(pool.assignments || {}).some((ids) => Array.isArray(ids) && ids.length > 0);
+}
+
+function isPoolRemovalLocked(
+  pool: PoolConfig | null | undefined,
+  scheduleGeneratedAt: string | null | undefined,
+): boolean {
+  if (scheduleGeneratedAt) return true;
+  return poolArtifactsGenerated(pool);
 }
 
 export function useTournamentWorkspaceState() {
@@ -803,7 +836,10 @@ export function useTournamentWorkspaceState() {
   const unitLabelPlural = isSinglesFormat ? 'Players' : 'Teams';
   const effectiveEntrantCount = useMemo(() => {
     if (!configDraft) return 0;
-    if (poolDraft?.teamsGenerated) return poolDraft.generatedTeams.length;
+    if (poolDraft?.teamsGenerated) {
+      if (isSinglesFormat) return poolDraft.poolPlayers.length;
+      return poolDraft.generatedTeams.length;
+    }
     if (poolDraft?.poolPlayers.length) {
       if (isSinglesFormat) return poolDraft.poolPlayers.length;
       return Math.max(1, Math.floor(poolDraft.poolPlayers.length / 2));
@@ -825,6 +861,10 @@ export function useTournamentWorkspaceState() {
     if (Number.isNaN(parsed.getTime())) return 'Generated';
     return `Generated (${parsed.toLocaleString()})`;
   }, [activeFormat?.scheduleGeneratedAt]);
+  const poolRemovalLocked = useMemo(
+    () => isPoolRemovalLocked(poolDraft, activeFormat?.scheduleGeneratedAt),
+    [poolDraft, activeFormat?.scheduleGeneratedAt],
+  );
 
   const clubPlayersForActiveFormat = useMemo(
     () =>
@@ -1992,7 +2032,7 @@ export function useTournamentWorkspaceState() {
       return;
     }
     if (effectiveSchedulingModel(activeFormat.config.schedulingModel) === 'GROUPS_KO' && poolDraft) {
-      const poolError = validateGroupsKoPoolBeforeSchedule(poolDraft);
+      const poolError = validateGroupsKoPoolBeforeSchedule(poolDraft, { isSinglesFormat: activeFormat.type === 'SINGLES' });
       if (poolError) {
         window.alert(poolError);
         return;
@@ -2000,8 +2040,14 @@ export function useTournamentWorkspaceState() {
     }
     if (effectiveSchedulingModel(activeFormat.config.schedulingModel) === 'MATCH_COUNT_KO') {
       const generatedTeams = poolDraft?.generatedTeams || [];
-      if (!generatedTeams.length) {
-        window.alert('Generate teams in Pool and save before schedule generation.');
+      const poolPlayers = poolDraft?.poolPlayers || [];
+      const singlesPoolReady = activeFormat.type === 'SINGLES' && poolPlayers.length >= 2;
+      if (!generatedTeams.length && !singlesPoolReady) {
+        window.alert(
+          activeFormat.type === 'SINGLES'
+            ? 'Add at least 2 players to Pool and save before schedule generation.'
+            : 'Generate teams in Pool and save before schedule generation.',
+        );
         return;
       }
     }
@@ -2150,7 +2196,7 @@ export function useTournamentWorkspaceState() {
         const nextPool = clone(prev);
         const groupCountChanged = nextPool.groupCount !== requestedGroupCount;
         nextPool.groupCount = requestedGroupCount;
-        if (groupCountChanged && nextPool.generatedTeams.length) {
+        if (groupCountChanged && (nextPool.generatedTeams.length || nextPool.teamsGenerated)) {
           nextPool.groups = [];
           nextPool.assignments = {};
           nextPool.teamsGenerated = false;
@@ -2442,8 +2488,12 @@ export function useTournamentWorkspaceState() {
   }
 
   function removePlayerFromPool(playerId: string) {
-    if (!poolDraft || !activeFormat || poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated) return;
+    if (!poolDraft || !activeFormat) return;
     if (!poolDraft.poolPlayers.some((entry) => entry.playerId === playerId)) return;
+    if (isPoolRemovalLocked(poolDraft, activeFormat.scheduleGeneratedAt)) {
+      window.alert('Cannot remove player after teams/groups or schedule are generated. Reset generated artifacts first.');
+      return;
+    }
     const selectedFormatId = activeFormat.id;
 
     void (async () => {
@@ -2464,6 +2514,13 @@ export function useTournamentWorkspaceState() {
 
       const next = clone(poolDraft);
       next.poolPlayers = next.poolPlayers.filter((entry) => entry.playerId !== playerId);
+      // Pool composition changed; discard generated artifacts to avoid stale teams/groups.
+      next.generatedTeams = [];
+      next.groups = [];
+      next.assignments = {};
+      next.teamsGenerated = false;
+      next.pairsValidated = false;
+      next.pairValidationMessage = '';
       setPoolDraft(next);
       if (addPlayerId === playerId) setAddPlayerId('');
       setPoolDirty(true);
@@ -2494,6 +2551,7 @@ export function useTournamentWorkspaceState() {
 
   function validateGeneratedPairs() {
     if (!poolDraft || !activeFormat || activeFormat.type === 'SINGLES') return;
+    const schedulingModel = effectiveSchedulingModel(activeFormat.config.schedulingModel);
     const poolPlayerIds = poolDraft.poolPlayers.map((entry) => entry.playerId);
     if (!poolPlayerIds.length) return;
     const next = clone(poolDraft);
@@ -2563,7 +2621,9 @@ export function useTournamentWorkspaceState() {
     }
 
     next.pairsValidated = true;
-    next.pairValidationMessage = 'Pairs validated. You can now generate groups.';
+    next.pairValidationMessage = schedulingModel === 'MATCH_COUNT_KO'
+      ? 'Pairs validated.'
+      : 'Pairs validated. You can now generate groups.';
     setPoolDraft(next);
     setPoolDirty(true);
   }
@@ -2592,6 +2652,7 @@ export function useTournamentWorkspaceState() {
 
   function generateTeamsAndGroups() {
     if (!poolDraft || !activeFormat) return;
+    const schedulingModel = effectiveSchedulingModel(activeFormat.config.schedulingModel);
 
     void (async () => {
       const auth = readAdminAuth();
@@ -2656,7 +2717,7 @@ export function useTournamentWorkspaceState() {
       const teams: GeneratedTeam[] = [];
       if (activeFormat.type === 'SINGLES') {
         if (!poolDraft.poolPlayers.length) {
-          window.alert('Add at least one player before generating groups.');
+          window.alert(`Add at least one player before generating ${schedulingModel === 'MATCH_COUNT_KO' ? 'teams' : 'groups'}.`);
           return;
         }
         teams.push(...buildSinglesEntries(poolDraft.poolPlayers, playersById));
@@ -2686,6 +2747,41 @@ export function useTournamentWorkspaceState() {
           pairValidationMessage: '',
         });
         setPoolPlayersOpen(false);
+        setPoolDirty(true);
+        return;
+      }
+
+      if (activeFormat.type === 'SINGLES' && schedulingModel === 'GROUPS_KO') {
+        const grouped = buildGroupsAndAssignments(teams, groupCount);
+        setPoolDraft({
+          ...poolDraft,
+          groupCount,
+          generatedTeams: [],
+          groups: grouped.groups,
+          assignments: grouped.assignments,
+          teamsGenerated: true,
+          pairsValidated: true,
+          pairValidationMessage: '',
+        });
+        setPoolPlayersOpen(false);
+        setPoolGroupsOpen(true);
+        setPoolDirty(true);
+        return;
+      }
+
+      if (schedulingModel === 'MATCH_COUNT_KO') {
+        setPoolDraft({
+          ...poolDraft,
+          groupCount,
+          generatedTeams: teams,
+          groups: [],
+          assignments: {},
+          teamsGenerated: true,
+          pairsValidated: true,
+          pairValidationMessage: '',
+        });
+        setPoolPlayersOpen(false);
+        setPoolGroupsOpen(false);
         setPoolDirty(true);
         return;
       }
@@ -2837,6 +2933,7 @@ export function useTournamentWorkspaceState() {
     effectiveEntrantCount,
     planningMetrics,
     scheduleStatusLabel,
+    poolRemovalLocked,
     isSinglesFormat,
     unitLabel,
     unitLabelPlural,
