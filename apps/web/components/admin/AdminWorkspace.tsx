@@ -507,6 +507,9 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setSuccess(null);
     localStorage.removeItem(STORAGE_AUTH);
     localStorage.removeItem(STORAGE_PROFILE);
+    if (typeof window !== 'undefined') {
+      window.location.assign('/');
+    }
   }
 
   if (!hydrated) {
@@ -2749,6 +2752,7 @@ function SessionDetailPanel(props: {
     key: 'serial',
     direction: 'asc',
   });
+  const [playerMatchFilter, setPlayerMatchFilter] = useState('');
   const courtById = new Map(courts.map((c) => [c.id, c.name]));
   const canManageMatches = session?.status === 'OPEN' || session?.status === 'CLOSED';
   const playerOptions = players.length ? players : [{ id: 0, display_name: 'No players', club_id: 0, is_active: false, created_at: '' }];
@@ -2799,6 +2803,17 @@ function SessionDetailPanel(props: {
 
   const compareString = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   const compareNumber = (a: number, b: number) => a - b;
+  const sessionPlayerOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const game of sessionMatches) {
+      const participants = participantsByGame[game.id] ?? [];
+      for (const participant of participants) {
+        const name = participant.display_name?.trim();
+        if (name) names.add(name);
+      }
+    }
+    return Array.from(names).sort((a, b) => compareString(a, b));
+  }, [participantsByGame, sessionMatches]);
   const toggleMatchSort = (key: MatchSortKey) => {
     setMatchSort((prev) => {
       if (prev.key === key) {
@@ -2869,6 +2884,14 @@ function SessionDetailPanel(props: {
 
     return mapped;
   }, [courtById, matchSort.direction, matchSort.key, participantsByGame, sessionMatches]);
+  const normalizedPlayerMatchFilter = playerMatchFilter.trim().toLowerCase();
+  const filteredMatchRows = useMemo(() => {
+    if (!normalizedPlayerMatchFilter) return matchRows;
+    return matchRows.filter((row) => (
+      [row.player1, row.player2, row.player3, row.player4]
+        .some((name) => name !== '-' && name.toLowerCase().includes(normalizedPlayerMatchFilter))
+    ));
+  }, [matchRows, normalizedPlayerMatchFilter]);
 
   const sortArrow = (key: MatchSortKey) => {
     if (matchSort.key !== key) return '↕';
@@ -2892,6 +2915,9 @@ function SessionDetailPanel(props: {
     setB1(players[2]?.id ?? 0);
     setB2(players[3]?.id ?? 0);
   }, [players]);
+  useEffect(() => {
+    setPlayerMatchFilter('');
+  }, [session?.id]);
 
   useEffect(() => {
     setCourtId(courts[0]?.id ?? null);
@@ -3103,7 +3129,9 @@ function SessionDetailPanel(props: {
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>
       </AdminCard>
-      <AdminCard title={`Matches in Session (${sessionMatches.length})`} action={
+      <AdminCard title={normalizedPlayerMatchFilter
+        ? `Matches in Session (${filteredMatchRows.length} of ${sessionMatches.length})`
+        : `Matches in Session (${sessionMatches.length})`} action={
         <button
           style={outlineBtn}
           disabled={!canManageMatches}
@@ -3121,6 +3149,35 @@ function SessionDetailPanel(props: {
             Match edits are disabled for {session.status} sessions. Revert finalize or reopen the session first.
           </div>
         ) : null}
+        <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>Filter by Player</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              list={`session-player-filter-${session?.id ?? 'none'}`}
+              value={playerMatchFilter}
+              onChange={(e) => setPlayerMatchFilter(e.target.value)}
+              placeholder="Type player name"
+              style={{ ...field, minWidth: 240 }}
+            />
+            <button
+              type="button"
+              style={outlineBtn}
+              onClick={() => setPlayerMatchFilter('')}
+              disabled={!playerMatchFilter}
+            >
+              Clear
+            </button>
+          </div>
+          <datalist id={`session-player-filter-${session?.id ?? 'none'}`}>
+            {sessionPlayerOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          {normalizedPlayerMatchFilter && filteredMatchRows.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#64748b' }}>No matches found for this player filter.</div>
+          ) : null}
+        </div>
         <AdminTable
           columns={[
             sortableHeader('S/N', 'serial'),
@@ -3135,7 +3192,7 @@ function SessionDetailPanel(props: {
             sortableHeader('Status', 'status'),
             'Actions',
           ]}
-          rows={matchRows.map((row) => {
+          rows={filteredMatchRows.map((row) => {
             const g = row.game;
             return [
               row.serial,

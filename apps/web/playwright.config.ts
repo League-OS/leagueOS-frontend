@@ -13,6 +13,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   reporter: [
     ['list'],
     ['html', { outputFolder: `${artifactDir}/html-report`, open: 'never' }],

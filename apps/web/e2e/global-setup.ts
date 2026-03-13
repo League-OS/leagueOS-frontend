@@ -6,6 +6,7 @@
 
 import { chromium } from '@playwright/test';
 import path from 'path';
+import { runLocalDbCleanup } from './local-db-cleanup';
 
 const EMAIL    = process.env.E2E_EMAIL    || 'enosh_fvma_badminton_club@leagueos.local';
 const PASSWORD = process.env.E2E_PASSWORD || 'Recorder@123';
@@ -13,6 +14,8 @@ const PASSWORD = process.env.E2E_PASSWORD || 'Recorder@123';
 export const AUTH_STATE_PATH = path.resolve(__dirname, '../.auth-state.json');
 
 export default async function globalSetup() {
+  runLocalDbCleanup();
+
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();

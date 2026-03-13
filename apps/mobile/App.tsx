@@ -15,7 +15,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { LeagueOsApiClient } from '@leagueos/api';
+import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_CLUB_ID } from '@leagueos/config';
 import type { Game, GameParticipant, LeaderboardEntry, Profile, Season, Session } from '@leagueos/schemas';
 
@@ -150,8 +150,24 @@ export default function App() {
   async function login() {
     setLoading(true);
     setError(null);
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError('Email is required.');
+      setLoading(false);
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError('Please enter a valid email address.');
+      setLoading(false);
+      return;
+    }
+    if (!password) {
+      setError('Password is required.');
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await client.login({ email, password });
+      const res = await client.login({ email: normalizedEmail, password });
       const clubId = res.club_id ?? DEFAULT_CLUB_ID;
       const scoped = res.club_id === clubId ? res : await client.switchClub(res.token, clubId);
       const nextAuth: AuthState = { token: scoped.token, clubId };
@@ -160,6 +176,10 @@ export default function App() {
       await SecureStore.setItemAsync('leagueos_club', String(clubId));
       await loadDashboard(nextAuth.token, nextAuth.clubId);
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError('Invalid email or password.');
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Login failed');
     } finally {
       setLoading(false);

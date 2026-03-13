@@ -44,6 +44,25 @@ type RequestOptions = {
   body?: unknown;
 };
 
+function hasEmailValidationError(detail: unknown): boolean {
+  if (!Array.isArray(detail)) return false;
+  return detail.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const item = entry as {
+      loc?: unknown;
+      path?: unknown;
+      msg?: unknown;
+      message?: unknown;
+      validation?: unknown;
+    };
+    const loc = Array.isArray(item.loc) ? item.loc : (Array.isArray(item.path) ? item.path : []);
+    const locText = loc.map((part) => String(part).toLowerCase()).join('.');
+    const msgText = String(item.msg ?? item.message ?? '').toLowerCase();
+    const validation = String(item.validation ?? '').toLowerCase();
+    return locText.includes('email') || msgText.includes('email') || validation === 'email';
+  });
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -125,12 +144,34 @@ export class LeagueOsApiClient {
   }
 
   async login(input: LoginRequest): Promise<AuthResponse> {
-    loginRequestSchema.parse(input);
-    const data = await this.request<unknown>('/auth/login', {
-      method: 'POST',
-      body: input,
-    });
-    return authResponseSchema.parse(data);
+    const parsedInput = loginRequestSchema.safeParse(input);
+    if (!parsedInput.success) {
+      const hasEmailIssue = parsedInput.error.issues.some((issue) => issue.path[0] === 'email');
+      if (hasEmailIssue) {
+        throw new Error('Please enter a valid email address.');
+      }
+      const hasPasswordIssue = parsedInput.error.issues.some((issue) => issue.path[0] === 'password');
+      if (hasPasswordIssue) {
+        throw new Error('Password must be at least 8 characters.');
+      }
+      throw new Error('Please enter a valid email and password.');
+    }
+
+    try {
+      const data = await this.request<unknown>('/auth/login', {
+        method: 'POST',
+        body: parsedInput.data,
+      });
+      return authResponseSchema.parse(data);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 422) {
+        if (hasEmailValidationError(error.detail)) {
+          throw new Error('Please enter a valid email address.');
+        }
+        throw new Error('Please check your login details and try again.');
+      }
+      throw error;
+    }
   }
 
   async forgotPassword(email: string): Promise<{ ok: boolean; message: string; reset_link?: string; email_send_error?: string | null }> {
