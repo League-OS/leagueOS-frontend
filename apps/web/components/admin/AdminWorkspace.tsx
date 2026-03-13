@@ -508,6 +508,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setSuccess(null);
     localStorage.removeItem(STORAGE_AUTH);
     localStorage.removeItem(STORAGE_PROFILE);
+    localStorage.removeItem(STORAGE_CTX);
+    router.replace('/');
   }
 
   if (!hydrated) {

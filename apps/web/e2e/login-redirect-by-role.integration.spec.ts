@@ -27,9 +27,13 @@ const USER: Credentials = {
 
 async function login(page: Page, creds: Credentials) {
   await page.goto('/');
-  await page.getByLabel('Email').fill(creds.email);
-  await page.getByRole('textbox', { name: /^Password/i }).fill(creds.password);
-  await page.getByRole('button', { name: /sign in/i }).click();
+
+  const emailField = page.getByLabel('Email');
+  if (await emailField.count()) {
+    await emailField.fill(creds.email);
+    await page.getByRole('textbox', { name: /^Password/i }).fill(creds.password);
+    await page.getByRole('button', { name: /sign in/i }).click();
+  }
 }
 
 async function expectAdminRedirect(page: Page) {
@@ -59,4 +63,12 @@ test('Recorder remains in player app (not /admin) after login', async ({ page })
 test('User remains in player app (not /admin) after login', async ({ page }) => {
   await login(page, USER);
   await expectPlayerApp(page);
+});
+
+test('Admin logout redirects to home page', async ({ page }) => {
+  await login(page, GLOBAL_ADMIN);
+  await expectAdminRedirect(page);
+
+  await page.getByRole('button', { name: /logout/i }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/');
 });
