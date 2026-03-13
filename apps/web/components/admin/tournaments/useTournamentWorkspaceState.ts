@@ -41,10 +41,17 @@ import type {
   TournamentLifecycleStatus,
   TournamentRecord,
   ViewTab,
+  WinCondition,
 } from './types';
 
 type AdminAuth = { token: string; clubId: number };
 type TournamentWindowOverrides = Record<string, { startAt?: string; endAt?: string }>;
+type FormatRegistrationRow = {
+  id: number;
+  player_id: number;
+  player_name: string;
+  status: string;
+};
 type TournamentEditability = {
   canEditIdentity: boolean;
   canEditTimezone: boolean;
@@ -192,6 +199,102 @@ async function deleteTournamentBase(
   throw new Error(message);
 }
 
+async function listFormatRegistrations(
+  token: string,
+  clubId: number,
+  tournamentId: number,
+  formatInstanceId: number,
+): Promise<FormatRegistrationRow[]> {
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const url = `${apiBase}/tournaments/${tournamentId}/formats/${formatInstanceId}/registrations?club_id=${clubId}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Unable to load format registrations (HTTP ${response.status})`);
+  }
+  return (await response.json()) as FormatRegistrationRow[];
+}
+
+type ApiDetailPayload = { detail?: unknown };
+
+function parseApiErrorDetail(payload: ApiDetailPayload, fallback: string): { code: string; message: string } {
+  if (!payload || typeof payload !== 'object') {
+    return { code: '', message: fallback };
+  }
+  const detail = payload.detail;
+  if (typeof detail === 'string' && detail.trim()) {
+    return { code: '', message: detail };
+  }
+  if (!detail || typeof detail !== 'object') {
+    return { code: '', message: fallback };
+  }
+  const code = typeof (detail as { code?: unknown }).code === 'string' ? String((detail as { code?: unknown }).code) : '';
+  const message = typeof (detail as { message?: unknown }).message === 'string'
+    ? String((detail as { message?: unknown }).message)
+    : fallback;
+  return { code, message };
+}
+
+async function addAdminFormatRegistration(
+  token: string,
+  clubId: number,
+  tournamentId: number,
+  formatInstanceId: number,
+  playerId: number,
+): Promise<void> {
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const url = `${apiBase}/tournaments/${tournamentId}/formats/${formatInstanceId}/registrations?club_id=${clubId}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ player_id: playerId, registration_source: 'ADMIN' }),
+  });
+  if (response.ok) return;
+
+  let detail = { code: '', message: `Unable to add registration (HTTP ${response.status})` };
+  try {
+    detail = parseApiErrorDetail((await response.json()) as ApiDetailPayload, detail.message);
+  } catch {
+    // keep fallback
+  }
+  if (detail.code === 'PLAYER_ALREADY_REGISTERED_IN_FORMAT') return;
+  throw new Error(detail.message);
+}
+
+async function removeAdminFormatRegistration(
+  token: string,
+  clubId: number,
+  tournamentId: number,
+  formatInstanceId: number,
+  playerId: number,
+): Promise<void> {
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const url = `${apiBase}/tournaments/${tournamentId}/formats/${formatInstanceId}/registrations/${playerId}?club_id=${clubId}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (response.ok) return;
+
+  let detail = { code: '', message: `Unable to remove registration (HTTP ${response.status})` };
+  try {
+    detail = parseApiErrorDetail((await response.json()) as ApiDetailPayload, detail.message);
+  } catch {
+    // keep fallback
+  }
+  if (detail.code === 'REGISTRATION_NOT_FOUND') return;
+  throw new Error(detail.message);
+}
+
 function readTournamentWindowOverrides(): TournamentWindowOverrides {
   if (typeof window === 'undefined') return {};
   const raw = window.localStorage.getItem(TOURNAMENT_WINDOWS_STORAGE_KEY);
@@ -288,6 +391,10 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     groupCount: row.group_count || config.groupCount,
     groupKoTeamsPerGroup: row.group_ko_teams_per_group || config.groupKoTeamsPerGroup,
   };
+  mergedConfig.stageRules = normalizeStageRulesFromConfigJson(
+    rawConfigJson.stage_rules ?? rawConfigJson.stageRules,
+    mergedConfig,
+  );
   const mergedPool: PoolConfig = {
     ...(persistedPool ?? defaultPoolConfig()),
     groupCount: mergedConfig.groupCount,
@@ -498,6 +605,56 @@ function normalizeCourtConfigFromConfigJson(value: unknown): CourtConfig | null 
   };
 }
 
+function toPositiveInt(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const normalized = Math.floor(n);
+  if (normalized < 1) return fallback;
+  return normalized;
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return n;
+}
+
+function normalizeStageRuleFromConfigJson(value: unknown): StageRule | null {
+  const obj = asObject(value);
+  if (!obj) return null;
+  const defaults = defaultStageRule();
+  const setsToWinRaw = Number(obj.setsToWin ?? obj.sets_to_win);
+  const setsToWin: 1 | 2 | 3 = setsToWinRaw === 2 || setsToWinRaw === 3 ? setsToWinRaw : 1;
+  const winConditionRaw = String(obj.winCondition ?? obj.win_condition ?? '').toUpperCase();
+  const winCondition: WinCondition = winConditionRaw === 'WIN_BY_2' ? 'WIN_BY_2' : 'FIRST_TO_POINTS';
+
+  return {
+    setsToWin,
+    winCondition,
+    pointsToWinSet: toPositiveInt(obj.pointsToWinSet ?? obj.points_to_win_set, defaults.pointsToWinSet),
+    maxPointsPerSet: toPositiveInt(obj.maxPointsPerSet ?? obj.set_cap, defaults.maxPointsPerSet ?? 30),
+    winPoints: toNumber(obj.winPoints ?? obj.win_points, defaults.winPoints),
+    lossPoints: toNumber(obj.lossPoints ?? obj.loss_points, defaults.lossPoints),
+    forfeitPoints: toNumber(obj.forfeitPoints ?? obj.forfeit_points, defaults.forfeitPoints),
+    drawPoints: toNumber(obj.drawPoints ?? obj.draw_points, defaults.drawPoints),
+  };
+}
+
+function normalizeStageRulesFromConfigJson(value: unknown, config: FormatConfig): Record<string, StageRule> {
+  const obj = asObject(value);
+  if (!obj) return {};
+
+  const validStageIds = new Set(buildStages(config).map((stage) => stage.id));
+  const rules: Record<string, StageRule> = {};
+  Object.entries(obj).forEach(([stageId, stageRuleRaw]) => {
+    if (!validStageIds.has(stageId)) return;
+    const normalized = normalizeStageRuleFromConfigJson(stageRuleRaw);
+    if (!normalized) return;
+    rules[stageId] = normalized;
+  });
+  return rules;
+}
+
 function extractAllowedCourtIds(assignments: Record<string, string[]>): number[] {
   return Array.from(
     new Set(
@@ -507,6 +664,27 @@ function extractAllowedCourtIds(assignments: Record<string, string[]>): number[]
         .filter((courtId) => Number.isInteger(courtId)),
     ),
   ).sort((a, b) => a - b);
+}
+
+function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
+  const assignedTeamIds = Object.values(pool.assignments || {})
+    .flatMap((ids) => ids || [])
+    .map((id) => String(id));
+  if (!assignedTeamIds.length) {
+    return 'Generate groups in Pool and save before schedule generation.';
+  }
+
+  const knownTeamIds = new Set(pool.generatedTeams.map((team) => String(team.id)));
+  if (!knownTeamIds.size) {
+    return 'Pool teams are missing. Regenerate pairs/groups in Pool and save before schedule generation.';
+  }
+
+  for (const teamId of assignedTeamIds) {
+    if (!knownTeamIds.has(teamId)) {
+      return `Pool assignment "${teamId}" is stale. Regenerate groups in Pool and save, then retry schedule generation.`;
+    }
+  }
+  return null;
 }
 
 export function useTournamentWorkspaceState() {
@@ -558,6 +736,7 @@ export function useTournamentWorkspaceState() {
   const [poolGroupsOpen, setPoolGroupsOpen] = useState(true);
   const [bracketMatchesOpen, setBracketMatchesOpen] = useState(false);
   const [bracketMatches, setBracketMatches] = useState<ApiTournamentMatch[]>([]);
+  const [formatRegistrations, setFormatRegistrations] = useState<FormatRegistrationRow[]>([]);
   const [scheduleActionBusy, setScheduleActionBusy] = useState<'generate' | 'view' | 'reset' | null>(null);
   const [activeCourtId, setActiveCourtId] = useState<string | null>(null);
 
@@ -790,6 +969,7 @@ export function useTournamentWorkspaceState() {
     setScheduleDraft({});
     setCourtConfigDraft(null);
     setBracketMatches([]);
+    setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
   }
@@ -813,6 +993,7 @@ export function useTournamentWorkspaceState() {
     setScheduleDraft(clone(format.courtAssignments));
     setCourtConfigDraft(clone(format.courtConfig || defaultCourtConfig()));
     setBracketMatches([]);
+    setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
   }
@@ -1776,9 +1957,25 @@ export function useTournamentWorkspaceState() {
 
   function generateSchedule() {
     if (!activeFormat || !activeTournamentId) return;
-    if (scheduleDirty || courtDirty) {
-      window.alert('Save schedule changes first before generating.');
+    if (configDirty || poolDirty || scheduleDirty || courtDirty) {
+      window.alert('Save config, pool, and schedule changes first before generating.');
       return;
+    }
+    if (!courts.length) {
+      window.alert('Add at least one tournament court before schedule generation.');
+      return;
+    }
+    const allowedCourtIds = extractAllowedCourtIds(scheduleDraft);
+    if (!allowedCourtIds.length) {
+      window.alert('Assign at least one stage court in Schedules and save before generating.');
+      return;
+    }
+    if (effectiveSchedulingModel(activeFormat.config.schedulingModel) === 'GROUPS_KO' && poolDraft) {
+      const poolError = validateGroupsKoPoolBeforeSchedule(poolDraft);
+      if (poolError) {
+        window.alert(poolError);
+        return;
+      }
     }
 
     void (async () => {
@@ -1792,12 +1989,27 @@ export function useTournamentWorkspaceState() {
           await client.generateTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {});
           await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
           const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           setBracketMatches(rows);
+          setFormatRegistrations(registrations);
           setBracketMatchesOpen(true);
           showSavedNotice('Schedule generated');
           return;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unable to generate schedule.';
+          if (message.toLowerCase().includes('schedule already generated')) {
+            try {
+              const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+              const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+              setBracketMatches(rows);
+              setFormatRegistrations(registrations);
+              setBracketMatchesOpen(true);
+              showSavedNotice('Existing schedule loaded');
+              return;
+            } catch {
+              // Fall back to original alert below if loading existing rows fails.
+            }
+          }
           window.alert(message);
           return;
         } finally {
@@ -1827,7 +2039,9 @@ export function useTournamentWorkspaceState() {
       if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
         try {
           const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           setBracketMatches(rows);
+          setFormatRegistrations(registrations);
           setBracketMatchesOpen(true);
           if (!rows.length) {
             showSavedNotice('No matches generated yet');
@@ -1861,6 +2075,7 @@ export function useTournamentWorkspaceState() {
         try {
           await client.resetTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           setBracketMatches([]);
+          setFormatRegistrations([]);
           setBracketMatchesOpen(false);
           await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
           showSavedNotice('Schedule reset');
@@ -1880,6 +2095,7 @@ export function useTournamentWorkspaceState() {
         scheduleLocked: false,
       }));
       setBracketMatches([]);
+      setFormatRegistrations([]);
       setBracketMatchesOpen(false);
       showSavedNotice('Schedule reset');
       setScheduleActionBusy(null);
@@ -2160,32 +2376,70 @@ export function useTournamentWorkspaceState() {
     if (!poolDraft || !addPlayerId || !activeFormat) return;
     if (poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated) return;
     if (poolDraft.poolPlayers.some((entry) => entry.playerId === addPlayerId)) return;
+    const selectedPlayerId = addPlayerId;
+    const selectedFormatId = activeFormat.id;
 
-    const next = clone(poolDraft);
-    const player = clubPlayersForActiveFormat.find((item) => item.id === addPlayerId);
-    const resolvedSeasonId = next.seasonId || defaultPoolSeasonId();
-    next.poolPlayers.push({
-      playerId: addPlayerId,
-      registeredAt: new Date().toISOString().slice(0, 10),
-      regRoute: 'ADMIN',
-      seededElo: player?.elo,
-      eloSeasonId: resolvedSeasonId,
-    });
-    if (!next.seasonId) next.seasonId = resolvedSeasonId;
+    void (async () => {
+      const auth = readAdminAuth();
+      const parsedTournamentId = activeTournamentId ? Number.parseInt(activeTournamentId, 10) : Number.NaN;
+      const parsedFormatId = Number.parseInt(selectedFormatId, 10);
+      const parsedPlayerId = Number.parseInt(selectedPlayerId, 10);
 
-    setPoolDraft(next);
-    setAddPlayerId('');
-    setPoolDirty(true);
+      if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId) && Number.isInteger(parsedPlayerId)) {
+        try {
+          await addAdminFormatRegistration(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, parsedPlayerId);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to add player to format registration pool.';
+          window.alert(message);
+          return;
+        }
+      }
+
+      const next = clone(poolDraft);
+      const player = clubPlayersForActiveFormat.find((item) => item.id === selectedPlayerId);
+      const resolvedSeasonId = next.seasonId || defaultPoolSeasonId();
+      next.poolPlayers.push({
+        playerId: selectedPlayerId,
+        registeredAt: new Date().toISOString().slice(0, 10),
+        regRoute: 'ADMIN',
+        seededElo: player?.elo,
+        eloSeasonId: resolvedSeasonId,
+      });
+      if (!next.seasonId) next.seasonId = resolvedSeasonId;
+
+      setPoolDraft(next);
+      setAddPlayerId('');
+      setPoolDirty(true);
+    })();
   }
 
   function removePlayerFromPool(playerId: string) {
-    if (!poolDraft || poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated) return;
+    if (!poolDraft || !activeFormat || poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated) return;
     if (!poolDraft.poolPlayers.some((entry) => entry.playerId === playerId)) return;
-    const next = clone(poolDraft);
-    next.poolPlayers = next.poolPlayers.filter((entry) => entry.playerId !== playerId);
-    setPoolDraft(next);
-    if (addPlayerId === playerId) setAddPlayerId('');
-    setPoolDirty(true);
+    const selectedFormatId = activeFormat.id;
+
+    void (async () => {
+      const auth = readAdminAuth();
+      const parsedTournamentId = activeTournamentId ? Number.parseInt(activeTournamentId, 10) : Number.NaN;
+      const parsedFormatId = Number.parseInt(selectedFormatId, 10);
+      const parsedPlayerId = Number.parseInt(playerId, 10);
+
+      if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId) && Number.isInteger(parsedPlayerId)) {
+        try {
+          await removeAdminFormatRegistration(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, parsedPlayerId);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to remove player from format registration pool.';
+          window.alert(message);
+          return;
+        }
+      }
+
+      const next = clone(poolDraft);
+      next.poolPlayers = next.poolPlayers.filter((entry) => entry.playerId !== playerId);
+      setPoolDraft(next);
+      if (addPlayerId === playerId) setAddPlayerId('');
+      setPoolDirty(true);
+    })();
   }
 
   function updateGeneratedPairing(teamId: string, playerIndex: 0 | 1, playerId: string) {
@@ -2537,6 +2791,7 @@ export function useTournamentWorkspaceState() {
     bracketMatchesOpen,
     setBracketMatchesOpen,
     bracketMatches,
+    formatRegistrations,
     scheduleActionBusy,
     activeCourtId,
     setActiveCourtId,

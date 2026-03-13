@@ -2,7 +2,7 @@ import type { TournamentMatch as ApiTournamentMatch } from '@leagueos/api';
 
 import { Metric, SaveRow } from './shared';
 import { collapseBtn, field, grid2, grid4, insightCard, labelCol, outlineBtn, subCard, td, th } from './styles';
-import type { CourtConfig, CourtItem, PlanningMetrics, StageDef } from './types';
+import type { CourtConfig, CourtItem, GeneratedTeam, PlanningMetrics, StageDef } from './types';
 
 type ScheduleTabProps = {
   scheduleDirty: boolean;
@@ -26,6 +26,8 @@ type ScheduleTabProps = {
   bracketMatchesOpen: boolean;
   setBracketMatchesOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   bracketMatches: ApiTournamentMatch[];
+  formatRegistrations: Array<{ id: number; player_id: number; player_name: string; status: string }>;
+  generatedTeams: GeneratedTeam[];
 };
 
 function formatDateTime(value: string | null): string {
@@ -35,13 +37,19 @@ function formatDateTime(value: string | null): string {
   return parsed.toLocaleString();
 }
 
-function formatSlot(
+function formatRoundLabel(match: ApiTournamentMatch): string {
+  if (match.group_code) return `Group(${match.group_code})`;
+  return match.round_label || '-';
+}
+
+function renderTeamSlot(
   match: ApiTournamentMatch,
   side: 'home' | 'away',
   matchNumberById: Map<number, number>,
-): string {
+  registrationById: Map<number, { player_id: number; player_name: string }>,
+  generatedTeams: GeneratedTeam[],
+): JSX.Element | string {
   const registrationId = side === 'home' ? match.home_registration_id : match.away_registration_id;
-  const seed = side === 'home' ? match.home_seed : match.away_seed;
   const source = side === 'home' ? match.home_slot_source : match.away_slot_source;
   const groupCode = side === 'home' ? match.home_slot_group_code : match.away_slot_group_code;
   const groupRank = side === 'home' ? match.home_slot_group_rank : match.away_slot_group_rank;
@@ -57,8 +65,27 @@ function formatSlot(
     const suffix = registrationId ? ` -> R${registrationId}` : '';
     return `W(${depLabel})${suffix}`;
   }
+
   if (registrationId) {
-    return seed ? `R${registrationId} (S${seed})` : `R${registrationId}`;
+    const registration = registrationById.get(registrationId);
+    const playerId = registration?.player_id;
+    const team = playerId
+      ? generatedTeams.find((row) => row.playerIds.includes(String(playerId)))
+      : null;
+    if (team?.name) {
+      const members = team.name.split('/').map((part) => part.trim()).filter(Boolean);
+      if (members.length >= 2) {
+        return (
+          <span style={{ display: 'inline-grid', lineHeight: 1.25 }}>
+            <span>{members[0]}</span>
+            <span>/ {members.slice(1).join(' / ')}</span>
+          </span>
+        );
+      }
+      return team.name;
+    }
+    if (registration?.player_name) return registration.player_name;
+    return `R${registrationId}`;
   }
   return '-';
 }
@@ -85,9 +112,16 @@ export function ScheduleTab({
   bracketMatchesOpen,
   setBracketMatchesOpen,
   bracketMatches,
+  formatRegistrations,
+  generatedTeams,
 }: ScheduleTabProps) {
   const busy = scheduleActionBusy !== null;
   const matchNumberById = new Map(bracketMatches.map((row) => [row.id, row.match_number]));
+  const registrationById = new Map(
+    formatRegistrations
+      .filter((row) => Number.isInteger(row.id))
+      .map((row) => [row.id, { player_id: row.player_id, player_name: row.player_name }]),
+  );
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -212,7 +246,7 @@ export function ScheduleTab({
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
               <thead>
                 <tr>
-                  {['#', 'Stage', 'Round', 'Home Slot', 'Away Slot', 'Status', 'Court', 'Start', 'End'].map((header) => (
+                  {['#', 'Round', 'Team A', 'Team B', 'Status', 'Court', 'Start', 'End'].map((header) => (
                     <th key={header} style={th}>{header}</th>
                   ))}
                 </tr>
@@ -221,12 +255,9 @@ export function ScheduleTab({
                 {bracketMatches.map((match) => (
                   <tr key={match.id}>
                     <td style={td}>{match.match_number}</td>
-                    <td style={td}>
-                      {match.group_code ? `${match.stage_code} (${match.group_code})` : match.stage_code}
-                    </td>
-                    <td style={td}>{match.round_label || '-'}</td>
-                    <td style={td}>{formatSlot(match, 'home', matchNumberById)}</td>
-                    <td style={td}>{formatSlot(match, 'away', matchNumberById)}</td>
+                    <td style={td}>{formatRoundLabel(match)}</td>
+                    <td style={td}>{renderTeamSlot(match, 'home', matchNumberById, registrationById, generatedTeams)}</td>
+                    <td style={td}>{renderTeamSlot(match, 'away', matchNumberById, registrationById, generatedTeams)}</td>
                     <td style={td}>{match.status}</td>
                     <td style={td}>{match.court_name || '-'}</td>
                     <td style={td}>{formatDateTime(match.start_at)}</td>
