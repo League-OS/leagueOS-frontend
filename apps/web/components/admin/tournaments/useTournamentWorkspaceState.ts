@@ -190,9 +190,10 @@ async function deleteTournamentBase(
 
   let message = `Unable to delete tournament (HTTP ${response.status})`;
   try {
-    const payload = await response.json() as { detail?: unknown };
-    if (typeof payload.detail === 'string' && payload.detail.trim()) {
-      message = payload.detail;
+    const payload = await response.json() as ApiDetailPayload;
+    const parsed = parseApiErrorDetail(payload, message);
+    if (parsed.message.trim()) {
+      message = parsed.message;
     }
   } catch {
     // Keep fallback message.
@@ -1226,17 +1227,18 @@ export function useTournamentWorkspaceState() {
     if (!window.confirm(`Delete tournament "${target.name}"?`)) return;
 
     void (async () => {
-      let deletedViaApi = false;
       const auth = readAdminAuth();
       const parsedTournamentId = Number.parseInt(tournamentId, 10);
-      if (auth && Number.isInteger(parsedTournamentId)) {
-        try {
-          await deleteTournamentBase(auth.token, auth.clubId, parsedTournamentId);
-          deletedViaApi = true;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unable to delete tournament.';
-          console.warn('Tournament delete API unavailable. Applying local fallback delete.', message);
-        }
+      if (!auth || !Number.isInteger(parsedTournamentId)) {
+        window.alert('Unable to delete tournament: missing admin authentication.');
+        return;
+      }
+      try {
+        await deleteTournamentBase(auth.token, auth.clubId, parsedTournamentId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to delete tournament.';
+        window.alert(message);
+        return;
       }
 
       if (activeTournamentId === tournamentId) {
@@ -1261,7 +1263,7 @@ export function useTournamentWorkspaceState() {
         writeTournamentWindowOverrides(next);
         return next;
       });
-      showSavedNotice(deletedViaApi ? 'Tournament deleted' : 'Tournament deleted locally (API pending)');
+      showSavedNotice('Tournament deleted');
     })();
   }
 

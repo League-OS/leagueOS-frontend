@@ -23,6 +23,14 @@ async function createTournament(
   return (await response.json()) as { id: number };
 }
 
+async function deleteTournament(request: APIRequestContext, auth: { token: string; club_id: number }, tournamentId: number) {
+  const response = await request.delete(`${API_BASE}/tournaments/${tournamentId}?club_id=${auth.club_id}`, {
+    headers: { Authorization: `Bearer ${auth.token}` },
+  });
+  if (response.status() === 404) return;
+  expect(response.ok()).toBeTruthy();
+}
+
 async function createFormat(
   request: APIRequestContext,
   auth: { token: string; club_id: number },
@@ -96,28 +104,36 @@ test('schedule generation is blocked when no tournament courts exist', async ({ 
   const suffix = Date.now();
   const tournamentName = `e2e-no-courts-${suffix}`;
   const formatName = `fmt-no-courts-${suffix}`;
+  let tournamentId: number | null = null;
 
-  const tournament = await createTournament(request, auth, tournamentName);
-  const format = await createFormat(request, auth, tournament.id, {
-    name: formatName,
-    format_type: 'DOUBLES',
-    scheduling_model: 'DIRECT_KNOCKOUT',
-    average_set_duration_minutes: 10,
-  });
+  try {
+    const tournament = await createTournament(request, auth, tournamentName);
+    tournamentId = tournament.id;
+    const format = await createFormat(request, auth, tournament.id, {
+      name: formatName,
+      format_type: 'DOUBLES',
+      scheduling_model: 'DIRECT_KNOCKOUT',
+      average_set_duration_minutes: 10,
+    });
 
-  await setTournamentStatus(request, auth, tournament.id, 'REGISTRATION_OPEN');
-  const playerIds = await firstNPlayerIds(request, auth, 2);
-  await addRegistrations(request, auth, tournament.id, format.id, playerIds);
-  await setTournamentStatus(request, auth, tournament.id, 'REGISTRATION_CLOSED');
+    await setTournamentStatus(request, auth, tournament.id, 'REGISTRATION_OPEN');
+    const playerIds = await firstNPlayerIds(request, auth, 2);
+    await addRegistrations(request, auth, tournament.id, format.id, playerIds);
+    await setTournamentStatus(request, auth, tournament.id, 'REGISTRATION_CLOSED');
 
-  await openTournamentAndFormat(page, tournamentName, formatName);
-  await page.getByRole('button', { name: 'Schedules' }).click();
+    await openTournamentAndFormat(page, tournamentName, formatName);
+    await page.getByRole('button', { name: 'Schedules' }).click();
 
-  const dialogPromise = page.waitForEvent('dialog');
-  await page.getByRole('button', { name: /Generate Schedule/ }).click();
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toContain('Add at least one tournament court before schedule generation.');
-  await dialog.accept();
+    const dialogPromise = page.waitForEvent('dialog');
+    await page.getByRole('button', { name: /Generate Schedule/ }).click();
+    const dialog = await dialogPromise;
+    expect(dialog.message()).toContain('Add at least one tournament court before schedule generation.');
+    await dialog.accept();
+  } finally {
+    if (tournamentId !== null) {
+      await deleteTournament(request, auth, tournamentId);
+    }
+  }
 });
 
 test('format stage rules persist after save and reload', async ({ page, request }) => {
@@ -125,30 +141,70 @@ test('format stage rules persist after save and reload', async ({ page, request 
   const suffix = Date.now();
   const tournamentName = `e2e-stage-rules-${suffix}`;
   const formatName = `fmt-stage-rules-${suffix}`;
+  let tournamentId: number | null = null;
 
+  try {
+    const tournament = await createTournament(request, auth, tournamentName);
+    tournamentId = tournament.id;
+    await createFormat(request, auth, tournament.id, {
+      name: formatName,
+      format_type: 'DOUBLES',
+      scheduling_model: 'GROUPS_KO',
+      average_set_duration_minutes: 10,
+      group_count: 2,
+      group_ko_teams_per_group: 2,
+    });
+
+    await openTournamentAndFormat(page, tournamentName, formatName);
+    await page.getByRole('button', { name: 'Config' }).click();
+
+    const stageOne = page.locator('article').filter({ hasText: /^Stage 1:/ }).first();
+    const pointsInput = stageOne.getByLabel('Points to Win Set');
+    await pointsInput.fill('19');
+    await page.getByRole('button', { name: /^Save$/ }).first().click();
+    await expect(page.getByText('Configuration saved')).toBeVisible();
+
+    await page.reload();
+    await openTournamentAndFormat(page, tournamentName, formatName);
+    await page.getByRole('button', { name: 'Config' }).click();
+
+    const reloadedStageOne = page.locator('article').filter({ hasText: /^Stage 1:/ }).first();
+    await expect(reloadedStageOne.getByLabel('Points to Win Set')).toHaveValue('19');
+  } finally {
+    if (tournamentId !== null) {
+      await deleteTournament(request, auth, tournamentId);
+    }
+  }
+});
+
+test('tournament delete button removes tournament from UI and backend', async ({ page, request }) => {
+  const auth = await apiLogin(request, UI_EMAIL, UI_PASSWORD);
+  const suffix = Date.now();
+  const tournamentName = `e2e-delete-ui-${suffix}`;
   const tournament = await createTournament(request, auth, tournamentName);
-  await createFormat(request, auth, tournament.id, {
-    name: formatName,
-    format_type: 'DOUBLES',
-    scheduling_model: 'GROUPS_KO',
-    average_set_duration_minutes: 10,
-    group_count: 2,
-    group_ko_teams_per_group: 2,
-  });
+  let deleted = false;
 
-  await openTournamentAndFormat(page, tournamentName, formatName);
-  await page.getByRole('button', { name: 'Config' }).click();
+  try {
+    await page.goto('/admin/tournaments');
+    await expect(page.getByRole('button', { name: `Open ${tournamentName}` })).toBeVisible();
 
-  const stageOne = page.locator('article').filter({ hasText: /^Stage 1:/ }).first();
-  const pointsInput = stageOne.getByLabel('Points to Win Set');
-  await pointsInput.fill('19');
-  await page.getByRole('button', { name: /^Save$/ }).first().click();
-  await expect(page.getByText('Configuration saved')).toBeVisible();
+    const confirmPromise = page.waitForEvent('dialog');
+    await page.getByRole('button', { name: `Delete ${tournamentName}` }).click();
+    const confirm = await confirmPromise;
+    expect(confirm.type()).toBe('confirm');
+    expect(confirm.message()).toContain(`Delete tournament "${tournamentName}"?`);
+    await confirm.accept();
 
-  await page.reload();
-  await openTournamentAndFormat(page, tournamentName, formatName);
-  await page.getByRole('button', { name: 'Config' }).click();
+    await expect(page.getByRole('button', { name: `Open ${tournamentName}` })).toHaveCount(0);
 
-  const reloadedStageOne = page.locator('article').filter({ hasText: /^Stage 1:/ }).first();
-  await expect(reloadedStageOne.getByLabel('Points to Win Set')).toHaveValue('19');
+    const response = await request.get(`${API_BASE}/tournaments/${tournament.id}?club_id=${auth.club_id}`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+    });
+    expect(response.status()).toBe(404);
+    deleted = true;
+  } finally {
+    if (!deleted) {
+      await deleteTournament(request, auth, tournament.id);
+    }
+  }
 });
