@@ -80,6 +80,8 @@ export type TournamentFormatInstance = {
   seed_source: 'ELO' | 'MANUAL';
   config_json: Record<string, unknown>;
   schedule_generated_at: string | null;
+  schedule_published_at: string | null;
+  schedule_lifecycle_state: 'NOT_CREATED' | 'CREATED' | 'PUBLISHED';
   schedule_locked: boolean;
   created_at?: string | null;
   updated_at?: string | null;
@@ -175,6 +177,23 @@ export type TournamentMatch = {
   tentative_end_at: string | null;
   row_version: number;
   idempotency_key: string | null;
+};
+
+export type TournamentMatchStartTimeUpdateResult = {
+  id: number;
+  match_number: number;
+  start_at: string | null;
+  end_at: string | null;
+  tentative_start_at: string | null;
+  tentative_end_at: string | null;
+  row_version: number;
+};
+
+export type TournamentMatchStartTimesUpdateResponse = {
+  ok: boolean;
+  format_instance_id: number;
+  updated_count: number;
+  matches: TournamentMatchStartTimeUpdateResult[];
 };
 
 export class ApiError extends Error {
@@ -833,6 +852,32 @@ export class LeagueOsApiClient {
     });
   }
 
+  async publishTournamentSchedule(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+  ): Promise<{
+    ok: boolean;
+    format_instance_id: number;
+    schedule_lifecycle_state: 'PUBLISHED';
+    schedule_published_at: string | null;
+    idempotent_replay?: boolean;
+  }> {
+    return this.request<{
+      ok: boolean;
+      format_instance_id: number;
+      schedule_lifecycle_state: 'PUBLISHED';
+      schedule_published_at: string | null;
+      idempotent_replay?: boolean;
+    }>(`/tournaments/${tournamentId}/formats/${formatInstanceId}/schedule/publish`, {
+      method: 'POST',
+      token,
+      clubId,
+      query: { club_id: clubId },
+    });
+  }
+
   async resetTournamentSchedule(
     token: string,
     clubId: number,
@@ -858,6 +903,31 @@ export class LeagueOsApiClient {
       clubId,
       query: { club_id: clubId },
     });
+  }
+
+  async updateTournamentMatchStartTimes(
+    token: string,
+    clubId: number,
+    tournamentId: number,
+    formatInstanceId: number,
+    payload: {
+      updates: Array<{
+        match_id: number;
+        start_at: string;
+        expected_row_version?: number;
+      }>;
+    },
+  ): Promise<TournamentMatchStartTimesUpdateResponse> {
+    return this.request<TournamentMatchStartTimesUpdateResponse>(
+      `/tournaments/${tournamentId}/formats/${formatInstanceId}/matches/start-times`,
+      {
+        method: 'PATCH',
+        token,
+        clubId,
+        query: { club_id: clubId },
+        body: payload,
+      },
+    );
   }
 
   async seasons(token: string, clubId: number, isActive?: boolean): Promise<Season[]> {

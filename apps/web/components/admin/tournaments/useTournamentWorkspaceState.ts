@@ -373,6 +373,14 @@ function toUtcIsoFromInput(value: string): string | undefined {
   return parsed.toISOString();
 }
 
+function buildMatchStartDrafts(matches: ApiTournamentMatch[]): Record<number, string> {
+  const drafts: Record<number, string> = {};
+  matches.forEach((match) => {
+    drafts[match.id] = toDateTimeLocalInput(match.start_at);
+  });
+  return drafts;
+}
+
 function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
   const config = defaultFormatConfig();
   const rawConfigJson = asObject(row.config_json) ?? {};
@@ -400,6 +408,29 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     ...config,
     schedulingModel: mappedSchedulingModel,
     setDurationMinutes: row.average_set_duration_minutes || config.setDurationMinutes,
+    gapBetweenSetsMinutes: Math.max(
+      0,
+      toNumber(
+        rawConfigJson.gap_between_sets_minutes ?? rawConfigJson.schedule_gap_between_sets_minutes,
+        config.gapBetweenSetsMinutes,
+      ),
+    ),
+    gapBetweenMatchesPerStageMinutes: Math.max(
+      0,
+      toNumber(
+        rawConfigJson.gap_between_matches_per_stage_minutes
+          ?? rawConfigJson.schedule_gap_between_matches_per_stage_minutes,
+        config.gapBetweenMatchesPerStageMinutes,
+      ),
+    ),
+    gapBetweenStagesMinutes: Math.max(
+      0,
+      toNumber(
+        rawConfigJson.gap_between_stages_minutes
+          ?? rawConfigJson.schedule_gap_between_stages_minutes,
+        config.gapBetweenStagesMinutes,
+      ),
+    ),
     maxTeamsAllowed: row.max_teams_allowed || config.maxTeamsAllowed,
     matchCountPerEntrant: row.matches_per_team || config.matchCountPerEntrant,
     matchCountKoTeamsToKo,
@@ -426,6 +457,9 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     regClose: toDateTimeLocalInput(row.registration_close_at),
     autoClose: row.auto_registration_close,
     scheduleGeneratedAt: row.schedule_generated_at,
+    schedulePublishedAt: row.schedule_published_at,
+    scheduleLifecycleState: row.schedule_lifecycle_state
+      || (row.schedule_published_at ? 'PUBLISHED' : (row.schedule_generated_at ? 'CREATED' : 'NOT_CREATED')),
     scheduleLocked: row.schedule_locked,
     config: mergedConfig,
     pool: mergedPool,
@@ -789,8 +823,10 @@ export function useTournamentWorkspaceState() {
   const [poolGroupsOpen, setPoolGroupsOpen] = useState(true);
   const [bracketMatchesOpen, setBracketMatchesOpen] = useState(false);
   const [bracketMatches, setBracketMatches] = useState<ApiTournamentMatch[]>([]);
+  const [matchStartDrafts, setMatchStartDrafts] = useState<Record<number, string>>({});
+  const [matchTimesDirty, setMatchTimesDirty] = useState(false);
   const [formatRegistrations, setFormatRegistrations] = useState<FormatRegistrationRow[]>([]);
-  const [scheduleActionBusy, setScheduleActionBusy] = useState<'generate' | 'view' | 'reset' | null>(null);
+  const [scheduleActionBusy, setScheduleActionBusy] = useState<'generate' | 'publish' | 'save_times' | 'reset' | null>(null);
   const [activeCourtId, setActiveCourtId] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
@@ -857,11 +893,13 @@ export function useTournamentWorkspaceState() {
     return computePlanningMetrics(planningConfig);
   }, [configDraft, effectiveEntrantCount]);
   const scheduleStatusLabel = useMemo(() => {
-    if (!activeFormat?.scheduleGeneratedAt) return 'Not Generated';
-    const parsed = new Date(activeFormat.scheduleGeneratedAt);
-    if (Number.isNaN(parsed.getTime())) return 'Generated';
-    return `Generated (${parsed.toLocaleString()})`;
-  }, [activeFormat?.scheduleGeneratedAt]);
+    if (activeFormat?.schedulePublishedAt) {
+      const publishedAt = new Date(activeFormat.schedulePublishedAt);
+      if (!Number.isNaN(publishedAt.getTime())) return `Published (${publishedAt.toLocaleString()})`;
+      return 'Published';
+    }
+    return 'Not Published';
+  }, [activeFormat?.schedulePublishedAt]);
   const poolRemovalLocked = useMemo(
     () => isPoolRemovalLocked(poolDraft, activeFormat?.scheduleGeneratedAt),
     [poolDraft, activeFormat?.scheduleGeneratedAt],
@@ -1029,6 +1067,8 @@ export function useTournamentWorkspaceState() {
     setScheduleDraft({});
     setCourtConfigDraft(null);
     setBracketMatches([]);
+    setMatchStartDrafts({});
+    setMatchTimesDirty(false);
     setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
@@ -1053,6 +1093,8 @@ export function useTournamentWorkspaceState() {
     setScheduleDraft(clone(format.courtAssignments));
     setCourtConfigDraft(clone(format.courtConfig || defaultCourtConfig()));
     setBracketMatches([]);
+    setMatchStartDrafts({});
+    setMatchTimesDirty(false);
     setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
@@ -1070,7 +1112,7 @@ export function useTournamentWorkspaceState() {
   }
 
   function canSwitch(): boolean {
-    const hasUnsavedChanges = configDirty || poolDirty || scheduleDirty || courtDirty;
+    const hasUnsavedChanges = configDirty || poolDirty || scheduleDirty || courtDirty || matchTimesDirty;
     if (!hasUnsavedChanges) return true;
     return window.confirm('Unsaved changes detected. Continue without saving?');
   }
@@ -1628,6 +1670,8 @@ export function useTournamentWorkspaceState() {
         regClose: formDraft.regClose,
         autoClose: formDraft.autoClose,
         scheduleGeneratedAt: null,
+        schedulePublishedAt: null,
+        scheduleLifecycleState: 'NOT_CREATED',
         scheduleLocked: false,
         config: defaultFormatConfig(),
         pool: defaultPoolConfig(),
@@ -1692,6 +1736,15 @@ export function useTournamentWorkspaceState() {
     setActiveFormatId(formatId);
     setActiveTab(tab);
     loadDrafts(target);
+
+    const auth = readAdminAuth();
+    const parsedTournamentId = activeTournamentId ? Number.parseInt(activeTournamentId, 10) : Number.NaN;
+    const parsedFormatId = Number.parseInt(formatId, 10);
+    if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
+      void loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId).catch(() => {
+        // keep table collapsed/empty when matches cannot be loaded
+      });
+    }
   }
 
   function switchTab(tab: ViewTab) {
@@ -1798,6 +1851,9 @@ export function useTournamentWorkspaceState() {
             stage_rules: merged.stageRules,
             match_count_pairing_mode: merged.matchCountPairingMode,
             match_count_ko_teams_to_ko: merged.matchCountKoTeamsToKo,
+            gap_between_sets_minutes: merged.gapBetweenSetsMinutes,
+            gap_between_matches_per_stage_minutes: merged.gapBetweenMatchesPerStageMinutes,
+            gap_between_stages_minutes: merged.gapBetweenStagesMinutes,
           };
           const updated = await client.updateTournamentFormat(
             auth.token,
@@ -2018,6 +2074,17 @@ export function useTournamentWorkspaceState() {
     })();
   }
 
+  async function loadBracketData(authToken: string, clubId: number, tournamentId: number, formatId: number) {
+    const rows = await client.tournamentFormatMatches(authToken, clubId, tournamentId, formatId);
+    const registrations = await listFormatRegistrations(authToken, clubId, tournamentId, formatId);
+    setBracketMatches(rows);
+    setMatchStartDrafts(buildMatchStartDrafts(rows));
+    setMatchTimesDirty(false);
+    setFormatRegistrations(registrations);
+    setBracketMatchesOpen(true);
+    return rows;
+  }
+
   function generateSchedule() {
     if (!activeFormat || !activeTournamentId) return;
     if (configDirty || poolDirty || scheduleDirty || courtDirty) {
@@ -2064,22 +2131,14 @@ export function useTournamentWorkspaceState() {
         try {
           await client.generateTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {});
           await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
-          const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          setBracketMatches(rows);
-          setFormatRegistrations(registrations);
-          setBracketMatchesOpen(true);
+          await loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           showSavedNotice('Schedule generated');
           return;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unable to generate schedule.';
           if (message.toLowerCase().includes('schedule already generated')) {
             try {
-              const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-              const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-              setBracketMatches(rows);
-              setFormatRegistrations(registrations);
-              setBracketMatchesOpen(true);
+              await loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
               showSavedNotice('Existing schedule loaded');
               return;
             } catch {
@@ -2096,6 +2155,8 @@ export function useTournamentWorkspaceState() {
       updateCurrentFormat((format) => ({
         ...format,
         scheduleGeneratedAt: new Date().toISOString(),
+        schedulePublishedAt: null,
+        scheduleLifecycleState: 'CREATED',
         scheduleLocked: true,
       }));
       showSavedNotice('Schedule generated');
@@ -2103,28 +2164,23 @@ export function useTournamentWorkspaceState() {
     })();
   }
 
-  function viewBrackets() {
+  function publishSchedule() {
     if (!activeFormat || !activeTournamentId) return;
 
     void (async () => {
-      setScheduleActionBusy('view');
+      setScheduleActionBusy('publish');
       const auth = readAdminAuth();
       const parsedTournamentId = Number.parseInt(activeTournamentId, 10);
       const parsedFormatId = Number.parseInt(activeFormat.id, 10);
 
       if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
         try {
-          const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          setBracketMatches(rows);
-          setFormatRegistrations(registrations);
-          setBracketMatchesOpen(true);
-          if (!rows.length) {
-            showSavedNotice('No matches generated yet');
-          }
+          await client.publishTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
+          showSavedNotice('Schedule published');
           return;
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unable to load brackets.';
+          const message = error instanceof Error ? error.message : 'Unable to publish schedule.';
           window.alert(message);
           return;
         } finally {
@@ -2132,7 +2188,75 @@ export function useTournamentWorkspaceState() {
         }
       }
 
-      setBracketMatchesOpen(true);
+      updateCurrentFormat((format) => ({
+        ...format,
+        schedulePublishedAt: new Date().toISOString(),
+        scheduleLifecycleState: 'PUBLISHED',
+      }));
+      showSavedNotice('Schedule published');
+      setScheduleActionBusy(null);
+    })();
+  }
+
+  function updateMatchStartDraft(matchId: number, value: string) {
+    setMatchStartDrafts((prev) => ({
+      ...prev,
+      [matchId]: value,
+    }));
+    setMatchTimesDirty(true);
+  }
+
+  function saveMatchStartTimes() {
+    if (!activeFormat || !activeTournamentId || !matchTimesDirty) return;
+
+    void (async () => {
+      setScheduleActionBusy('save_times');
+      const auth = readAdminAuth();
+      const parsedTournamentId = Number.parseInt(activeTournamentId, 10);
+      const parsedFormatId = Number.parseInt(activeFormat.id, 10);
+
+      if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
+        try {
+          const updates = bracketMatches
+            .map((match) => {
+              const draftStart = matchStartDrafts[match.id] ?? '';
+              const currentStart = toDateTimeLocalInput(match.start_at);
+              if (draftStart === currentStart) return null;
+              const nextStartIso = toUtcIsoFromInput(draftStart);
+              if (!nextStartIso) {
+                throw new Error(`Invalid start time for match #${match.match_number}.`);
+              }
+              return {
+                match_id: match.id,
+                start_at: nextStartIso,
+                expected_row_version: match.row_version,
+              };
+            })
+            .filter((row): row is NonNullable<typeof row> => row !== null);
+
+          if (!updates.length) {
+            setMatchTimesDirty(false);
+            showSavedNotice('No start-time changes to save');
+            return;
+          }
+
+          await client.updateTournamentMatchStartTimes(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
+            updates,
+          });
+          await loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          showSavedNotice('Match times saved');
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to save match times.';
+          window.alert(message);
+          return;
+        } finally {
+          setScheduleActionBusy(null);
+        }
+      }
+
+      setMatchTimesDirty(false);
+      showSavedNotice('Match times saved');
       setScheduleActionBusy(null);
     })();
   }
@@ -2151,6 +2275,8 @@ export function useTournamentWorkspaceState() {
         try {
           await client.resetTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           setBracketMatches([]);
+          setMatchStartDrafts({});
+          setMatchTimesDirty(false);
           setFormatRegistrations([]);
           setBracketMatchesOpen(false);
           await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
@@ -2168,9 +2294,13 @@ export function useTournamentWorkspaceState() {
       updateCurrentFormat((format) => ({
         ...format,
         scheduleGeneratedAt: null,
+        schedulePublishedAt: null,
+        scheduleLifecycleState: 'NOT_CREATED',
         scheduleLocked: false,
       }));
       setBracketMatches([]);
+      setMatchStartDrafts({});
+      setMatchTimesDirty(false);
       setFormatRegistrations([]);
       setBracketMatchesOpen(false);
       showSavedNotice('Schedule reset');
@@ -2917,6 +3047,8 @@ export function useTournamentWorkspaceState() {
     bracketMatchesOpen,
     setBracketMatchesOpen,
     bracketMatches,
+    matchStartDrafts,
+    matchTimesDirty,
     formatRegistrations,
     scheduleActionBusy,
     activeCourtId,
@@ -2963,7 +3095,9 @@ export function useTournamentWorkspaceState() {
     saveSchedules,
     saveCourtsConfig,
     generateSchedule,
-    viewBrackets,
+    publishSchedule,
+    saveMatchStartTimes,
+    updateMatchStartDraft,
     resetSchedule,
     updateConfig,
     updateStageRule,

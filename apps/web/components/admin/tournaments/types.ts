@@ -22,6 +22,9 @@ export type StageRule = {
 export type FormatConfig = {
   maxTeamsAllowed: number;
   setDurationMinutes: number;
+  gapBetweenSetsMinutes: number;
+  gapBetweenMatchesPerStageMinutes: number;
+  gapBetweenStagesMinutes: number;
   schedulingModel: SchedulingModel;
   rrType: 'single' | 'double';
   rrIncludeKo: 'yes' | 'no';
@@ -78,6 +81,8 @@ export type Format = {
   regClose: string;
   autoClose: boolean;
   scheduleGeneratedAt?: string | null;
+  schedulePublishedAt?: string | null;
+  scheduleLifecycleState?: 'NOT_CREATED' | 'CREATED' | 'PUBLISHED';
   scheduleLocked?: boolean;
   config: FormatConfig;
   pool: PoolConfig;

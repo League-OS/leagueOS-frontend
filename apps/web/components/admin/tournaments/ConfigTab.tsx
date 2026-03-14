@@ -111,6 +111,42 @@ export function ConfigTab({
                 style={field}
               />
             </label>
+            <label style={labelCol}>
+              Gap Between Sets (min)
+              <input
+                type="number"
+                min={0}
+                value={configDraft.gapBetweenSetsMinutes}
+                onChange={(event) => {
+                  updateConfig({ gapBetweenSetsMinutes: Math.max(0, Number(event.target.value) || 0) });
+                }}
+                style={field}
+              />
+            </label>
+            <label style={labelCol}>
+              Gap Between Matches Per Stage (min)
+              <input
+                type="number"
+                min={0}
+                value={configDraft.gapBetweenMatchesPerStageMinutes}
+                onChange={(event) => {
+                  updateConfig({ gapBetweenMatchesPerStageMinutes: Math.max(0, Number(event.target.value) || 0) });
+                }}
+                style={field}
+              />
+            </label>
+            <label style={labelCol}>
+              Gap Between Stages (min)
+              <input
+                type="number"
+                min={0}
+                value={configDraft.gapBetweenStagesMinutes}
+                onChange={(event) => {
+                  updateConfig({ gapBetweenStagesMinutes: Math.max(0, Number(event.target.value) || 0) });
+                }}
+                style={field}
+              />
+            </label>
           </div>
         </section>
 
