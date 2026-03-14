@@ -219,6 +219,8 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       bracketMatchesOpen={state.bracketMatchesOpen}
                       setBracketMatchesOpen={state.setBracketMatchesOpen}
                       bracketMatches={state.bracketMatches}
+                      formatRegistrations={state.formatRegistrations}
+                      generatedTeams={state.poolDraft.generatedTeams}
                     />
                   ) : null}
 
