@@ -2876,6 +2876,31 @@ function SessionDetailPanel(props: {
     return mapped;
   }, [courtById, matchSort.direction, matchSort.key, participantsByGame, sessionMatches]);
 
+  const playerMatchTotals = useMemo(() => {
+    const playerById = new Map(players.map((p) => [p.id, p.display_name]));
+    const totals = new Map<number, { playerName: string; totalMatches: number }>();
+
+    sessionMatches.forEach((game) => {
+      const participants = participantsByGame[game.id] ?? [];
+      const uniquePlayerIds = new Set(participants.map((p) => p.player_id));
+      uniquePlayerIds.forEach((playerId) => {
+        const playerName = playerById.get(playerId) || `Player ${playerId}`;
+        const current = totals.get(playerId) ?? { playerName, totalMatches: 0 };
+        totals.set(playerId, {
+          playerName,
+          totalMatches: current.totalMatches + 1,
+        });
+      });
+    });
+
+    return Array.from(totals.values()).sort((a, b) => {
+      if (b.totalMatches !== a.totalMatches) return b.totalMatches - a.totalMatches;
+      return a.playerName.localeCompare(b.playerName);
+    });
+  }, [participantsByGame, players, sessionMatches]);
+
+  const createdByLabel = session?.created_by_label?.trim() || '—';
+
   const sortArrow = (key: MatchSortKey) => {
     if (matchSort.key !== key) return '↕';
     return matchSort.direction === 'asc' ? '↑' : '↓';
@@ -3105,9 +3130,23 @@ function SessionDetailPanel(props: {
             )}
           </div>
           <Info label="Season" value={season?.name || `Season ${session.season_id}`} />
+          <Info label="Created by" value={createdByLabel} />
           <Info label="Opened" value={fmtDateTime(session.opened_at)} />
           <Info label="Finalized" value={fmtDateTime(session.finalized_at)} />
         </div>
+      </AdminCard>
+      <AdminCard title={`Matches per Player (${playerMatchTotals.length})`}>
+        {playerMatchTotals.length ? (
+          <AdminTable
+            columns={['Player Name', 'Total Matches']}
+            rows={playerMatchTotals.map((row) => [row.playerName, row.totalMatches])}
+          />
+        ) : (
+          <AdminEmptyState
+            title="No matches yet"
+            description="Match counts will appear here once games are added to this session."
+          />
+        )}
       </AdminCard>
       <AdminCard title={`Matches in Session (${sessionMatches.length})`} action={
         <button

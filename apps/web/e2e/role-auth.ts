@@ -159,6 +159,6 @@ export async function logoutToLogin(page: Page) {
     await logoutButton.click();
   }
 
-  await expect.poll(() => new URL(page.url()).pathname).toBe('/', { timeout: 15_000 });
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 15_000 }).toBe('/');
   await expect(page.getByLabel('Email')).toBeVisible();
 }
