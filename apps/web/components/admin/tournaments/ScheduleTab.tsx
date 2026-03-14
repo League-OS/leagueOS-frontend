@@ -9,9 +9,13 @@ type ScheduleTabProps = {
   courtDirty: boolean;
   saveSchedules: () => void;
   scheduleStatusLabel: string;
-  scheduleActionBusy: 'generate' | 'view' | 'reset' | null;
+  scheduleActionBusy: 'generate' | 'publish' | 'save_times' | 'reset' | null;
   generateSchedule: () => void;
-  viewBrackets: () => void;
+  publishSchedule: () => void;
+  saveMatchStartTimes: () => void;
+  updateMatchStartDraft: (matchId: number, value: string) => void;
+  matchStartDrafts: Record<number, string>;
+  matchTimesDirty: boolean;
   resetSchedule: () => void;
   courtConfigDraft: CourtConfig | null;
   patchCourtConfigDraft: (transform: (current: CourtConfig) => CourtConfig) => void;
@@ -38,6 +42,7 @@ function formatDateTime(value: string | null): string {
 }
 
 function formatRoundLabel(match: ApiTournamentMatch): string {
+  if (match.stage_code === 'MCKO_INITIAL') return match.round_label || 'Initial Round';
   if (match.group_code) return `Group(${match.group_code})`;
   return match.round_label || '-';
 }
@@ -97,7 +102,11 @@ export function ScheduleTab({
   scheduleStatusLabel,
   scheduleActionBusy,
   generateSchedule,
-  viewBrackets,
+  publishSchedule,
+  saveMatchStartTimes,
+  updateMatchStartDraft,
+  matchStartDrafts,
+  matchTimesDirty,
   resetSchedule,
   courtConfigDraft,
   patchCourtConfigDraft,
@@ -136,8 +145,8 @@ export function ScheduleTab({
             <button style={outlineBtn} onClick={generateSchedule} disabled={busy}>
               {scheduleActionBusy === 'generate' ? 'Generating...' : 'Generate Schedule'}
             </button>
-            <button style={outlineBtn} onClick={viewBrackets} disabled={busy}>
-              {scheduleActionBusy === 'view' ? 'Loading...' : 'View Brackets'}
+            <button style={outlineBtn} onClick={publishSchedule} disabled={busy}>
+              {scheduleActionBusy === 'publish' ? 'Publishing...' : 'Publish Schedule'}
             </button>
             <button style={outlineBtn} onClick={resetSchedule} disabled={busy}>
               {scheduleActionBusy === 'reset' ? 'Resetting...' : 'Reset Schedule'}
@@ -243,29 +252,49 @@ export function ScheduleTab({
 
         {bracketMatchesOpen ? (
           bracketMatches.length ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
-              <thead>
-                <tr>
-                  {['#', 'Round', 'Team A', 'Team B', 'Status', 'Court', 'Start', 'End'].map((header) => (
-                    <th key={header} style={th}>{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {bracketMatches.map((match) => (
-                  <tr key={match.id}>
-                    <td style={td}>{match.match_number}</td>
-                    <td style={td}>{formatRoundLabel(match)}</td>
-                    <td style={td}>{renderTeamSlot(match, 'home', matchNumberById, registrationById, generatedTeams)}</td>
-                    <td style={td}>{renderTeamSlot(match, 'away', matchNumberById, registrationById, generatedTeams)}</td>
-                    <td style={td}>{match.status}</td>
-                    <td style={td}>{match.court_name || '-'}</td>
-                    <td style={td}>{formatDateTime(match.start_at)}</td>
-                    <td style={td}>{formatDateTime(match.end_at)}</td>
+            <>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <button
+                  style={outlineBtn}
+                  onClick={saveMatchStartTimes}
+                  disabled={busy || !matchTimesDirty}
+                >
+                  {scheduleActionBusy === 'save_times' ? 'Saving...' : 'Save Match Times'}
+                </button>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    {['#', 'Round', 'Team A', 'Team B', 'Status', 'Court', 'Start', 'End'].map((header) => (
+                      <th key={header} style={th}>{header}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {bracketMatches.map((match) => (
+                    <tr key={match.id}>
+                      <td style={td}>{match.match_number}</td>
+                      <td style={td}>{formatRoundLabel(match)}</td>
+                      <td style={td}>{renderTeamSlot(match, 'home', matchNumberById, registrationById, generatedTeams)}</td>
+                      <td style={td}>{renderTeamSlot(match, 'away', matchNumberById, registrationById, generatedTeams)}</td>
+                      <td style={td}>{match.status}</td>
+                      <td style={td}>{match.court_name || '-'}</td>
+                      <td style={td}>
+                        <input
+                          type="datetime-local"
+                          value={matchStartDrafts[match.id] ?? ''}
+                          onChange={(event) => {
+                            updateMatchStartDraft(match.id, event.target.value);
+                          }}
+                          style={{ ...field, minWidth: 190 }}
+                        />
+                      </td>
+                      <td style={td}>{formatDateTime(match.end_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           ) : (
             <p style={{ color: '#64748b', marginTop: 8 }}>No generated matches yet. Generate schedule first.</p>
           )

@@ -62,6 +62,9 @@ export const defaultStageRule = (): StageRule => ({
 export const defaultFormatConfig = (): FormatConfig => ({
   maxTeamsAllowed: 16,
   setDurationMinutes: 10,
+  gapBetweenSetsMinutes: 0,
+  gapBetweenMatchesPerStageMinutes: 0,
+  gapBetweenStagesMinutes: 0,
   schedulingModel: 'DIRECT_KNOCKOUT',
   rrType: 'single',
   rrIncludeKo: 'no',
@@ -70,6 +73,7 @@ export const defaultFormatConfig = (): FormatConfig => ({
   groupKoTeamsPerGroup: 2,
   matchCountPerEntrant: 4,
   matchCountKoTeamsToKo: 4,
+  matchCountPairingMode: 'BALANCED',
   stageRules: {},
 });
 
@@ -253,14 +257,25 @@ export function computePlanningMetrics(config: FormatConfig): PlanningMetrics {
 
   let totalSets = 0;
   let totalDuration = 0;
+  let totalMatchCount = 0;
   buildStages(config).forEach((stage) => {
     const matches = stageMatches[stage.id] || 0;
     const rule = config.stageRules[stage.id] || defaultStageRule();
     const setsToWin = Math.max(1, Number(rule.setsToWin || 1));
     const maxSetsInMatch = (2 * setsToWin) - 1;
     totalSets += matches * maxSetsInMatch;
-    totalDuration += matches * ((maxSetsInMatch * config.setDurationMinutes) + ((maxSetsInMatch - 1) * 2));
+    totalMatchCount += matches;
+    const perMatchMinutes = (maxSetsInMatch * config.setDurationMinutes)
+      + ((maxSetsInMatch - 1) * Math.max(0, config.gapBetweenSetsMinutes));
+    totalDuration += matches * perMatchMinutes;
   });
+  if (totalMatchCount > 1) {
+    totalDuration += (totalMatchCount - 1) * Math.max(0, config.gapBetweenMatchesPerStageMinutes);
+  }
+  const stageCount = buildStages(config).length;
+  if (stageCount > 1) {
+    totalDuration += (stageCount - 1) * Math.max(0, config.gapBetweenStagesMinutes);
+  }
 
   return {
     matches: totalMatches,

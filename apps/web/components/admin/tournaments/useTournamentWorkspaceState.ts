@@ -34,6 +34,7 @@ import type {
   FormatLifecycleStatus,
   GeneratedTeam,
   Group,
+  MatchCountPairingMode,
   PoolConfig,
   SchedulingModel,
   SlotDraft,
@@ -189,9 +190,10 @@ async function deleteTournamentBase(
 
   let message = `Unable to delete tournament (HTTP ${response.status})`;
   try {
-    const payload = await response.json() as { detail?: unknown };
-    if (typeof payload.detail === 'string' && payload.detail.trim()) {
-      message = payload.detail;
+    const payload = await response.json() as ApiDetailPayload;
+    const parsed = parseApiErrorDetail(payload, message);
+    if (parsed.message.trim()) {
+      message = parsed.message;
     }
   } catch {
     // Keep fallback message.
@@ -371,6 +373,14 @@ function toUtcIsoFromInput(value: string): string | undefined {
   return parsed.toISOString();
 }
 
+function buildMatchStartDrafts(matches: ApiTournamentMatch[]): Record<number, string> {
+  const drafts: Record<number, string> = {};
+  matches.forEach((match) => {
+    drafts[match.id] = toDateTimeLocalInput(match.start_at);
+  });
+  return drafts;
+}
+
 function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
   const config = defaultFormatConfig();
   const rawConfigJson = asObject(row.config_json) ?? {};
@@ -379,6 +389,18 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
   const persistedCourtConfig = normalizeCourtConfigFromConfigJson(rawConfigJson.court_config);
   const uiSchedulingModelRaw = typeof rawConfigJson.ui_scheduling_model === 'string' ? rawConfigJson.ui_scheduling_model : '';
   const columnSchedulingModel = typeof row.scheduling_model === 'string' ? row.scheduling_model : '';
+  const matchCountKoTeamsRaw = Number(rawConfigJson.match_count_ko_teams_to_ko ?? rawConfigJson.matchCountKoTeamsToKo);
+  const matchCountKoTeamsToKo = Number.isFinite(matchCountKoTeamsRaw) && matchCountKoTeamsRaw >= 2
+    ? Math.floor(matchCountKoTeamsRaw)
+    : config.matchCountKoTeamsToKo;
+  const rawMatchCountPairingMode = (
+    typeof rawConfigJson.match_count_pairing_mode === 'string'
+      ? rawConfigJson.match_count_pairing_mode
+      : (typeof rawConfigJson.matchCountPairingMode === 'string' ? rawConfigJson.matchCountPairingMode : '')
+  ).toUpperCase();
+  const matchCountPairingMode: MatchCountPairingMode = isMatchCountPairingMode(rawMatchCountPairingMode)
+    ? rawMatchCountPairingMode
+    : config.matchCountPairingMode;
   const mappedSchedulingModel = isUiSchedulingModel(columnSchedulingModel) && columnSchedulingModel !== ''
     ? columnSchedulingModel
     : (isUiSchedulingModel(uiSchedulingModelRaw) && uiSchedulingModelRaw !== '' ? uiSchedulingModelRaw : 'DIRECT_KNOCKOUT');
@@ -386,8 +408,33 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     ...config,
     schedulingModel: mappedSchedulingModel,
     setDurationMinutes: row.average_set_duration_minutes || config.setDurationMinutes,
+    gapBetweenSetsMinutes: Math.max(
+      0,
+      toNumber(
+        rawConfigJson.gap_between_sets_minutes ?? rawConfigJson.schedule_gap_between_sets_minutes,
+        config.gapBetweenSetsMinutes,
+      ),
+    ),
+    gapBetweenMatchesPerStageMinutes: Math.max(
+      0,
+      toNumber(
+        rawConfigJson.gap_between_matches_per_stage_minutes
+          ?? rawConfigJson.schedule_gap_between_matches_per_stage_minutes,
+        config.gapBetweenMatchesPerStageMinutes,
+      ),
+    ),
+    gapBetweenStagesMinutes: Math.max(
+      0,
+      toNumber(
+        rawConfigJson.gap_between_stages_minutes
+          ?? rawConfigJson.schedule_gap_between_stages_minutes,
+        config.gapBetweenStagesMinutes,
+      ),
+    ),
     maxTeamsAllowed: row.max_teams_allowed || config.maxTeamsAllowed,
     matchCountPerEntrant: row.matches_per_team || config.matchCountPerEntrant,
+    matchCountKoTeamsToKo,
+    matchCountPairingMode,
     groupCount: row.group_count || config.groupCount,
     groupKoTeamsPerGroup: row.group_ko_teams_per_group || config.groupKoTeamsPerGroup,
   };
@@ -410,6 +457,9 @@ function mapApiFormatToLocal(row: TournamentFormatInstance): Format {
     regClose: toDateTimeLocalInput(row.registration_close_at),
     autoClose: row.auto_registration_close,
     scheduleGeneratedAt: row.schedule_generated_at,
+    schedulePublishedAt: row.schedule_published_at,
+    scheduleLifecycleState: row.schedule_lifecycle_state
+      || (row.schedule_published_at ? 'PUBLISHED' : (row.schedule_generated_at ? 'CREATED' : 'NOT_CREATED')),
     scheduleLocked: row.schedule_locked,
     config: mergedConfig,
     pool: mergedPool,
@@ -463,6 +513,10 @@ function eloForFormat(player: ClubPlayer, formatType?: FormatType): number {
 
 function isUiSchedulingModel(value: string): value is SchedulingModel {
   return value === '' || value === 'RR' || value === 'GROUPS_KO' || value === 'MATCH_COUNT_KO' || value === 'DIRECT_KNOCKOUT';
+}
+
+function isMatchCountPairingMode(value: string): value is MatchCountPairingMode {
+  return value === 'BALANCED' || value === 'SEEDED_SPREAD';
 }
 
 function effectiveSchedulingModel(value: SchedulingModel | undefined | null): Exclude<SchedulingModel, ''> {
@@ -666,7 +720,10 @@ function extractAllowedCourtIds(assignments: Record<string, string[]>): number[]
   ).sort((a, b) => a - b);
 }
 
-function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
+function validateGroupsKoPoolBeforeSchedule(
+  pool: PoolConfig,
+  { isSinglesFormat }: { isSinglesFormat: boolean },
+): string | null {
   const assignedTeamIds = Object.values(pool.assignments || {})
     .flatMap((ids) => ids || [])
     .map((id) => String(id));
@@ -674,9 +731,23 @@ function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
     return 'Generate groups in Pool and save before schedule generation.';
   }
 
-  const knownTeamIds = new Set(pool.generatedTeams.map((team) => String(team.id)));
+  const knownTeamIds = new Set<string>();
+  if (isSinglesFormat) {
+    pool.poolPlayers.forEach((entry) => {
+      const playerId = String(entry.playerId || '').trim();
+      if (!playerId) return;
+      knownTeamIds.add(playerId);
+      knownTeamIds.add(`player_${playerId}`);
+    });
+  } else {
+    pool.generatedTeams.forEach((team) => {
+      knownTeamIds.add(String(team.id));
+    });
+  }
   if (!knownTeamIds.size) {
-    return 'Pool teams are missing. Regenerate pairs/groups in Pool and save before schedule generation.';
+    return isSinglesFormat
+      ? 'Pool players are missing. Add players and generate groups in Pool before schedule generation.'
+      : 'Pool teams are missing. Regenerate pairs/groups in Pool and save before schedule generation.';
   }
 
   for (const teamId of assignedTeamIds) {
@@ -685,6 +756,22 @@ function validateGroupsKoPoolBeforeSchedule(pool: PoolConfig): string | null {
     }
   }
   return null;
+}
+
+function poolArtifactsGenerated(pool: PoolConfig | null | undefined): boolean {
+  if (!pool) return false;
+  if (pool.teamsGenerated) return true;
+  if (pool.generatedTeams.length > 0) return true;
+  if (pool.groups.length > 0) return true;
+  return Object.values(pool.assignments || {}).some((ids) => Array.isArray(ids) && ids.length > 0);
+}
+
+function isPoolRemovalLocked(
+  pool: PoolConfig | null | undefined,
+  scheduleGeneratedAt: string | null | undefined,
+): boolean {
+  if (scheduleGeneratedAt) return true;
+  return poolArtifactsGenerated(pool);
 }
 
 export function useTournamentWorkspaceState() {
@@ -736,8 +823,10 @@ export function useTournamentWorkspaceState() {
   const [poolGroupsOpen, setPoolGroupsOpen] = useState(true);
   const [bracketMatchesOpen, setBracketMatchesOpen] = useState(false);
   const [bracketMatches, setBracketMatches] = useState<ApiTournamentMatch[]>([]);
+  const [matchStartDrafts, setMatchStartDrafts] = useState<Record<number, string>>({});
+  const [matchTimesDirty, setMatchTimesDirty] = useState(false);
   const [formatRegistrations, setFormatRegistrations] = useState<FormatRegistrationRow[]>([]);
-  const [scheduleActionBusy, setScheduleActionBusy] = useState<'generate' | 'view' | 'reset' | null>(null);
+  const [scheduleActionBusy, setScheduleActionBusy] = useState<'generate' | 'publish' | 'save_times' | 'reset' | null>(null);
   const [activeCourtId, setActiveCourtId] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
@@ -784,7 +873,10 @@ export function useTournamentWorkspaceState() {
   const unitLabelPlural = isSinglesFormat ? 'Players' : 'Teams';
   const effectiveEntrantCount = useMemo(() => {
     if (!configDraft) return 0;
-    if (poolDraft?.teamsGenerated) return poolDraft.generatedTeams.length;
+    if (poolDraft?.teamsGenerated) {
+      if (isSinglesFormat) return poolDraft.poolPlayers.length;
+      return poolDraft.generatedTeams.length;
+    }
     if (poolDraft?.poolPlayers.length) {
       if (isSinglesFormat) return poolDraft.poolPlayers.length;
       return Math.max(1, Math.floor(poolDraft.poolPlayers.length / 2));
@@ -801,11 +893,17 @@ export function useTournamentWorkspaceState() {
     return computePlanningMetrics(planningConfig);
   }, [configDraft, effectiveEntrantCount]);
   const scheduleStatusLabel = useMemo(() => {
-    if (!activeFormat?.scheduleGeneratedAt) return 'Not Generated';
-    const parsed = new Date(activeFormat.scheduleGeneratedAt);
-    if (Number.isNaN(parsed.getTime())) return 'Generated';
-    return `Generated (${parsed.toLocaleString()})`;
-  }, [activeFormat?.scheduleGeneratedAt]);
+    if (activeFormat?.schedulePublishedAt) {
+      const publishedAt = new Date(activeFormat.schedulePublishedAt);
+      if (!Number.isNaN(publishedAt.getTime())) return `Published (${publishedAt.toLocaleString()})`;
+      return 'Published';
+    }
+    return 'Not Published';
+  }, [activeFormat?.schedulePublishedAt]);
+  const poolRemovalLocked = useMemo(
+    () => isPoolRemovalLocked(poolDraft, activeFormat?.scheduleGeneratedAt),
+    [poolDraft, activeFormat?.scheduleGeneratedAt],
+  );
 
   const clubPlayersForActiveFormat = useMemo(
     () =>
@@ -969,6 +1067,8 @@ export function useTournamentWorkspaceState() {
     setScheduleDraft({});
     setCourtConfigDraft(null);
     setBracketMatches([]);
+    setMatchStartDrafts({});
+    setMatchTimesDirty(false);
     setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
@@ -993,6 +1093,8 @@ export function useTournamentWorkspaceState() {
     setScheduleDraft(clone(format.courtAssignments));
     setCourtConfigDraft(clone(format.courtConfig || defaultCourtConfig()));
     setBracketMatches([]);
+    setMatchStartDrafts({});
+    setMatchTimesDirty(false);
     setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
@@ -1010,7 +1112,7 @@ export function useTournamentWorkspaceState() {
   }
 
   function canSwitch(): boolean {
-    const hasUnsavedChanges = configDirty || poolDirty || scheduleDirty || courtDirty;
+    const hasUnsavedChanges = configDirty || poolDirty || scheduleDirty || courtDirty || matchTimesDirty;
     if (!hasUnsavedChanges) return true;
     return window.confirm('Unsaved changes detected. Continue without saving?');
   }
@@ -1167,17 +1269,18 @@ export function useTournamentWorkspaceState() {
     if (!window.confirm(`Delete tournament "${target.name}"?`)) return;
 
     void (async () => {
-      let deletedViaApi = false;
       const auth = readAdminAuth();
       const parsedTournamentId = Number.parseInt(tournamentId, 10);
-      if (auth && Number.isInteger(parsedTournamentId)) {
-        try {
-          await deleteTournamentBase(auth.token, auth.clubId, parsedTournamentId);
-          deletedViaApi = true;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unable to delete tournament.';
-          console.warn('Tournament delete API unavailable. Applying local fallback delete.', message);
-        }
+      if (!auth || !Number.isInteger(parsedTournamentId)) {
+        window.alert('Unable to delete tournament: missing admin authentication.');
+        return;
+      }
+      try {
+        await deleteTournamentBase(auth.token, auth.clubId, parsedTournamentId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to delete tournament.';
+        window.alert(message);
+        return;
       }
 
       if (activeTournamentId === tournamentId) {
@@ -1202,7 +1305,7 @@ export function useTournamentWorkspaceState() {
         writeTournamentWindowOverrides(next);
         return next;
       });
-      showSavedNotice(deletedViaApi ? 'Tournament deleted' : 'Tournament deleted locally (API pending)');
+      showSavedNotice('Tournament deleted');
     })();
   }
 
@@ -1567,6 +1670,8 @@ export function useTournamentWorkspaceState() {
         regClose: formDraft.regClose,
         autoClose: formDraft.autoClose,
         scheduleGeneratedAt: null,
+        schedulePublishedAt: null,
+        scheduleLifecycleState: 'NOT_CREATED',
         scheduleLocked: false,
         config: defaultFormatConfig(),
         pool: defaultPoolConfig(),
@@ -1631,6 +1736,15 @@ export function useTournamentWorkspaceState() {
     setActiveFormatId(formatId);
     setActiveTab(tab);
     loadDrafts(target);
+
+    const auth = readAdminAuth();
+    const parsedTournamentId = activeTournamentId ? Number.parseInt(activeTournamentId, 10) : Number.NaN;
+    const parsedFormatId = Number.parseInt(formatId, 10);
+    if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
+      void loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId).catch(() => {
+        // keep table collapsed/empty when matches cannot be loaded
+      });
+    }
   }
 
   function switchTab(tab: ViewTab) {
@@ -1735,6 +1849,11 @@ export function useTournamentWorkspaceState() {
             ...(activeFormat.metaConfigJson || {}),
             ui_scheduling_model: merged.schedulingModel,
             stage_rules: merged.stageRules,
+            match_count_pairing_mode: merged.matchCountPairingMode,
+            match_count_ko_teams_to_ko: merged.matchCountKoTeamsToKo,
+            gap_between_sets_minutes: merged.gapBetweenSetsMinutes,
+            gap_between_matches_per_stage_minutes: merged.gapBetweenMatchesPerStageMinutes,
+            gap_between_stages_minutes: merged.gapBetweenStagesMinutes,
           };
           const updated = await client.updateTournamentFormat(
             auth.token,
@@ -1955,6 +2074,17 @@ export function useTournamentWorkspaceState() {
     })();
   }
 
+  async function loadBracketData(authToken: string, clubId: number, tournamentId: number, formatId: number) {
+    const rows = await client.tournamentFormatMatches(authToken, clubId, tournamentId, formatId);
+    const registrations = await listFormatRegistrations(authToken, clubId, tournamentId, formatId);
+    setBracketMatches(rows);
+    setMatchStartDrafts(buildMatchStartDrafts(rows));
+    setMatchTimesDirty(false);
+    setFormatRegistrations(registrations);
+    setBracketMatchesOpen(true);
+    return rows;
+  }
+
   function generateSchedule() {
     if (!activeFormat || !activeTournamentId) return;
     if (configDirty || poolDirty || scheduleDirty || courtDirty) {
@@ -1971,9 +2101,22 @@ export function useTournamentWorkspaceState() {
       return;
     }
     if (effectiveSchedulingModel(activeFormat.config.schedulingModel) === 'GROUPS_KO' && poolDraft) {
-      const poolError = validateGroupsKoPoolBeforeSchedule(poolDraft);
+      const poolError = validateGroupsKoPoolBeforeSchedule(poolDraft, { isSinglesFormat: activeFormat.type === 'SINGLES' });
       if (poolError) {
         window.alert(poolError);
+        return;
+      }
+    }
+    if (effectiveSchedulingModel(activeFormat.config.schedulingModel) === 'MATCH_COUNT_KO') {
+      const generatedTeams = poolDraft?.generatedTeams || [];
+      const poolPlayers = poolDraft?.poolPlayers || [];
+      const singlesPoolReady = activeFormat.type === 'SINGLES' && poolPlayers.length >= 2;
+      if (!generatedTeams.length && !singlesPoolReady) {
+        window.alert(
+          activeFormat.type === 'SINGLES'
+            ? 'Add at least 2 players to Pool and save before schedule generation.'
+            : 'Generate teams in Pool and save before schedule generation.',
+        );
         return;
       }
     }
@@ -1988,22 +2131,14 @@ export function useTournamentWorkspaceState() {
         try {
           await client.generateTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {});
           await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
-          const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          setBracketMatches(rows);
-          setFormatRegistrations(registrations);
-          setBracketMatchesOpen(true);
+          await loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           showSavedNotice('Schedule generated');
           return;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unable to generate schedule.';
           if (message.toLowerCase().includes('schedule already generated')) {
             try {
-              const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-              const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-              setBracketMatches(rows);
-              setFormatRegistrations(registrations);
-              setBracketMatchesOpen(true);
+              await loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
               showSavedNotice('Existing schedule loaded');
               return;
             } catch {
@@ -2020,6 +2155,8 @@ export function useTournamentWorkspaceState() {
       updateCurrentFormat((format) => ({
         ...format,
         scheduleGeneratedAt: new Date().toISOString(),
+        schedulePublishedAt: null,
+        scheduleLifecycleState: 'CREATED',
         scheduleLocked: true,
       }));
       showSavedNotice('Schedule generated');
@@ -2027,28 +2164,23 @@ export function useTournamentWorkspaceState() {
     })();
   }
 
-  function viewBrackets() {
+  function publishSchedule() {
     if (!activeFormat || !activeTournamentId) return;
 
     void (async () => {
-      setScheduleActionBusy('view');
+      setScheduleActionBusy('publish');
       const auth = readAdminAuth();
       const parsedTournamentId = Number.parseInt(activeTournamentId, 10);
       const parsedFormatId = Number.parseInt(activeFormat.id, 10);
 
       if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
         try {
-          const rows = await client.tournamentFormatMatches(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
-          setBracketMatches(rows);
-          setFormatRegistrations(registrations);
-          setBracketMatchesOpen(true);
-          if (!rows.length) {
-            showSavedNotice('No matches generated yet');
-          }
+          await client.publishTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
+          showSavedNotice('Schedule published');
           return;
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unable to load brackets.';
+          const message = error instanceof Error ? error.message : 'Unable to publish schedule.';
           window.alert(message);
           return;
         } finally {
@@ -2056,7 +2188,75 @@ export function useTournamentWorkspaceState() {
         }
       }
 
-      setBracketMatchesOpen(true);
+      updateCurrentFormat((format) => ({
+        ...format,
+        schedulePublishedAt: new Date().toISOString(),
+        scheduleLifecycleState: 'PUBLISHED',
+      }));
+      showSavedNotice('Schedule published');
+      setScheduleActionBusy(null);
+    })();
+  }
+
+  function updateMatchStartDraft(matchId: number, value: string) {
+    setMatchStartDrafts((prev) => ({
+      ...prev,
+      [matchId]: value,
+    }));
+    setMatchTimesDirty(true);
+  }
+
+  function saveMatchStartTimes() {
+    if (!activeFormat || !activeTournamentId || !matchTimesDirty) return;
+
+    void (async () => {
+      setScheduleActionBusy('save_times');
+      const auth = readAdminAuth();
+      const parsedTournamentId = Number.parseInt(activeTournamentId, 10);
+      const parsedFormatId = Number.parseInt(activeFormat.id, 10);
+
+      if (auth && Number.isInteger(parsedTournamentId) && Number.isInteger(parsedFormatId)) {
+        try {
+          const updates = bracketMatches
+            .map((match) => {
+              const draftStart = matchStartDrafts[match.id] ?? '';
+              const currentStart = toDateTimeLocalInput(match.start_at);
+              if (draftStart === currentStart) return null;
+              const nextStartIso = toUtcIsoFromInput(draftStart);
+              if (!nextStartIso) {
+                throw new Error(`Invalid start time for match #${match.match_number}.`);
+              }
+              return {
+                match_id: match.id,
+                start_at: nextStartIso,
+                expected_row_version: match.row_version,
+              };
+            })
+            .filter((row): row is NonNullable<typeof row> => row !== null);
+
+          if (!updates.length) {
+            setMatchTimesDirty(false);
+            showSavedNotice('No start-time changes to save');
+            return;
+          }
+
+          await client.updateTournamentMatchStartTimes(auth.token, auth.clubId, parsedTournamentId, parsedFormatId, {
+            updates,
+          });
+          await loadBracketData(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+          showSavedNotice('Match times saved');
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to save match times.';
+          window.alert(message);
+          return;
+        } finally {
+          setScheduleActionBusy(null);
+        }
+      }
+
+      setMatchTimesDirty(false);
+      showSavedNotice('Match times saved');
       setScheduleActionBusy(null);
     })();
   }
@@ -2075,6 +2275,8 @@ export function useTournamentWorkspaceState() {
         try {
           await client.resetTournamentSchedule(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
           setBracketMatches([]);
+          setMatchStartDrafts({});
+          setMatchTimesDirty(false);
           setFormatRegistrations([]);
           setBracketMatchesOpen(false);
           await loadTournamentFormatsFromApi(activeTournamentId, activeFormat.id);
@@ -2092,9 +2294,13 @@ export function useTournamentWorkspaceState() {
       updateCurrentFormat((format) => ({
         ...format,
         scheduleGeneratedAt: null,
+        schedulePublishedAt: null,
+        scheduleLifecycleState: 'NOT_CREATED',
         scheduleLocked: false,
       }));
       setBracketMatches([]);
+      setMatchStartDrafts({});
+      setMatchTimesDirty(false);
       setFormatRegistrations([]);
       setBracketMatchesOpen(false);
       showSavedNotice('Schedule reset');
@@ -2122,7 +2328,7 @@ export function useTournamentWorkspaceState() {
         const nextPool = clone(prev);
         const groupCountChanged = nextPool.groupCount !== requestedGroupCount;
         nextPool.groupCount = requestedGroupCount;
-        if (groupCountChanged && nextPool.generatedTeams.length) {
+        if (groupCountChanged && (nextPool.generatedTeams.length || nextPool.teamsGenerated)) {
           nextPool.groups = [];
           nextPool.assignments = {};
           nextPool.teamsGenerated = false;
@@ -2414,8 +2620,12 @@ export function useTournamentWorkspaceState() {
   }
 
   function removePlayerFromPool(playerId: string) {
-    if (!poolDraft || !activeFormat || poolDraft.generatedTeams.length > 0 || poolDraft.teamsGenerated) return;
+    if (!poolDraft || !activeFormat) return;
     if (!poolDraft.poolPlayers.some((entry) => entry.playerId === playerId)) return;
+    if (isPoolRemovalLocked(poolDraft, activeFormat.scheduleGeneratedAt)) {
+      window.alert('Cannot remove player after teams/groups or schedule are generated. Reset generated artifacts first.');
+      return;
+    }
     const selectedFormatId = activeFormat.id;
 
     void (async () => {
@@ -2436,6 +2646,13 @@ export function useTournamentWorkspaceState() {
 
       const next = clone(poolDraft);
       next.poolPlayers = next.poolPlayers.filter((entry) => entry.playerId !== playerId);
+      // Pool composition changed; discard generated artifacts to avoid stale teams/groups.
+      next.generatedTeams = [];
+      next.groups = [];
+      next.assignments = {};
+      next.teamsGenerated = false;
+      next.pairsValidated = false;
+      next.pairValidationMessage = '';
       setPoolDraft(next);
       if (addPlayerId === playerId) setAddPlayerId('');
       setPoolDirty(true);
@@ -2466,6 +2683,7 @@ export function useTournamentWorkspaceState() {
 
   function validateGeneratedPairs() {
     if (!poolDraft || !activeFormat || activeFormat.type === 'SINGLES') return;
+    const schedulingModel = effectiveSchedulingModel(activeFormat.config.schedulingModel);
     const poolPlayerIds = poolDraft.poolPlayers.map((entry) => entry.playerId);
     if (!poolPlayerIds.length) return;
     const next = clone(poolDraft);
@@ -2535,7 +2753,9 @@ export function useTournamentWorkspaceState() {
     }
 
     next.pairsValidated = true;
-    next.pairValidationMessage = 'Pairs validated. You can now generate groups.';
+    next.pairValidationMessage = schedulingModel === 'MATCH_COUNT_KO'
+      ? 'Pairs validated.'
+      : 'Pairs validated. You can now generate groups.';
     setPoolDraft(next);
     setPoolDirty(true);
   }
@@ -2564,6 +2784,7 @@ export function useTournamentWorkspaceState() {
 
   function generateTeamsAndGroups() {
     if (!poolDraft || !activeFormat) return;
+    const schedulingModel = effectiveSchedulingModel(activeFormat.config.schedulingModel);
 
     void (async () => {
       const auth = readAdminAuth();
@@ -2628,7 +2849,7 @@ export function useTournamentWorkspaceState() {
       const teams: GeneratedTeam[] = [];
       if (activeFormat.type === 'SINGLES') {
         if (!poolDraft.poolPlayers.length) {
-          window.alert('Add at least one player before generating groups.');
+          window.alert(`Add at least one player before generating ${schedulingModel === 'MATCH_COUNT_KO' ? 'teams' : 'groups'}.`);
           return;
         }
         teams.push(...buildSinglesEntries(poolDraft.poolPlayers, playersById));
@@ -2658,6 +2879,41 @@ export function useTournamentWorkspaceState() {
           pairValidationMessage: '',
         });
         setPoolPlayersOpen(false);
+        setPoolDirty(true);
+        return;
+      }
+
+      if (activeFormat.type === 'SINGLES' && schedulingModel === 'GROUPS_KO') {
+        const grouped = buildGroupsAndAssignments(teams, groupCount);
+        setPoolDraft({
+          ...poolDraft,
+          groupCount,
+          generatedTeams: [],
+          groups: grouped.groups,
+          assignments: grouped.assignments,
+          teamsGenerated: true,
+          pairsValidated: true,
+          pairValidationMessage: '',
+        });
+        setPoolPlayersOpen(false);
+        setPoolGroupsOpen(true);
+        setPoolDirty(true);
+        return;
+      }
+
+      if (schedulingModel === 'MATCH_COUNT_KO') {
+        setPoolDraft({
+          ...poolDraft,
+          groupCount,
+          generatedTeams: teams,
+          groups: [],
+          assignments: {},
+          teamsGenerated: true,
+          pairsValidated: true,
+          pairValidationMessage: '',
+        });
+        setPoolPlayersOpen(false);
+        setPoolGroupsOpen(false);
         setPoolDirty(true);
         return;
       }
@@ -2791,6 +3047,8 @@ export function useTournamentWorkspaceState() {
     bracketMatchesOpen,
     setBracketMatchesOpen,
     bracketMatches,
+    matchStartDrafts,
+    matchTimesDirty,
     formatRegistrations,
     scheduleActionBusy,
     activeCourtId,
@@ -2809,6 +3067,7 @@ export function useTournamentWorkspaceState() {
     effectiveEntrantCount,
     planningMetrics,
     scheduleStatusLabel,
+    poolRemovalLocked,
     isSinglesFormat,
     unitLabel,
     unitLabelPlural,
@@ -2836,7 +3095,9 @@ export function useTournamentWorkspaceState() {
     saveSchedules,
     saveCourtsConfig,
     generateSchedule,
-    viewBrackets,
+    publishSchedule,
+    saveMatchStartTimes,
+    updateMatchStartDraft,
     resetSchedule,
     updateConfig,
     updateStageRule,

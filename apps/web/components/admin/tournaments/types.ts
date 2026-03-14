@@ -2,6 +2,7 @@ import type { Season } from '@leagueos/schemas';
 
 export type FormatType = 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
 export type SchedulingModel = '' | 'RR' | 'GROUPS_KO' | 'MATCH_COUNT_KO' | 'DIRECT_KNOCKOUT';
+export type MatchCountPairingMode = 'BALANCED' | 'SEEDED_SPREAD';
 export type WinCondition = 'FIRST_TO_POINTS' | 'WIN_BY_2';
 export type ViewTab = 'config' | 'pool' | 'schedules' | 'courts';
 export type TournamentLifecycleStatus = 'DRAFT' | 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -21,6 +22,9 @@ export type StageRule = {
 export type FormatConfig = {
   maxTeamsAllowed: number;
   setDurationMinutes: number;
+  gapBetweenSetsMinutes: number;
+  gapBetweenMatchesPerStageMinutes: number;
+  gapBetweenStagesMinutes: number;
   schedulingModel: SchedulingModel;
   rrType: 'single' | 'double';
   rrIncludeKo: 'yes' | 'no';
@@ -29,6 +33,7 @@ export type FormatConfig = {
   groupKoTeamsPerGroup: number;
   matchCountPerEntrant: number;
   matchCountKoTeamsToKo: number;
+  matchCountPairingMode: MatchCountPairingMode;
   stageRules: Record<string, StageRule>;
 };
 
@@ -76,6 +81,8 @@ export type Format = {
   regClose: string;
   autoClose: boolean;
   scheduleGeneratedAt?: string | null;
+  schedulePublishedAt?: string | null;
+  scheduleLifecycleState?: 'NOT_CREATED' | 'CREATED' | 'PUBLISHED';
   scheduleLocked?: boolean;
   config: FormatConfig;
   pool: PoolConfig;
