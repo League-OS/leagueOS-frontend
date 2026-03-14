@@ -164,6 +164,34 @@ async function putTournamentBase(
   throw new Error(message);
 }
 
+async function deleteTournamentBase(
+  token: string,
+  clubId: number,
+  tournamentId: number,
+): Promise<void> {
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const url = `${apiBase}/tournaments/${tournamentId}?club_id=${clubId}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (response.ok) return;
+
+  let message = `Unable to delete tournament (HTTP ${response.status})`;
+  try {
+    const payload = await response.json() as { detail?: unknown };
+    if (typeof payload.detail === 'string' && payload.detail.trim()) {
+      message = payload.detail;
+    }
+  } catch {
+    // Keep fallback message.
+  }
+  throw new Error(message);
+}
+
 function readTournamentWindowOverrides(): TournamentWindowOverrides {
   if (typeof window === 'undefined') return {};
   const raw = window.localStorage.getItem(TOURNAMENT_WINDOWS_STORAGE_KEY);
@@ -219,6 +247,7 @@ function mapApiTournamentToRecord(row: ApiTournament, seasonName: string): Tourn
     seasonName: seasonName || (row.season_id !== null ? `Season ${row.season_id}` : 'No season'),
     adminNotes: row.admin_notes ?? '',
     status: row.status,
+    formatCount: typeof row.formats_count === 'number' ? row.formats_count : 0,
     formats: [],
     courts: [],
   };
@@ -717,6 +746,7 @@ export function useTournamentWorkspaceState() {
             ...mapped,
             startAt: mapped.startAt || override?.startAt || existing.startAt || '',
             endAt: mapped.endAt || override?.endAt || existing.endAt || '',
+            formatCount: existing.formats.length ? existing.formats.length : mapped.formatCount,
             formats: existing.formats,
             courts: existing.courts,
           };
@@ -817,7 +847,11 @@ export function useTournamentWorkspaceState() {
       try {
         const apiFormats = await client.tournamentFormats(auth.token, auth.clubId, parsedTournamentId);
         const mappedFormats = apiFormats.map(mapApiFormatToLocal);
-        setTournaments((items) => items.map((item) => (item.id === tournamentId ? { ...item, formats: mappedFormats } : item)));
+        setTournaments((items) => items.map((item) => (
+          item.id === tournamentId
+            ? { ...item, formats: mappedFormats, formatCount: mappedFormats.length }
+            : item
+        )));
         setFormats(mappedFormats);
         if (!mappedFormats.length) {
           setActiveFormatId(null);
@@ -948,6 +982,52 @@ export function useTournamentWorkspaceState() {
     setShowCreateTournament(true);
   }
 
+  function requestDeleteTournament(tournamentId: string) {
+    if (!canSwitch()) return;
+    const target = tournaments.find((item) => item.id === tournamentId);
+    if (!target) return;
+    if (!window.confirm(`Delete tournament "${target.name}"?`)) return;
+
+    void (async () => {
+      let deletedViaApi = false;
+      const auth = readAdminAuth();
+      const parsedTournamentId = Number.parseInt(tournamentId, 10);
+      if (auth && Number.isInteger(parsedTournamentId)) {
+        try {
+          await deleteTournamentBase(auth.token, auth.clubId, parsedTournamentId);
+          deletedViaApi = true;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to delete tournament.';
+          console.warn('Tournament delete API unavailable. Applying local fallback delete.', message);
+        }
+      }
+
+      if (activeTournamentId === tournamentId) {
+        setActiveTournamentId(null);
+        setShowAddFormat(false);
+        setEditingFormatId(null);
+        setActiveFormatId(null);
+        setFormats([]);
+        setCourts([]);
+        setActiveCourtId(null);
+        clearActiveFormatDrafts();
+      }
+
+      if (editingTournamentId === tournamentId) {
+        resetTournamentEditorState();
+      }
+
+      setTournaments((items) => items.filter((item) => item.id !== tournamentId));
+      setTournamentWindowOverrides((prev) => {
+        const next = { ...prev };
+        delete next[tournamentId];
+        writeTournamentWindowOverrides(next);
+        return next;
+      });
+      showSavedNotice(deletedViaApi ? 'Tournament deleted' : 'Tournament deleted locally (API pending)');
+    })();
+  }
+
   function cancelTournamentEditor() {
     resetTournamentEditorState();
   }
@@ -1039,6 +1119,7 @@ export function useTournamentWorkspaceState() {
         seasonName: 'No season',
         adminNotes: tournamentAdminNotes.trim(),
         status: 'DRAFT',
+        formatCount: 0,
         formats: [],
         courts: [],
       };
@@ -1075,6 +1156,7 @@ export function useTournamentWorkspaceState() {
             ...mapped,
             startAt: mapped.startAt || nextLocal.startAt,
             endAt: mapped.endAt || nextLocal.endAt,
+            formatCount: editingTarget.formats.length ? editingTarget.formats.length : mapped.formatCount,
             formats: editingTarget.formats,
             courts: editingTarget.courts,
           };
@@ -1130,7 +1212,11 @@ export function useTournamentWorkspaceState() {
 
   function updateActiveTournamentFormats(nextFormats: Format[]) {
     if (!activeTournamentId) return;
-    setTournaments((items) => items.map((item) => (item.id === activeTournamentId ? { ...item, formats: nextFormats } : item)));
+    setTournaments((items) => items.map((item) => (
+      item.id === activeTournamentId
+        ? { ...item, formats: nextFormats, formatCount: nextFormats.length }
+        : item
+    )));
   }
 
   function updateActiveTournamentCourts(nextCourts: CourtItem[]) {
@@ -2478,6 +2564,7 @@ export function useTournamentWorkspaceState() {
     saveTournament,
     requestShowCreateTournament,
     requestEditTournament,
+    requestDeleteTournament,
     cancelTournamentEditor,
     saveFormatBase,
     openTournament,

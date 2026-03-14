@@ -1,4 +1,4 @@
-import { card, outlineBtn } from './styles';
+import { addIconBtn, card, outlineBtn } from './styles';
 import type { Format, TournamentRecord } from './types';
 
 type TournamentSidebarProps = {
@@ -33,7 +33,11 @@ export function TournamentSidebar({
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong>Formats</strong>
-        <button style={outlineBtn} onClick={requestShowAddFormat}>+ Add Format</button>
+        <button style={addIconBtn} title="Add format" aria-label="Add format" onClick={requestShowAddFormat}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
       <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
         {formats.map((format) => (

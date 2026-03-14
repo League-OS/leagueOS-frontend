@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { SaveRow } from './shared';
-import { field, grid3, labelCol, outlineBtn, subCard, td, th } from './styles';
+import { addIconBtn, field, grid3, labelCol, outlineBtn, subCard, td, th } from './styles';
 import type { CourtConfig, CourtItem, SlotDraft } from './types';
 
 type CourtsTabProps = {
@@ -47,19 +47,6 @@ export function CourtsTab({
     cursor: 'pointer',
     background: '#fff',
   } as const;
-  const iconBtn = {
-    width: 28,
-    height: 28,
-    border: '1px solid #c3d2ca',
-    borderRadius: 8,
-    background: '#fff',
-    color: '#17302a',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-    cursor: 'pointer',
-  } as const;
 
   function formatDuration(startTime: string, endTime: string): string {
     const parseMinutes = (value: string): number | null => {
@@ -84,7 +71,7 @@ export function CourtsTab({
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <strong>Tournament Courts</strong>
-        <button style={iconBtn} title="Add court" aria-label="Add court" onClick={() => setShowAddCourtModal(true)}>
+        <button style={addIconBtn} title="Add court" aria-label="Add court" onClick={() => setShowAddCourtModal(true)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
           </svg>

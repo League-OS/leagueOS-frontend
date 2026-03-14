@@ -38,6 +38,16 @@ export function lifecycleStatusBadgeStyle(status: TournamentLifecycleStatus): CS
   };
 }
 
+export function lifecycleStatusSelectStyle(status: TournamentLifecycleStatus): CSSProperties {
+  const colors = lifecycleStatusColors[status];
+  return {
+    borderColor: colors.border,
+    background: colors.bg,
+    color: colors.text,
+    fontWeight: 700,
+  };
+}
+
 export function formatTimezoneWithOffset(timezone: string): string {
   if (!timezone) return '-';
   try {

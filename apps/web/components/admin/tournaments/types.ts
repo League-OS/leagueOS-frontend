@@ -96,6 +96,7 @@ export type TournamentRecord = {
   seasonName: string;
   adminNotes: string;
   status: TournamentLifecycleStatus;
+  formatCount: number;
   formats: Format[];
   courts: CourtItem[];
 };
