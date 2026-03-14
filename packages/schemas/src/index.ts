@@ -43,6 +43,8 @@ export const sessionSchema = z.object({
   closed_at: z.string().nullable().optional(),
   finalized_at: z.string().nullable().optional(),
   created_at: z.string().nullable().optional(),
+  created_by_user_id: z.number().nullable().optional(),
+  created_by_label: z.string().nullable().optional(),
 }).transform((row) => {
   const dt = new Date(row.session_start_time);
   if (Number.isNaN(dt.getTime())) {
