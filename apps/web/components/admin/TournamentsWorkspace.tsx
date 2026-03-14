@@ -33,6 +33,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
         url: `${origin}/tournaments/${state.activeTournamentId}?signup=one_click`,
         description: 'Use this during registration and club signup phases.',
         qrFileSuffix: 'signup',
+        showQr: true,
       },
       {
         id: 'courtside',
@@ -40,6 +41,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
         url: `${origin}/tournaments/${state.activeTournamentId}/courtside`,
         description: 'No auth required. Use this for public courtside display and live sharing.',
         qrFileSuffix: 'courtside',
+        showQr: true,
       },
       {
         id: 'venue-display',
@@ -47,6 +49,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
         url: `${origin}/tournaments/${state.activeTournamentId}/venue-display`,
         description: 'No auth required. Use this on TVs or venue screens for autoplay display.',
         qrFileSuffix: 'venue-display',
+        showQr: false,
       },
       {
         id: 'courtside-operator',
@@ -55,6 +58,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
         description: 'Operator console for on-court scoring. Opens read-only until admin auth exists on the device.',
         qrFileSuffix: 'courtside-operator',
         authRequired: true,
+        showQr: false,
       },
     ]
     : [];

@@ -16,6 +16,7 @@ export type TournamentShareLink = {
   description: string;
   qrFileSuffix: string;
   authRequired?: boolean;
+  showQr?: boolean;
 };
 
 type FormatDirectoryPanelProps = {
@@ -53,7 +54,8 @@ export function FormatDirectoryPanel({
   const [qrStatuses, setQrStatuses] = useState<Record<string, 'idle' | 'loading' | 'error'>>({});
 
   const activeShareLinks = shareLinks.filter((link) => link.url);
-  const shareLinkFingerprint = activeShareLinks.map((link) => `${link.id}:${link.url}`).join('|');
+  const qrEnabledLinks = activeShareLinks.filter((link) => link.showQr !== false);
+  const shareLinkFingerprint = qrEnabledLinks.map((link) => `${link.id}:${link.url}`).join('|');
 
   const iconBtn = {
     width: 28,
@@ -75,20 +77,20 @@ export function FormatDirectoryPanel({
 
   useEffect(() => {
     let cancelled = false;
-    if (!activeShareLinks.length) {
+    if (!qrEnabledLinks.length) {
       setQrDataUrls({});
       setQrStatuses({});
       return;
     }
     setQrStatuses(
-      activeShareLinks.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, link) => {
+      qrEnabledLinks.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, link) => {
         acc[link.id] = 'loading';
         return acc;
       }, {}),
     );
     void import('qrcode')
       .then(async (QRCode) => Promise.all(
-        activeShareLinks.map(async (link) => ({
+        qrEnabledLinks.map(async (link) => ({
           id: link.id,
           dataUrl: await QRCode.toDataURL(link.url, {
             width: 280,
@@ -120,7 +122,7 @@ export function FormatDirectoryPanel({
         if (cancelled) return;
         setQrDataUrls({});
         setQrStatuses(
-          activeShareLinks.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, link) => {
+          qrEnabledLinks.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, link) => {
             acc[link.id] = 'error';
             return acc;
           }, {}),
@@ -130,7 +132,7 @@ export function FormatDirectoryPanel({
     return () => {
       cancelled = true;
     };
-  }, [activeShareLinks.length, shareLinkFingerprint]);
+  }, [qrEnabledLinks.length, shareLinkFingerprint]);
 
   function downloadQrPng(linkId: string, qrFileSuffix: string) {
     const qrDataUrl = qrDataUrls[linkId];
@@ -232,10 +234,18 @@ export function FormatDirectoryPanel({
         </button>
 
         {shareLinksExpanded ? (
-          <div style={{ display: 'grid', gap: 10, padding: 12 }}>
-            {shareLinks.map((shareLink) => {
+          <div
+            style={{
+              display: 'grid',
+              gap: 10,
+              padding: 12,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(430px, 1fr))',
+            }}
+          >
+            {activeShareLinks.map((shareLink) => {
+              const showQr = shareLink.showQr !== false;
               const qrDataUrl = qrDataUrls[shareLink.id] || '';
-              const qrStatus = qrStatuses[shareLink.id] || 'idle';
+              const qrStatus = showQr ? (qrStatuses[shareLink.id] || 'idle') : 'idle';
               return (
                 <article
                   key={shareLink.id}
@@ -246,7 +256,7 @@ export function FormatDirectoryPanel({
                     padding: 10,
                     display: 'grid',
                     gap: 8,
-                    gridTemplateColumns: '1fr auto',
+                    gridTemplateColumns: showQr ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
                     alignItems: 'start',
                   }}
                 >
@@ -294,36 +304,40 @@ export function FormatDirectoryPanel({
                           <rect x="5" y="5" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
                         </svg>
                       </button>
-                      <button
-                        style={{
-                          ...iconBtn,
-                          color: qrDataUrl ? '#17302a' : '#7d8a84',
-                          background: qrDataUrl ? '#fff' : '#f1f5f3',
-                          cursor: qrDataUrl ? 'pointer' : 'not-allowed',
-                        }}
-                        disabled={!qrDataUrl}
-                        title="Download QR as PNG"
-                        aria-label="Download QR as PNG"
-                        onClick={() => downloadQrPng(shareLink.id, shareLink.qrFileSuffix)}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path d="M12 4v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                          <path d="m8 10 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                        </svg>
-                      </button>
+                      {showQr ? (
+                        <button
+                          style={{
+                            ...iconBtn,
+                            color: qrDataUrl ? '#17302a' : '#7d8a84',
+                            background: qrDataUrl ? '#fff' : '#f1f5f3',
+                            cursor: qrDataUrl ? 'pointer' : 'not-allowed',
+                          }}
+                          disabled={!qrDataUrl}
+                          title="Download QR as PNG"
+                          aria-label="Download QR as PNG"
+                          onClick={() => downloadQrPng(shareLink.id, shareLink.qrFileSuffix)}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M12 4v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                            <path d="m8 10 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      ) : null}
                       {copyStatus ? <span style={{ color: '#5a6b64', fontSize: 12 }}>{copyStatus}</span> : null}
                     </div>
                   </div>
-                  <div style={{ border: '1px solid #d4dfd9', borderRadius: 10, padding: 6, background: '#fff' }}>
-                    {qrDataUrl ? (
-                      <img src={qrDataUrl} alt={`${shareLink.label} QR code`} width={84} height={84} />
-                    ) : (
-                      <div style={{ width: 84, height: 84, display: 'grid', placeItems: 'center', color: '#6b7d75', fontSize: 11 }}>
-                        {qrStatus === 'loading' ? 'Generating...' : 'No QR'}
-                      </div>
-                    )}
-                  </div>
+                  {showQr ? (
+                    <div style={{ border: '1px solid #d4dfd9', borderRadius: 10, padding: 6, background: '#fff' }}>
+                      {qrDataUrl ? (
+                        <img src={qrDataUrl} alt={`${shareLink.label} QR code`} width={84} height={84} />
+                      ) : (
+                        <div style={{ width: 84, height: 84, display: 'grid', placeItems: 'center', color: '#6b7d75', fontSize: 11 }}>
+                          {qrStatus === 'loading' ? 'Generating...' : 'No QR'}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
