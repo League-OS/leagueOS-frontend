@@ -35,6 +35,7 @@ type PoolTabProps = {
   setPoolPlayersOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   poolGroupsOpen: boolean;
   setPoolGroupsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  formatRegistrations: Array<{ id: number; player_id: number; player_name: string; status: string }>;
 };
 
 export function PoolTab({
@@ -67,6 +68,7 @@ export function PoolTab({
   setPoolPlayersOpen,
   poolGroupsOpen,
   setPoolGroupsOpen,
+  formatRegistrations,
 }: PoolTabProps) {
   const showGroupControls = schedulingModel === 'GROUPS_KO';
   const showGenerateAction = !isSinglesFormat || showGroupControls;
@@ -79,9 +81,23 @@ export function PoolTab({
   const [showGenerateGroupsTooltip, setShowGenerateGroupsTooltip] = useState(false);
   const playersById = new Map(clubPlayers.map((player) => [player.id, player]));
   const poolPlayersById = new Map(poolDraft.poolPlayers.map((entry) => [entry.playerId, entry]));
+  const registrationPlayersById = new Map(
+    formatRegistrations
+      .filter((registration) => registration.status === 'ACTIVE')
+      .map((registration) => [
+        String(registration.player_id),
+        {
+          id: String(registration.player_id),
+          name: registration.player_name || `Player ${registration.player_id}`,
+          email: '',
+          phone: '',
+          elo: 0,
+        },
+      ]),
+  );
   const singlesPoolEntries = isSinglesFormat
     ? poolDraft.poolPlayers.map((entry) => {
-      const player = playersById.get(entry.playerId);
+      const player = playersById.get(entry.playerId) ?? registrationPlayersById.get(entry.playerId);
       return {
         id: `player_${entry.playerId}`,
         name: player?.name || `Player ${entry.playerId}`,
@@ -182,7 +198,7 @@ export function PoolTab({
               <tbody>
                 {poolDraft.poolPlayers.length ? (
                   poolDraft.poolPlayers.map((poolPlayer, index) => {
-                    const player = clubPlayers.find((candidate) => candidate.id === poolPlayer.playerId);
+                    const player = playersById.get(poolPlayer.playerId) ?? registrationPlayersById.get(poolPlayer.playerId);
                     if (!player) return null;
                     return (
                       <tr key={poolPlayer.playerId}>
@@ -278,8 +294,8 @@ export function PoolTab({
               {poolDraft.generatedTeams.map((team, index) => {
                 const player1Id = team.playerIds[0] || '';
                 const player2Id = team.playerIds[1] || '';
-                const player1 = playersById.get(player1Id);
-                const player2 = playersById.get(player2Id);
+                const player1 = playersById.get(player1Id) ?? registrationPlayersById.get(player1Id);
+                const player2 = playersById.get(player2Id) ?? registrationPlayersById.get(player2Id);
                 const player1Elo = poolPlayersById.get(player1Id)?.seededElo ?? player1?.elo ?? 0;
                 const player2Elo = poolPlayersById.get(player2Id)?.seededElo ?? player2?.elo ?? 0;
                 return (
@@ -293,7 +309,7 @@ export function PoolTab({
                       >
                         <option value="">Select player</option>
                         {poolDraft.poolPlayers.map((poolPlayer) => {
-                          const player = playersById.get(poolPlayer.playerId);
+                          const player = playersById.get(poolPlayer.playerId) ?? registrationPlayersById.get(poolPlayer.playerId);
                           if (!player) return null;
                           return (
                             <option key={player.id} value={player.id}>
@@ -311,7 +327,7 @@ export function PoolTab({
                       >
                         <option value="">Select player</option>
                         {poolDraft.poolPlayers.map((poolPlayer) => {
-                          const player = playersById.get(poolPlayer.playerId);
+                          const player = playersById.get(poolPlayer.playerId) ?? registrationPlayersById.get(poolPlayer.playerId);
                           if (!player) return null;
                           return (
                             <option key={player.id} value={player.id}>

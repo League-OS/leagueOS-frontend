@@ -229,6 +229,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                       setPoolPlayersOpen={state.setPoolPlayersOpen}
                       poolGroupsOpen={state.poolGroupsOpen}
                       setPoolGroupsOpen={state.setPoolGroupsOpen}
+                      formatRegistrations={state.formatRegistrations}
                     />
                   ) : null}
 

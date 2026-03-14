@@ -1,8 +1,17 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { loginViaAdminUi, resolveCredentialForRole } from './role-auth';
 
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
 const UI_EMAIL = process.env.E2E_EMAIL || 'enosh_fvma_badminton_club@leagueos.local';
 const UI_PASSWORD = process.env.E2E_PASSWORD || 'Recorder@123';
+
+function uniqueName(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function isoMinutesFromNow(minutes: number) {
+  return new Date(Date.now() + minutes * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 
 async function apiLogin(request: APIRequestContext, email: string, password: string) {
   const res = await request.post(`${API_BASE}/auth/login`, { data: { email, password } });
@@ -21,6 +30,42 @@ async function createTournament(
   });
   expect(response.ok()).toBeTruthy();
   return (await response.json()) as { id: number };
+}
+
+async function ensureLinkedUserPlayer(args: {
+  request: APIRequestContext;
+  adminToken: string;
+  clubId: number;
+  userEmail: string;
+}) {
+  const { request, adminToken, clubId, userEmail } = args;
+  const headers = { Authorization: `Bearer ${adminToken}` };
+
+  const listed = await request.get(`${API_BASE}/players?club_id=${clubId}&is_active=true`, { headers });
+  expect(listed.ok()).toBeTruthy();
+  const players = (await listed.json()) as Array<{ id: number; email?: string | null; display_name: string }>;
+  const existing = [...players]
+    .filter((player) => (player.email || '').toLowerCase() === userEmail.toLowerCase())
+    .sort((left, right) => left.id - right.id)[0];
+  if (existing) return existing;
+
+  const displayName = uniqueName('e2e-self-signup');
+  const created = await request.post(`${API_BASE}/players?club_id=${clubId}`, {
+    headers,
+    data: {
+      club_id: clubId,
+      display_name: displayName,
+      email: userEmail,
+      elo_initial_doubles: 1000,
+      elo_initial_singles: 1000,
+      elo_initial_mixed: 1000,
+      player_type: 'ROSTER',
+      sex: 'U',
+      is_active: true,
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  return (await created.json()) as { id: number; email?: string | null; display_name: string };
 }
 
 async function deleteTournament(request: APIRequestContext, auth: { token: string; club_id: number }, tournamentId: number) {
@@ -173,6 +218,66 @@ test('format stage rules persist after save and reload', async ({ page, request 
   } finally {
     if (tournamentId !== null) {
       await deleteTournament(request, auth, tournamentId);
+    }
+  }
+});
+
+test('admin pool view includes self-registered players', async ({ page, request }) => {
+  const { creds: adminCreds, login: adminLogin } = await resolveCredentialForRole(request, 'CLUB_ADMIN');
+  const { login: userLogin } = await resolveCredentialForRole(request, 'USER');
+  const suffix = Date.now();
+  const tournamentName = `e2e-admin-pool-self-${suffix}`;
+  const formatName = `fmt-admin-pool-self-${suffix}`;
+  let tournamentId: number | null = null;
+
+  const userProfileRes = await request.get(`${API_BASE}/profile`, {
+    headers: { Authorization: `Bearer ${userLogin.token}` },
+  });
+  expect(userProfileRes.ok()).toBeTruthy();
+  const userProfile = (await userProfileRes.json()) as { email: string };
+  const linkedPlayer = await ensureLinkedUserPlayer({
+    request,
+    adminToken: adminLogin.token,
+    clubId: adminLogin.club_id,
+    userEmail: userProfile.email,
+  });
+
+  try {
+    const tournament = await createTournament(request, adminLogin, tournamentName);
+    tournamentId = tournament.id;
+    const openRes = await request.post(`${API_BASE}/tournaments/${tournament.id}/status?club_id=${adminLogin.club_id}`, {
+      headers: { Authorization: `Bearer ${adminLogin.token}` },
+      data: { status: 'REGISTRATION_OPEN' },
+    });
+    expect(openRes.ok()).toBeTruthy();
+
+    const format = await createFormat(request, adminLogin, tournament.id, {
+      name: formatName,
+      format_type: 'SINGLES',
+      registration_open_at: isoMinutesFromNow(-15),
+      registration_close_at: isoMinutesFromNow(360),
+      auto_registration_close: false,
+      scheduling_model: 'DIRECT_KNOCKOUT',
+    });
+    const signupRes = await request.post(
+      `${API_BASE}/tournaments/${tournament.id}/formats/${format.id}/registrations?club_id=${adminLogin.club_id}`,
+      {
+        headers: { Authorization: `Bearer ${userLogin.token}` },
+        data: { player_id: linkedPlayer.id, registration_source: 'SELF' },
+      },
+    );
+    expect(signupRes.ok()).toBeTruthy();
+
+    await loginViaAdminUi(page, adminCreds);
+    await openTournamentAndFormat(page, tournamentName, formatName);
+    await page.getByRole('button', { name: 'Pool' }).click();
+
+    const playerRow = page.getByRole('row').filter({ hasText: linkedPlayer.display_name }).first();
+    await expect(playerRow).toBeVisible();
+    await expect(playerRow.getByText('SELF')).toBeVisible();
+  } finally {
+    if (tournamentId !== null) {
+      await deleteTournament(request, adminLogin, tournamentId);
     }
   }
 });

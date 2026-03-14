@@ -1,143 +1,157 @@
 .page {
   min-height: 100vh;
-  --ink: #15213d;
-  --muted: #61708c;
-  --panel: rgba(250, 252, 255, 0.88);
-  --line: rgba(19, 51, 111, 0.14);
-  --navy: #12336f;
-  --cobalt: #3565b3;
-  --mint: #2f9c63;
-  --gold: #cf9c27;
-  --paper: #f4f1e8;
-  --paper-dark: #ece5d2;
-  --glow: rgba(53, 101, 179, 0.14);
+  --ink: #14213e;
+  --muted: #68758c;
+  --line: rgba(17, 49, 108, 0.12);
+  --panel: rgba(250, 252, 255, 0.9);
+  --panel-strong: rgba(255, 255, 255, 0.97);
+  --navy: #163773;
+  --cobalt: #3a68b8;
+  --mint: #2c9d68;
+  --gold: #cf9820;
+  --glow: rgba(24, 57, 122, 0.12);
   background:
-    radial-gradient(circle at top left, rgba(53, 101, 179, 0.16), transparent 28%),
-    radial-gradient(circle at 85% 10%, rgba(47, 156, 99, 0.14), transparent 24%),
-    linear-gradient(135deg, rgba(18, 51, 111, 0.07) 0, rgba(18, 51, 111, 0.07) 1px, transparent 1px),
-    linear-gradient(180deg, #f8fafc 0%, var(--paper) 100%);
-  background-size: auto, auto, 22px 22px, auto;
+    radial-gradient(circle at top left, rgba(58, 104, 184, 0.16), transparent 30%),
+    radial-gradient(circle at 100% 12%, rgba(44, 157, 104, 0.12), transparent 20%),
+    linear-gradient(180deg, #f6f8fb 0%, #efe8d7 100%);
   color: var(--ink);
   font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
 }
 
 .shell {
-  max-width: 1480px;
+  width: min(100%, 720px);
   margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: 14px 12px 36px;
+  display: grid;
+  gap: 14px;
 }
 
-.header,
-.heroLead,
-.headerMeta,
-.toolbar,
-.sectionHeader,
-.courtTop,
-.featureTop,
-.timelineHead,
-.formatTop,
-.teamLine,
-.featureTeams {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+.panel,
+.metaPill,
+.featureCard,
+.matchCard,
+.courtCard,
+.formatCard,
+.detailCard,
+.statCard {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 18px 40px var(--glow);
+  backdrop-filter: blur(10px);
 }
 
-.header {
-  margin-bottom: 18px;
+.headerCard,
+.heroCard,
+.formatCard,
+.detailSheet {
+  border-radius: 28px;
 }
 
-.headerCopy {
+.headerCard,
+.heroCard,
+.formatCard,
+.detailCard {
+  padding: 16px;
+}
+
+.headerCard {
+  display: grid;
+  gap: 14px;
+}
+
+.headerCopy,
+.section,
+.matchStack,
+.filterRail,
+.timelineList {
   display: grid;
   gap: 10px;
 }
 
 .headerMeta {
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .kicker,
 .cardEyebrow,
-.ribbon {
+.ribbon,
+.teamTag,
+.matchBadge {
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 11px;
+  letter-spacing: 0.12em;
   font-weight: 800;
 }
 
-.kicker {
+.kicker,
+.cardEyebrow {
+  font-size: 0.68rem;
   color: var(--cobalt);
-}
-
-.ribbon {
-  color: #f9fbff;
-  display: inline-flex;
-  width: fit-content;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .title,
 .heroTitle,
 .sectionHeader h3,
 .formatCard h4,
-.courtCard h4 {
+.courtCard h4,
+.detailTitle {
   margin: 0;
   font-family: "Avenir Next Condensed", "Avenir Next", "Trebuchet MS", sans-serif;
   letter-spacing: -0.03em;
 }
 
 .title {
-  font-size: clamp(2.2rem, 4vw, 4.4rem);
-  line-height: 0.95;
+  font-size: clamp(2rem, 10vw, 3.5rem);
+  line-height: 0.92;
 }
 
 .heroTitle {
-  font-size: clamp(1.9rem, 3.4vw, 3.5rem);
-  line-height: 0.94;
+  font-size: clamp(1.5rem, 7vw, 2.6rem);
+  line-height: 0.95;
+}
+
+.detailTitle {
+  font-size: clamp(1.5rem, 6vw, 2.4rem);
+  line-height: 0.98;
 }
 
 .support,
-.muted,
+.heroCopy,
 .syncStamp,
 .featureMeta,
-.emptyInline {
+.tapHint,
+.cardMeta,
+.cardFooter,
+.emptyInline,
+.detailCopy {
   color: var(--muted);
 }
 
-.support {
+.support,
+.heroCopy,
+.detailCopy {
   margin: 0;
-  max-width: 760px;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
-.metaPill,
-.panel,
-.formatCard,
-.courtCard,
-.timelineItem,
-.statCard,
-.featureCard {
-  border: 1px solid var(--line);
-  background: var(--panel);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 20px 55px var(--glow);
+.heroCopy {
+  color: rgba(245, 248, 255, 0.78);
 }
 
 .metaPill {
-  min-width: 168px;
-  padding: 12px 14px;
+  min-width: 0;
+  padding: 11px 12px;
+  border-radius: 18px;
 }
 
 .metaPill span,
 .statCard span,
+.detailCard span,
 .miniStats span {
   display: block;
-  font-size: 11px;
+  font-size: 0.64rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
@@ -145,240 +159,278 @@
 
 .metaPill strong,
 .statCard strong,
+.detailCard strong,
 .miniStats strong {
   display: block;
   margin-top: 4px;
-  font-size: 18px;
+  font-size: 1rem;
+  line-height: 1.2;
   color: var(--ink);
 }
 
-.panel {
-  padding: 24px;
-}
-
-.hero {
-  background:
-    linear-gradient(130deg, rgba(18, 51, 111, 0.95), rgba(53, 101, 179, 0.88)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+.heroCard {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
   color: #f5f8ff;
-  border: 0;
-  position: relative;
+  background:
+    linear-gradient(150deg, rgba(18, 51, 111, 0.98), rgba(57, 104, 184, 0.92)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  border-color: rgba(255, 255, 255, 0.1);
   overflow: hidden;
 }
 
-.hero::after {
-  content: "";
-  position: absolute;
-  inset: auto -20% -40% auto;
-  width: 380px;
-  height: 380px;
+.heroTop {
+  display: grid;
+  gap: 14px;
+}
+
+.ribbon {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 10px;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 72%);
-  pointer-events: none;
-}
-
-.heroLead {
-  position: relative;
-  z-index: 1;
-}
-
-.hero .support,
-.hero .featureMeta,
-.hero .muted {
-  color: rgba(245, 248, 255, 0.78);
+  font-size: 0.64rem;
+  color: #f8fbff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .statGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 12px;
-  width: min(100%, 560px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .statCard {
-  padding: 14px;
+  padding: 12px;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .statCard strong {
-  color: #ffffff;
-  font-size: 26px;
+  color: #fff;
+  font-size: 1.35rem;
 }
 
-.featureCard {
-  margin-top: 20px;
-  padding: 18px;
-  position: relative;
-  z-index: 1;
-  background: rgba(245, 248, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-.featureTeams {
-  align-items: center;
-  margin-top: 18px;
-}
-
-.teamTag {
-  display: inline-flex;
-  margin-bottom: 8px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.76);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.teamName {
-  font-size: clamp(1.2rem, 2vw, 2.1rem);
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.scoreBlock {
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-  padding: 10px 18px;
-}
-
-.score {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  font-family: "Avenir Next Condensed", "Avenir Next", sans-serif;
-  font-size: clamp(2.2rem, 5vw, 4.6rem);
-  line-height: 0.9;
-  font-weight: 900;
-}
-
-.score small {
-  font-size: 0.45em;
-  opacity: 0.65;
-}
-
-.toolbar {
-  margin: 18px 0;
-  flex-wrap: wrap;
-}
-
-.filterRail {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.filterChip {
-  border: 1px solid rgba(18, 51, 111, 0.14);
-  background: rgba(255, 255, 255, 0.68);
-  color: var(--ink);
-  padding: 10px 14px;
-  font-weight: 700;
+.featureCard,
+.matchCard,
+.courtCard {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  color: inherit;
   cursor: pointer;
 }
 
-.filterChipActive {
-  background: linear-gradient(135deg, var(--navy), var(--cobalt));
-  color: #ffffff;
-  border-color: transparent;
-}
-
-.section {
-  display: grid;
-  gap: 14px;
-}
-
-.sectionHeader {
-  align-items: baseline;
-}
-
-.sectionHeader h3 {
-  font-size: 1.45rem;
-}
-
-.sectionHeader span {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.formatGrid,
-.courtGrid {
-  display: grid;
-  gap: 14px;
-}
-
-.formatGrid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.formatCard,
-.courtCard,
-.timelineItem {
-  padding: 16px;
-}
-
-.formatTop h4,
-.courtTop h4 {
-  font-size: 1.25rem;
-}
-
-.cardEyebrow {
-  color: var(--cobalt);
-}
-
-.miniStats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.contentGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
-  gap: 18px;
-  margin-top: 18px;
-}
-
-.courtGrid {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.matchPanel {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
+.featureCard,
+.matchCard,
+.courtCard {
   padding: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(243, 245, 248, 0.92));
-  border: 1px solid rgba(18, 51, 111, 0.1);
+  border-radius: 24px;
 }
 
-.teamLine,
-.teamStack {
+.featureCard {
+  background: rgba(250, 252, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.cardTop,
+.featureTop,
+.cardFooter,
+.detailTop,
+.detailHeroTop,
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.featureTeams,
+.detailScore {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.featureTeams {
+  margin-top: 14px;
+}
+
+.teamBlock,
+.detailTeam {
   display: grid;
   gap: 6px;
 }
 
-.teamLine {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+.teamBlock:last-child,
+.detailTeam:last-child {
+  text-align: right;
 }
 
-.teamLine strong {
-  font-size: 24px;
+.teamTag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.teamName,
+.detailTeam strong {
+  font-size: 1.02rem;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.scoreBlock {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.score,
+.detailScoreValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
   font-family: "Avenir Next Condensed", "Avenir Next", sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
 }
 
-.timeline {
+.score {
+  font-size: clamp(2.2rem, 13vw, 4rem);
+  line-height: 0.9;
+}
+
+.detailScoreValue {
+  font-size: clamp(2.1rem, 12vw, 3.8rem);
+  line-height: 0.9;
+  color: var(--navy);
+}
+
+.score small,
+.detailScoreValue small {
+  font-size: 0.42em;
+  opacity: 0.65;
+}
+
+.toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+.filterRail {
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.filterChip,
+.closeButton {
+  appearance: none;
+  border: 1px solid rgba(19, 51, 111, 0.12);
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.filterChipActive {
+  color: #fff;
+  background: linear-gradient(135deg, var(--navy), var(--cobalt));
+  border-color: transparent;
+}
+
+.sectionHeader h3 {
+  font-size: 1.35rem;
+}
+
+.sectionHeader span,
+.tapHint,
+.syncStamp,
+.cardMeta,
+.cardFooter,
+.emptyInline {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.matchStack,
+.courtGrid,
+.formatGrid,
+.contentGrid {
   display: grid;
   gap: 12px;
 }
 
-.timelineItem strong {
-  font-size: 16px;
+.cardMain {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.scoreRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.scoreRow span,
+.teamList {
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.scoreRow strong {
+  font-size: 1.45rem;
+  font-family: "Avenir Next Condensed", "Avenir Next", sans-serif;
+}
+
+.teamList {
+  display: grid;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.courtCard h4,
+.formatCard h4 {
+  font-size: 1.16rem;
+}
+
+.courtCardIdle {
+  cursor: default;
+}
+
+.miniStats,
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.timelineList {
+  gap: 8px;
+}
+
+.timelineRow {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(245, 248, 255, 0.84);
+  border: 1px solid rgba(19, 51, 111, 0.08);
+  font-size: 0.88rem;
+  line-height: 1.4;
 }
 
 .matchBadge {
@@ -386,73 +438,159 @@
   align-items: center;
   width: fit-content;
   padding: 6px 10px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 800;
+  border-radius: 999px;
+  font-size: 0.64rem;
 }
 
 .live {
   color: #114a31;
-  background: rgba(47, 156, 99, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(47, 156, 99, 0.26);
+  background: rgba(44, 157, 104, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(44, 157, 104, 0.24);
 }
 
 .upcoming {
   color: #173d7d;
-  background: rgba(53, 101, 179, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(53, 101, 179, 0.22);
+  background: rgba(58, 104, 184, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(58, 104, 184, 0.22);
 }
 
 .done {
-  color: #7d5610;
-  background: rgba(207, 156, 39, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(207, 156, 39, 0.26);
-}
-
-.syncStamp,
-.emptyInline {
-  font-size: 13px;
+  color: #7b550f;
+  background: rgba(207, 152, 32, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(207, 152, 32, 0.24);
 }
 
 .emptyState,
 .loadingPanel,
-.errorPanel {
+.errorPanel,
+.emptyInline {
+  display: grid;
+  gap: 10px;
+}
+
+.emptyState,
+.emptyInline {
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px dashed rgba(19, 51, 111, 0.14);
+}
+
+.detailBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(10, 18, 34, 0.54);
+  border: 0;
+}
+
+.detailSheet {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 21;
+  max-height: 88vh;
+  overflow: auto;
+  padding: 18px 14px 22px;
+  background:
+    radial-gradient(circle at top right, rgba(58, 104, 184, 0.12), transparent 24%),
+    linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(244, 247, 252, 0.98));
+  box-shadow: 0 -20px 50px rgba(8, 20, 42, 0.25);
+  display: grid;
+  gap: 14px;
+}
+
+.closeButton {
+  background: rgba(20, 33, 62, 0.08);
+}
+
+.detailHero,
+.detailSection {
   display: grid;
   gap: 12px;
 }
 
-.emptyState {
-  margin-top: 18px;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+.detailHero {
+  padding: 14px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(241, 246, 255, 0.92));
+  border: 1px solid rgba(18, 51, 111, 0.1);
 }
 
-@media (max-width: 1080px) {
+.detailMeta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.detailSection h3 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+@media (min-width: 700px) {
+  .shell {
+    width: min(100%, 1120px);
+    padding: 20px 18px 42px;
+  }
+
+  .headerMeta {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+  }
+
+  .heroTop {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+    align-items: end;
+  }
+
+  .courtGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .contentGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formatGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .detailSheet {
+    inset: 18px 18px 18px auto;
+    width: min(520px, calc(100vw - 36px));
+    max-height: calc(100vh - 36px);
+    border-radius: 30px;
+    border: 1px solid rgba(19, 51, 111, 0.12);
+  }
+}
+
+@media (max-width: 520px) {
+  .headerMeta,
+  .statGrid,
+  .miniStats,
+  .detailGrid {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 820px) {
-  .shell {
-    padding: 16px 14px 28px;
-  }
-
-  .header,
-  .heroLead,
   .featureTeams,
-  .toolbar {
+  .detailScore {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .teamBlock:last-child,
+  .detailTeam:last-child {
+    text-align: left;
+  }
+
+  .scoreBlock {
+    justify-items: start;
+  }
+
+  .cardTop,
+  .featureTop,
+  .cardFooter,
+  .detailTop,
+  .detailHeroTop,
+  .sectionHeader {
     flex-direction: column;
-  }
-
-  .headerMeta,
-  .statGrid {
-    width: 100%;
-  }
-
-  .statGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
