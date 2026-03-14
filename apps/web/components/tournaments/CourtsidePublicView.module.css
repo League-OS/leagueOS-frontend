@@ -1,0 +1,458 @@
+.page {
+  min-height: 100vh;
+  --ink: #15213d;
+  --muted: #61708c;
+  --panel: rgba(250, 252, 255, 0.88);
+  --line: rgba(19, 51, 111, 0.14);
+  --navy: #12336f;
+  --cobalt: #3565b3;
+  --mint: #2f9c63;
+  --gold: #cf9c27;
+  --paper: #f4f1e8;
+  --paper-dark: #ece5d2;
+  --glow: rgba(53, 101, 179, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(53, 101, 179, 0.16), transparent 28%),
+    radial-gradient(circle at 85% 10%, rgba(47, 156, 99, 0.14), transparent 24%),
+    linear-gradient(135deg, rgba(18, 51, 111, 0.07) 0, rgba(18, 51, 111, 0.07) 1px, transparent 1px),
+    linear-gradient(180deg, #f8fafc 0%, var(--paper) 100%);
+  background-size: auto, auto, 22px 22px, auto;
+  color: var(--ink);
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.shell {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+}
+
+.header,
+.heroLead,
+.headerMeta,
+.toolbar,
+.sectionHeader,
+.courtTop,
+.featureTop,
+.timelineHead,
+.formatTop,
+.teamLine,
+.featureTeams {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header {
+  margin-bottom: 18px;
+}
+
+.headerCopy {
+  display: grid;
+  gap: 10px;
+}
+
+.headerMeta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.kicker,
+.cardEyebrow,
+.ribbon {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.kicker {
+  color: var(--cobalt);
+}
+
+.ribbon {
+  color: #f9fbff;
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.title,
+.heroTitle,
+.sectionHeader h3,
+.formatCard h4,
+.courtCard h4 {
+  margin: 0;
+  font-family: "Avenir Next Condensed", "Avenir Next", "Trebuchet MS", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.title {
+  font-size: clamp(2.2rem, 4vw, 4.4rem);
+  line-height: 0.95;
+}
+
+.heroTitle {
+  font-size: clamp(1.9rem, 3.4vw, 3.5rem);
+  line-height: 0.94;
+}
+
+.support,
+.muted,
+.syncStamp,
+.featureMeta,
+.emptyInline {
+  color: var(--muted);
+}
+
+.support {
+  margin: 0;
+  max-width: 760px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.metaPill,
+.panel,
+.formatCard,
+.courtCard,
+.timelineItem,
+.statCard,
+.featureCard {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 55px var(--glow);
+}
+
+.metaPill {
+  min-width: 168px;
+  padding: 12px 14px;
+}
+
+.metaPill span,
+.statCard span,
+.miniStats span {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.metaPill strong,
+.statCard strong,
+.miniStats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.panel {
+  padding: 24px;
+}
+
+.hero {
+  background:
+    linear-gradient(130deg, rgba(18, 51, 111, 0.95), rgba(53, 101, 179, 0.88)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  color: #f5f8ff;
+  border: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -20% -40% auto;
+  width: 380px;
+  height: 380px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 72%);
+  pointer-events: none;
+}
+
+.heroLead {
+  position: relative;
+  z-index: 1;
+}
+
+.hero .support,
+.hero .featureMeta,
+.hero .muted {
+  color: rgba(245, 248, 255, 0.78);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 12px;
+  width: min(100%, 560px);
+}
+
+.statCard {
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.statCard strong {
+  color: #ffffff;
+  font-size: 26px;
+}
+
+.featureCard {
+  margin-top: 20px;
+  padding: 18px;
+  position: relative;
+  z-index: 1;
+  background: rgba(245, 248, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.featureTeams {
+  align-items: center;
+  margin-top: 18px;
+}
+
+.teamTag {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.76);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.teamName {
+  font-size: clamp(1.2rem, 2vw, 2.1rem);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.scoreBlock {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 10px 18px;
+}
+
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: "Avenir Next Condensed", "Avenir Next", sans-serif;
+  font-size: clamp(2.2rem, 5vw, 4.6rem);
+  line-height: 0.9;
+  font-weight: 900;
+}
+
+.score small {
+  font-size: 0.45em;
+  opacity: 0.65;
+}
+
+.toolbar {
+  margin: 18px 0;
+  flex-wrap: wrap;
+}
+
+.filterRail {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filterChip {
+  border: 1px solid rgba(18, 51, 111, 0.14);
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--ink);
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filterChipActive {
+  background: linear-gradient(135deg, var(--navy), var(--cobalt));
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.section {
+  display: grid;
+  gap: 14px;
+}
+
+.sectionHeader {
+  align-items: baseline;
+}
+
+.sectionHeader h3 {
+  font-size: 1.45rem;
+}
+
+.sectionHeader span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.formatGrid,
+.courtGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.formatGrid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.formatCard,
+.courtCard,
+.timelineItem {
+  padding: 16px;
+}
+
+.formatTop h4,
+.courtTop h4 {
+  font-size: 1.25rem;
+}
+
+.cardEyebrow {
+  color: var(--cobalt);
+}
+
+.miniStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.courtGrid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.matchPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(243, 245, 248, 0.92));
+  border: 1px solid rgba(18, 51, 111, 0.1);
+}
+
+.teamLine,
+.teamStack {
+  display: grid;
+  gap: 6px;
+}
+
+.teamLine {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.teamLine strong {
+  font-size: 24px;
+  font-family: "Avenir Next Condensed", "Avenir Next", sans-serif;
+}
+
+.timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.timelineItem strong {
+  font-size: 16px;
+}
+
+.matchBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+}
+
+.live {
+  color: #114a31;
+  background: rgba(47, 156, 99, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(47, 156, 99, 0.26);
+}
+
+.upcoming {
+  color: #173d7d;
+  background: rgba(53, 101, 179, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(53, 101, 179, 0.22);
+}
+
+.done {
+  color: #7d5610;
+  background: rgba(207, 156, 39, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(207, 156, 39, 0.26);
+}
+
+.syncStamp,
+.emptyInline {
+  font-size: 13px;
+}
+
+.emptyState,
+.loadingPanel,
+.errorPanel {
+  display: grid;
+  gap: 12px;
+}
+
+.emptyState {
+  margin-top: 18px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 1080px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .shell {
+    padding: 16px 14px 28px;
+  }
+
+  .header,
+  .heroLead,
+  .featureTeams,
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .headerMeta,
+  .statGrid {
+    width: 100%;
+  }
+
+  .statGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,620 @@
+'use client';
+
+import { startTransition, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { DEFAULT_API_BASE_URL } from '@leagueos/config';
+
+import styles from './CourtsidePublicView.module.css';
+
+type PublicTournament = {
+  id: number;
+  name: string;
+  status: string;
+  timezone: string;
+  schedule_start_at: string | null;
+  schedule_end_at: string | null;
+  publication_link: string | null;
+  venue_stream_link: string | null;
+};
+
+type PublicCourt = {
+  id: number;
+  name: string;
+  is_active: boolean;
+};
+
+type PublicRegistration = {
+  id: number;
+  player_id: number;
+  player_name: string;
+  status: string;
+};
+
+type PublicScore = {
+  score_a?: unknown;
+  score_b?: unknown;
+};
+
+type PublicMatch = {
+  id: number;
+  match_number: number;
+  stage_code: string;
+  group_code: string | null;
+  round_number: number | null;
+  round_label: string | null;
+  match_order_in_round: number | null;
+  status: string;
+  court_id: number | null;
+  court_name: string | null;
+  home_registration_id: number | null;
+  away_registration_id: number | null;
+  home_seed: number | null;
+  away_seed: number | null;
+  home_slot_source: string | null;
+  away_slot_source: string | null;
+  home_slot_group_code: string | null;
+  away_slot_group_code: string | null;
+  home_slot_group_rank: number | null;
+  away_slot_group_rank: number | null;
+  winner_registration_id: number | null;
+  loser_registration_id: number | null;
+  dependency_match_a_id: number | null;
+  dependency_match_b_id: number | null;
+  start_at: string | null;
+  end_at: string | null;
+  tentative_start_at: string | null;
+  tentative_end_at: string | null;
+  score_json: PublicScore;
+};
+
+type PublicGeneratedTeam = {
+  id: string;
+  name: string;
+  player_ids: string[];
+};
+
+type PublicFormat = {
+  id: number;
+  name: string;
+  format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
+  status: string | null;
+  scheduling_model: string | null;
+  config_json: Record<string, unknown>;
+  schedule_generated_at: string | null;
+  schedule_published_at: string | null;
+  allowed_court_ids: number[];
+  registrations: PublicRegistration[];
+  matches: PublicMatch[];
+};
+
+type PublicCourtsidePayload = {
+  tournament: PublicTournament;
+  courts: PublicCourt[];
+  formats: PublicFormat[];
+  generated_at: string | null;
+};
+
+type DecoratedMatch = {
+  format: PublicFormat;
+  match: PublicMatch;
+  homeLabel: string;
+  awayLabel: string;
+};
+
+const LIVE_STATUSES = new Set(['IN_PROGRESS']);
+const UPCOMING_STATUSES = new Set(['SCHEDULED']);
+const COMPLETED_STATUSES = new Set(['COMPLETED', 'FINALIZED']);
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function readGeneratedTeams(format: PublicFormat): PublicGeneratedTeam[] {
+  const config = asObject(format.config_json) ?? {};
+  const pool = asObject(config.pool) ?? {};
+  const raw = Array.isArray(pool.generatedTeams) ? pool.generatedTeams : [];
+  return raw
+    .map((entry) => {
+      const item = asObject(entry);
+      if (!item) return null;
+      const id = typeof item.id === 'string' ? item.id : '';
+      const name = typeof item.name === 'string' ? item.name : '';
+      const playerIds = Array.isArray(item.playerIds) ? item.playerIds.map((value) => String(value)) : [];
+      if (!id || !name) return null;
+      return {
+        id,
+        name,
+        player_ids: playerIds,
+      };
+    })
+    .filter((entry): entry is PublicGeneratedTeam => entry !== null);
+}
+
+function matchMoment(match: PublicMatch): number {
+  const value = match.start_at ?? match.tentative_start_at ?? match.end_at ?? match.tentative_end_at;
+  if (!value) return Number.POSITIVE_INFINITY;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+}
+
+function scoreValue(raw: unknown): number | null {
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatTournamentDate(value: string | null, timezone: string, options: Intl.DateTimeFormatOptions): string {
+  if (!value) return 'TBD';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'TBD';
+  return new Intl.DateTimeFormat(undefined, { timeZone: timezone, ...options }).format(parsed);
+}
+
+function formatClock(timezone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone: timezone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date());
+}
+
+function formatTypeLabel(value: PublicFormat['format_type']): string {
+  return value.replaceAll('_', ' ');
+}
+
+function stageLabel(match: PublicMatch): string {
+  if (match.group_code) return `Group ${match.group_code}`;
+  if (match.round_label) return match.round_label;
+  return match.stage_code.replaceAll('_', ' ');
+}
+
+function registrationLabel(format: PublicFormat, registrationId: number | null): string {
+  if (!registrationId) return 'TBD';
+  const registration = format.registrations.find((entry) => entry.id === registrationId) ?? null;
+  if (!registration) return `R${registrationId}`;
+  if (format.format_type === 'SINGLES') return registration.player_name;
+  const team = readGeneratedTeams(format).find((entry) => entry.player_ids.includes(String(registration.player_id)));
+  return team?.name ?? registration.player_name;
+}
+
+function slotLabel(format: PublicFormat, match: PublicMatch, side: 'home' | 'away'): string {
+  const registrationId = side === 'home' ? match.home_registration_id : match.away_registration_id;
+  if (registrationId) return registrationLabel(format, registrationId);
+
+  const source = side === 'home' ? match.home_slot_source : match.away_slot_source;
+  const groupCode = side === 'home' ? match.home_slot_group_code : match.away_slot_group_code;
+  const groupRank = side === 'home' ? match.home_slot_group_rank : match.away_slot_group_rank;
+  const dependencyId = side === 'home' ? match.dependency_match_a_id : match.dependency_match_b_id;
+
+  if (source === 'GROUP_RANK' && groupCode && groupRank) return `${groupCode}${groupRank}`;
+  if (source === 'MATCH_WINNER' && dependencyId) return `Winner M${dependencyId}`;
+  return 'TBD';
+}
+
+function decorateMatch(format: PublicFormat, match: PublicMatch): DecoratedMatch {
+  return {
+    format,
+    match,
+    homeLabel: slotLabel(format, match, 'home'),
+    awayLabel: slotLabel(format, match, 'away'),
+  };
+}
+
+function matchStatusClass(status: string): string {
+  if (LIVE_STATUSES.has(status)) return `${styles.matchBadge} ${styles.live}`;
+  if (COMPLETED_STATUSES.has(status)) return `${styles.matchBadge} ${styles.done}`;
+  return `${styles.matchBadge} ${styles.upcoming}`;
+}
+
+function matchStatusLabel(status: string): string {
+  if (status === 'IN_PROGRESS') return 'Live';
+  if (status === 'SCHEDULED') return 'Up Next';
+  if (status === 'FINALIZED') return 'Final';
+  return status.replaceAll('_', ' ');
+}
+
+function featuredMatches(formats: PublicFormat[]): DecoratedMatch[] {
+  return formats
+    .flatMap((format) => format.matches.map((match) => decorateMatch(format, match)))
+    .sort((left, right) => {
+      const leftLive = LIVE_STATUSES.has(left.match.status) ? 0 : UPCOMING_STATUSES.has(left.match.status) ? 1 : 2;
+      const rightLive = LIVE_STATUSES.has(right.match.status) ? 0 : UPCOMING_STATUSES.has(right.match.status) ? 1 : 2;
+      if (leftLive !== rightLive) return leftLive - rightLive;
+      return matchMoment(left.match) - matchMoment(right.match);
+    });
+}
+
+export function CourtsidePublicView() {
+  const params = useParams<{ tournamentId: string }>();
+  const tournamentId = Number.parseInt(params?.tournamentId ?? '', 10);
+  const [payload, setPayload] = useState<PublicCourtsidePayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedFormatId, setSelectedFormatId] = useState<'all' | number>('all');
+  const [clock, setClock] = useState('');
+
+  useEffect(() => {
+    if (!payload?.tournament.timezone) return;
+    setClock(formatClock(payload.tournament.timezone));
+    const timer = window.setInterval(() => {
+      setClock(formatClock(payload.tournament.timezone));
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [payload?.tournament.timezone]);
+
+  useEffect(() => {
+    if (!Number.isInteger(tournamentId)) {
+      setLoading(false);
+      setError('Invalid tournament URL.');
+      return;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const response = await fetch(`${API_BASE}/tournaments/public/${tournamentId}/courtside`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Unable to load courtside display (HTTP ${response.status}).`);
+        }
+        const nextPayload = (await response.json()) as PublicCourtsidePayload;
+        if (cancelled) return;
+        startTransition(() => {
+          setPayload(nextPayload);
+          setError('');
+          setLoading(false);
+        });
+      } catch (loadError) {
+        if (cancelled) return;
+        setLoading(false);
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load courtside display.');
+      }
+    }
+
+    void load();
+    const timer = window.setInterval(() => {
+      void load();
+    }, 20000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (!payload) return;
+    if (selectedFormatId === 'all') return;
+    if (!payload.formats.some((format) => format.id === selectedFormatId)) {
+      setSelectedFormatId('all');
+    }
+  }, [payload, selectedFormatId]);
+
+  if (loading) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.shell}>
+          <section className={`${styles.panel} ${styles.loadingPanel}`}>
+            <span className={styles.kicker}>Tournament Courtside</span>
+            <h1 className={styles.title}>Loading public display</h1>
+            <p className={styles.support}>Pulling the latest tournament and court schedule.</p>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !payload) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.shell}>
+          <section className={`${styles.panel} ${styles.errorPanel}`}>
+            <span className={styles.kicker}>Tournament Courtside</span>
+            <h1 className={styles.title}>Public display unavailable</h1>
+            <p className={styles.support}>{error || 'No public tournament data was returned.'}</p>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  const visibleFormats = payload.formats.filter((format) => selectedFormatId === 'all' || format.id === selectedFormatId);
+  const formatsWithActivity = visibleFormats.filter((format) => format.matches.length > 0);
+  const decorated = featuredMatches(formatsWithActivity);
+  const featured = decorated[0] ?? null;
+  const liveMatches = decorated.filter((entry) => LIVE_STATUSES.has(entry.match.status));
+  const upcomingMatches = decorated.filter((entry) => UPCOMING_STATUSES.has(entry.match.status)).slice(0, 8);
+  const completedMatches = decorated.filter((entry) => COMPLETED_STATUSES.has(entry.match.status)).slice(0, 6);
+
+  const courtSource = payload.courts.filter((court) => court.is_active);
+  const courts = (courtSource.length ? courtSource : payload.courts).map((court) => {
+    const matches = decorated
+      .filter((entry) => entry.match.court_id === court.id)
+      .sort((left, right) => matchMoment(left.match) - matchMoment(right.match));
+    return {
+      court,
+      current: matches.find((entry) => LIVE_STATUSES.has(entry.match.status)) ?? null,
+      next: matches.find((entry) => UPCOMING_STATUSES.has(entry.match.status)) ?? null,
+      recent: matches.filter((entry) => COMPLETED_STATUSES.has(entry.match.status)).slice(-1)[0] ?? null,
+    };
+  });
+
+  const liveCourts = courts.filter((entry) => entry.current).length;
+  const nextSlot = upcomingMatches[0]?.match.start_at ?? upcomingMatches[0]?.match.tentative_start_at ?? null;
+
+  return (
+    <main className={styles.page}>
+      <div className={styles.shell}>
+        <header className={styles.header}>
+          <div className={styles.headerCopy}>
+            <span className={styles.kicker}>Tournament Courtside</span>
+            <h1 className={styles.title}>{payload.tournament.name}</h1>
+            <p className={styles.support}>
+              Tournament-level public display. No login required.
+            </p>
+          </div>
+          <div className={styles.headerMeta}>
+            <div className={styles.metaPill}>
+              <span>Now</span>
+              <strong>{clock || formatClock(payload.tournament.timezone)}</strong>
+            </div>
+            <div className={styles.metaPill}>
+              <span>Timezone</span>
+              <strong>{payload.tournament.timezone}</strong>
+            </div>
+            <div className={styles.metaPill}>
+              <span>Window</span>
+              <strong>
+                {formatTournamentDate(payload.tournament.schedule_start_at, payload.tournament.timezone, { month: 'short', day: 'numeric' })}
+                {' - '}
+                {formatTournamentDate(payload.tournament.schedule_end_at, payload.tournament.timezone, { month: 'short', day: 'numeric' })}
+              </strong>
+            </div>
+          </div>
+        </header>
+
+        <section className={`${styles.panel} ${styles.hero}`}>
+          <div className={styles.heroLead}>
+            <div>
+              <span className={styles.ribbon}>Broadcast Deck</span>
+              <h2 className={styles.heroTitle}>
+                {featured ? featured.match.court_name || `Court ${featured.match.court_id}` : 'No live court activity yet'}
+              </h2>
+              <p className={styles.support}>
+                {featured
+                  ? `${featured.format.name} · ${stageLabel(featured.match)}`
+                  : 'Schedules will appear here once matches are generated for this tournament.'}
+              </p>
+            </div>
+            <div className={styles.statGrid}>
+              <article className={styles.statCard}>
+                <span>Live Matches</span>
+                <strong>{liveMatches.length}</strong>
+              </article>
+              <article className={styles.statCard}>
+                <span>Live Courts</span>
+                <strong>{liveCourts}</strong>
+              </article>
+              <article className={styles.statCard}>
+                <span>Formats</span>
+                <strong>{visibleFormats.length}</strong>
+              </article>
+              <article className={styles.statCard}>
+                <span>Next Slot</span>
+                <strong>
+                  {formatTournamentDate(nextSlot, payload.tournament.timezone, { hour: '2-digit', minute: '2-digit' })}
+                </strong>
+              </article>
+            </div>
+          </div>
+
+          {featured ? (
+            <article className={styles.featureCard}>
+              <div className={styles.featureTop}>
+                <span className={matchStatusClass(featured.match.status)}>{matchStatusLabel(featured.match.status)}</span>
+                <span className={styles.featureMeta}>
+                  {stageLabel(featured.match)} · Match {featured.match.match_number}
+                </span>
+              </div>
+              <div className={styles.featureTeams}>
+                <div>
+                  <span className={styles.teamTag}>Home</span>
+                  <div className={styles.teamName}>{featured.homeLabel}</div>
+                </div>
+                <div className={styles.scoreBlock}>
+                  <span className={styles.score}>
+                    {scoreValue(featured.match.score_json?.score_a) ?? '-'}
+                    <small>:</small>
+                    {scoreValue(featured.match.score_json?.score_b) ?? '-'}
+                  </span>
+                  <span className={styles.featureMeta}>
+                    {formatTournamentDate(
+                      featured.match.start_at ?? featured.match.tentative_start_at,
+                      payload.tournament.timezone,
+                      { hour: '2-digit', minute: '2-digit' },
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className={styles.teamTag}>Away</span>
+                  <div className={styles.teamName}>{featured.awayLabel}</div>
+                </div>
+              </div>
+            </article>
+          ) : (
+            <div className={styles.emptyState}>
+              No published or generated court schedule is available for public display yet.
+            </div>
+          )}
+        </section>
+
+        <section className={styles.toolbar}>
+          <div className={styles.filterRail}>
+            <button
+              className={selectedFormatId === 'all' ? `${styles.filterChip} ${styles.filterChipActive}` : styles.filterChip}
+              onClick={() => setSelectedFormatId('all')}
+            >
+              All Formats
+            </button>
+            {payload.formats.map((format) => (
+              <button
+                key={format.id}
+                className={selectedFormatId === format.id ? `${styles.filterChip} ${styles.filterChipActive}` : styles.filterChip}
+                onClick={() => setSelectedFormatId(format.id)}
+              >
+                {format.name}
+              </button>
+            ))}
+          </div>
+          <span className={styles.syncStamp}>
+            Synced {formatTournamentDate(payload.generated_at, payload.tournament.timezone, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        </section>
+
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h3>Format Snapshot</h3>
+            <span>{formatsWithActivity.length} active boards</span>
+          </div>
+          <div className={styles.formatGrid}>
+            {visibleFormats.map((format) => {
+              const liveCount = format.matches.filter((match) => LIVE_STATUSES.has(match.status)).length;
+              const scheduledCount = format.matches.filter((match) => UPCOMING_STATUSES.has(match.status)).length;
+              const completedCount = format.matches.filter((match) => COMPLETED_STATUSES.has(match.status)).length;
+              return (
+                <article key={format.id} className={styles.formatCard}>
+                  <div className={styles.formatTop}>
+                    <div>
+                      <span className={styles.cardEyebrow}>{formatTypeLabel(format.format_type)}</span>
+                      <h4>{format.name}</h4>
+                    </div>
+                    <span className={matchStatusClass(liveCount ? 'IN_PROGRESS' : scheduledCount ? 'SCHEDULED' : 'FINALIZED')}>
+                      {liveCount ? `${liveCount} live` : scheduledCount ? `${scheduledCount} queued` : 'Quiet'}
+                    </span>
+                  </div>
+                  <div className={styles.miniStats}>
+                    <div><span>Matches</span><strong>{format.matches.length}</strong></div>
+                    <div><span>Finished</span><strong>{completedCount}</strong></div>
+                    <div><span>Courts</span><strong>{new Set(format.matches.map((match) => match.court_id).filter((value) => value !== null)).size}</strong></div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <div className={styles.contentGrid}>
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h3>Court Boards</h3>
+              <span>Live first, next match second</span>
+            </div>
+            <div className={styles.courtGrid}>
+              {courts.map(({ court, current, next, recent }) => (
+                <article key={court.id} className={styles.courtCard}>
+                  <div className={styles.courtTop}>
+                    <h4>{court.name}</h4>
+                    <span className={current ? matchStatusClass('IN_PROGRESS') : next ? matchStatusClass('SCHEDULED') : matchStatusClass('FINALIZED')}>
+                      {current ? 'On Court' : next ? 'Queued' : 'Idle'}
+                    </span>
+                  </div>
+
+                  {current ? (
+                    <div className={styles.matchPanel}>
+                      <span className={styles.cardEyebrow}>{current.format.name}</span>
+                      <div className={styles.teamLine}>
+                        <span>{current.homeLabel}</span>
+                        <strong>{scoreValue(current.match.score_json?.score_a) ?? '-'}</strong>
+                      </div>
+                      <div className={styles.teamLine}>
+                        <span>{current.awayLabel}</span>
+                        <strong>{scoreValue(current.match.score_json?.score_b) ?? '-'}</strong>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!current && next ? (
+                    <div className={styles.matchPanel}>
+                      <span className={styles.cardEyebrow}>{next.format.name}</span>
+                      <div className={styles.teamStack}>
+                        <span>{next.homeLabel}</span>
+                        <span>{next.awayLabel}</span>
+                      </div>
+                      <span className={styles.muted}>
+                        Starts {formatTournamentDate(next.match.start_at ?? next.match.tentative_start_at, payload.tournament.timezone, { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {!current && !next && recent ? (
+                    <div className={styles.matchPanel}>
+                      <span className={styles.cardEyebrow}>Last Result</span>
+                      <div className={styles.teamStack}>
+                        <span>{recent.homeLabel}</span>
+                        <span>{recent.awayLabel}</span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!current && !next && !recent ? (
+                    <div className={styles.emptyInline}>No public match assignment on this court yet.</div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h3>Schedule Runway</h3>
+              <span>Next eight calls</span>
+            </div>
+            <div className={styles.timeline}>
+              {upcomingMatches.length ? upcomingMatches.map((entry) => (
+                <article key={entry.match.id} className={styles.timelineItem}>
+                  <div className={styles.timelineHead}>
+                    <span className={styles.cardEyebrow}>{entry.format.name}</span>
+                    <span className={styles.muted}>
+                      {formatTournamentDate(entry.match.start_at ?? entry.match.tentative_start_at, payload.tournament.timezone, { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <strong>{entry.match.court_name || `Court ${entry.match.court_id ?? 'TBD'}`}</strong>
+                  <div className={styles.teamStack}>
+                    <span>{entry.homeLabel}</span>
+                    <span>{entry.awayLabel}</span>
+                  </div>
+                  <span className={styles.muted}>{stageLabel(entry.match)}</span>
+                </article>
+              )) : <div className={styles.emptyInline}>No upcoming public matches are queued right now.</div>}
+            </div>
+
+            <div className={styles.sectionHeader}>
+              <h3>Recent Results</h3>
+              <span>Latest completed matches</span>
+            </div>
+            <div className={styles.timeline}>
+              {completedMatches.length ? completedMatches.map((entry) => (
+                <article key={entry.match.id} className={styles.timelineItem}>
+                  <div className={styles.timelineHead}>
+                    <span className={styles.cardEyebrow}>{entry.format.name}</span>
+                    <span className={styles.muted}>{entry.match.court_name || `Court ${entry.match.court_id ?? 'TBD'}`}</span>
+                  </div>
+                  <div className={styles.teamLine}>
+                    <span>{entry.homeLabel}</span>
+                    <strong>{scoreValue(entry.match.score_json?.score_a) ?? '-'}</strong>
+                  </div>
+                  <div className={styles.teamLine}>
+                    <span>{entry.awayLabel}</span>
+                    <strong>{scoreValue(entry.match.score_json?.score_b) ?? '-'}</strong>
+                  </div>
+                </article>
+              )) : <div className={styles.emptyInline}>Results will populate here once matches finish.</div>}
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  );
+}

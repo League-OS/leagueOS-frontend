@@ -28,6 +28,11 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
       typeof window !== 'undefined' ? window.location.origin : ''
     }/tournaments/${state.activeTournamentId}?signup=one_click`
     : '';
+  const tournamentCourtsideLink = state.activeTournamentId
+    ? `${
+      typeof window !== 'undefined' ? window.location.origin : ''
+    }/tournaments/${state.activeTournamentId}/courtside`
+    : '';
   const topSaveByTab = state.activeTab === 'config'
     ? { enabled: state.configDirty, onSave: state.saveConfig }
     : state.activeTab === 'pool'
@@ -113,6 +118,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 allowedLifecycleStatuses={state.allowedLifecycleStatuses}
                 updateTournamentStatus={state.updateTournamentStatus}
                 tournamentSignupLink={tournamentSignupLink}
+                tournamentCourtsideLink={tournamentCourtsideLink}
                 requestEditTournament={state.requestEditTournament}
               />
             </div>
