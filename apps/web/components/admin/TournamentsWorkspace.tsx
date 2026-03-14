@@ -7,6 +7,7 @@ import { AddFormatPanel } from './tournaments/AddFormatPanel';
 import { ConfigTab } from './tournaments/ConfigTab';
 import { CourtsTab } from './tournaments/CourtsTab';
 import { FormatDirectoryPanel } from './tournaments/FormatDirectoryPanel';
+import type { TournamentShareLink } from './tournaments/FormatDirectoryPanel';
 import { FormatTabs } from './tournaments/FormatTabs';
 import { PoolTab } from './tournaments/PoolTab';
 import { ScheduleTab } from './tournaments/ScheduleTab';
@@ -23,16 +24,40 @@ import { useTournamentWorkspaceState } from './tournaments/useTournamentWorkspac
 
 export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean }) {
   const state = useTournamentWorkspaceState();
-  const tournamentSignupLink = state.activeTournamentId
-    ? `${
-      typeof window !== 'undefined' ? window.location.origin : ''
-    }/tournaments/${state.activeTournamentId}?signup=one_click`
-    : '';
-  const tournamentCourtsideLink = state.activeTournamentId
-    ? `${
-      typeof window !== 'undefined' ? window.location.origin : ''
-    }/tournaments/${state.activeTournamentId}/courtside`
-    : '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const tournamentShareLinks: TournamentShareLink[] = state.activeTournamentId
+    ? [
+      {
+        id: 'signup',
+        label: 'Tournament Signup URL',
+        url: `${origin}/tournaments/${state.activeTournamentId}?signup=one_click`,
+        description: 'Use this during registration and club signup phases.',
+        qrFileSuffix: 'signup',
+      },
+      {
+        id: 'courtside',
+        label: 'Public Courtside URL',
+        url: `${origin}/tournaments/${state.activeTournamentId}/courtside`,
+        description: 'No auth required. Use this for public courtside display and live sharing.',
+        qrFileSuffix: 'courtside',
+      },
+      {
+        id: 'venue-display',
+        label: 'Tournament Venue Display URL',
+        url: `${origin}/tournaments/${state.activeTournamentId}/venue-display`,
+        description: 'No auth required. Use this on TVs or venue screens for autoplay display.',
+        qrFileSuffix: 'venue-display',
+      },
+      {
+        id: 'courtside-operator',
+        label: 'Courtside Mobile Operator URL',
+        url: `${origin}/tournaments/${state.activeTournamentId}/courtside-operator`,
+        description: 'Operator console for on-court scoring. Opens read-only until admin auth exists on the device.',
+        qrFileSuffix: 'courtside-operator',
+        authRequired: true,
+      },
+    ]
+    : [];
   const topSaveByTab = state.activeTab === 'config'
     ? { enabled: state.configDirty, onSave: state.saveConfig }
     : state.activeTab === 'pool'
@@ -117,8 +142,7 @@ export function TournamentsWorkspace({ embedded = false }: { embedded?: boolean 
                 lifecycleStatusOptions={state.lifecycleStatusOptions}
                 allowedLifecycleStatuses={state.allowedLifecycleStatuses}
                 updateTournamentStatus={state.updateTournamentStatus}
-                tournamentSignupLink={tournamentSignupLink}
-                tournamentCourtsideLink={tournamentCourtsideLink}
+                shareLinks={tournamentShareLinks}
                 requestEditTournament={state.requestEditTournament}
               />
             </div>

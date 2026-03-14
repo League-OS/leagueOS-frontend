@@ -1,0 +1,381 @@
+.page {
+  min-height: 100vh;
+  color: #f5f8ff;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.05), transparent 24%),
+    linear-gradient(135deg, #0c1b43, #12336f 46%, #1a4e95);
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 18px;
+  padding: 24px 28px 20px;
+}
+
+.header,
+.footer,
+.slideHead,
+.matchMeta,
+.liveTeams {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.brand,
+.headerCard {
+  display: grid;
+  gap: 8px;
+}
+
+.header h1,
+.headerCard h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 0.95;
+}
+
+.eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(245, 248, 255, 0.76);
+  font-weight: 800;
+}
+
+.metaStrip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pill,
+.liveCard,
+.queueCard,
+.standingsCard,
+.bracketMatch,
+.championCard,
+.headerCard,
+.emptyCard,
+.statCard {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 20px 36px rgba(7, 16, 41, 0.26);
+}
+
+.pill {
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.slides {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  padding: 26px;
+  opacity: 0;
+  transform: translateX(3%);
+  transition: opacity 220ms ease, transform 220ms ease;
+  pointer-events: none;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.active {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.slideHead {
+  align-items: end;
+}
+
+.slideHead h2,
+.standingsCard h3 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.slideHead p,
+.subtle,
+.footer span {
+  margin: 0;
+  color: rgba(245, 248, 255, 0.74);
+}
+
+.liveGrid,
+.queueGrid,
+.standingsLayout {
+  display: grid;
+  gap: 18px;
+}
+
+.liveGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.queueGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.standingsLayout {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.liveCard,
+.queueCard,
+.standingsCard,
+.bracketMatch,
+.championCard,
+.emptyCard,
+.headerCard {
+  padding: 18px;
+  border-radius: 24px;
+}
+
+.primary {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+}
+
+.matchMeta {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(245, 248, 255, 0.74);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(101, 208, 143, 0.15);
+  color: #dfffe8;
+}
+
+.liveTeams {
+  align-items: center;
+}
+
+.teamBlock {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.teamBlock strong {
+  font-size: 1.7rem;
+  line-height: 1.08;
+}
+
+.teamBlock span {
+  color: rgba(245, 248, 255, 0.74);
+}
+
+.score {
+  font-size: clamp(2.7rem, 5vw, 4.8rem);
+  line-height: 0.94;
+  font-weight: 900;
+  display: inline-flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.score small {
+  font-size: 0.45em;
+  opacity: 0.7;
+}
+
+.liveFoot {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statCard {
+  border-radius: 18px;
+  padding: 12px;
+  text-align: center;
+}
+
+.statCard span {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(245, 248, 255, 0.74);
+}
+
+.statCard strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.15rem;
+}
+
+.queueTime {
+  font-size: 2.6rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.queueTeams {
+  font-size: 1.6rem;
+  line-height: 1.18;
+  font-weight: 800;
+}
+
+.bracketLayout {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+}
+
+.roundColumn {
+  display: grid;
+  gap: 14px;
+}
+
+.roundLabel {
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(245, 248, 255, 0.7);
+  font-weight: 800;
+}
+
+.roundStack {
+  display: grid;
+  gap: 14px;
+}
+
+.bracketMeta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(245, 248, 255, 0.74);
+  font-weight: 800;
+}
+
+.entryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 1.05rem;
+}
+
+.entryRow:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.entryRow strong {
+  font-size: 1.5rem;
+}
+
+.championCard {
+  text-align: center;
+  align-self: center;
+  background: linear-gradient(145deg, rgba(123, 18, 71, 0.92), rgba(165, 34, 94, 0.82));
+}
+
+.championCard strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 2.1rem;
+  line-height: 1.05;
+}
+
+.standingsCard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.05rem;
+}
+
+.standingsCard th,
+.standingsCard td {
+  text-align: left;
+  padding: 10px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.standingsCard th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(245, 248, 255, 0.72);
+}
+
+.footer {
+  gap: 20px;
+}
+
+.progress {
+  flex: 1;
+  max-width: 320px;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.progressBar {
+  height: 100%;
+  background: linear-gradient(90deg, #66d08f, #82e4ab);
+  border-radius: inherit;
+}
+
+@media (max-width: 1080px) {
+  .liveGrid,
+  .queueGrid,
+  .standingsLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding: 18px 14px;
+  }
+
+  .header,
+  .slideHead,
+  .liveTeams,
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .metaStrip {
+    justify-content: flex-start;
+  }
+
+  .slides {
+    min-height: 920px;
+  }
+
+  .liveFoot {
+    grid-template-columns: 1fr;
+  }
+}

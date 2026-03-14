@@ -9,6 +9,15 @@ import {
 } from './lifecycleUi';
 import type { Format, TournamentLifecycleStatus, TournamentRecord } from './types';
 
+export type TournamentShareLink = {
+  id: string;
+  label: string;
+  url: string;
+  description: string;
+  qrFileSuffix: string;
+  authRequired?: boolean;
+};
+
 type FormatDirectoryPanelProps = {
   activeTournament: TournamentRecord | null;
   formats: Format[];
@@ -20,8 +29,7 @@ type FormatDirectoryPanelProps = {
   lifecycleStatusOptions: TournamentLifecycleStatus[];
   allowedLifecycleStatuses: (current: TournamentLifecycleStatus) => TournamentLifecycleStatus[];
   updateTournamentStatus: (tournamentId: string, status: TournamentLifecycleStatus) => void;
-  tournamentSignupLink: string;
-  tournamentCourtsideLink: string;
+  shareLinks: TournamentShareLink[];
   requestEditTournament: (tournamentId: string) => void;
 };
 
@@ -36,8 +44,7 @@ export function FormatDirectoryPanel({
   lifecycleStatusOptions,
   allowedLifecycleStatuses,
   updateTournamentStatus,
-  tournamentSignupLink,
-  tournamentCourtsideLink,
+  shareLinks,
   requestEditTournament,
 }: FormatDirectoryPanelProps) {
   const [copyStatus, setCopyStatus] = useState('');
@@ -45,22 +52,6 @@ export function FormatDirectoryPanel({
   const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
   const [qrStatuses, setQrStatuses] = useState<Record<string, 'idle' | 'loading' | 'error'>>({});
 
-  const shareLinks = [
-    {
-      id: 'signup',
-      label: 'Tournament Signup URL',
-      url: tournamentSignupLink,
-      description: 'Use this during registration and club signup phases.',
-      qrFileSuffix: 'signup',
-    },
-    {
-      id: 'courtside',
-      label: 'Public Courtside URL',
-      url: tournamentCourtsideLink,
-      description: 'No auth required. Use this for public display and live sharing.',
-      qrFileSuffix: 'courtside',
-    },
-  ];
   const activeShareLinks = shareLinks.filter((link) => link.url);
   const shareLinkFingerprint = activeShareLinks.map((link) => `${link.id}:${link.url}`).join('|');
 
@@ -232,7 +223,7 @@ export function FormatDirectoryPanel({
           <span style={{ display: 'grid', gap: 2, textAlign: 'left' }}>
             <strong style={{ fontSize: 13 }}>Share URLs</strong>
             <span style={{ color: '#5a6b64', fontSize: 12 }}>
-              {activeShareLinks.length} active now. Space reserved for two more views later.
+              {activeShareLinks.length} active now. This list is ready for more tournament-facing views.
             </span>
           </span>
           <span style={{ color: '#4a5c54', fontSize: 12, fontWeight: 700 }}>
@@ -260,7 +251,24 @@ export function FormatDirectoryPanel({
                   }}
                 >
                   <div style={{ display: 'grid', gap: 6 }}>
-                    <strong style={{ fontSize: 13 }}>{shareLink.label}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: 13 }}>{shareLink.label}</strong>
+                      {shareLink.authRequired ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: '#6a4b04',
+                            background: '#fff4ce',
+                            border: '1px solid #f1d58d',
+                            borderRadius: 999,
+                            padding: '3px 8px',
+                          }}
+                        >
+                          Admin auth required
+                        </span>
+                      ) : null}
+                    </div>
                     <input value={shareLink.url} readOnly style={{ ...field, background: '#f7faf8' }} />
                     <span style={{ color: '#5a6b64', fontSize: 12 }}>{shareLink.description}</span>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

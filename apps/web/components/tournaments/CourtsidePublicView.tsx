@@ -1,206 +1,22 @@
 'use client';
 
-import { startTransition, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { DEFAULT_API_BASE_URL } from '@leagueos/config';
 
 import styles from './CourtsidePublicView.module.css';
-
-type PublicTournament = {
-  id: number;
-  name: string;
-  status: string;
-  timezone: string;
-  schedule_start_at: string | null;
-  schedule_end_at: string | null;
-  publication_link: string | null;
-  venue_stream_link: string | null;
-};
-
-type PublicCourt = {
-  id: number;
-  name: string;
-  is_active: boolean;
-};
-
-type PublicRegistration = {
-  id: number;
-  player_id: number;
-  player_name: string;
-  status: string;
-};
-
-type PublicScore = {
-  score_a?: unknown;
-  score_b?: unknown;
-};
-
-type PublicMatch = {
-  id: number;
-  match_number: number;
-  stage_code: string;
-  group_code: string | null;
-  round_number: number | null;
-  round_label: string | null;
-  match_order_in_round: number | null;
-  status: string;
-  court_id: number | null;
-  court_name: string | null;
-  home_registration_id: number | null;
-  away_registration_id: number | null;
-  home_seed: number | null;
-  away_seed: number | null;
-  home_slot_source: string | null;
-  away_slot_source: string | null;
-  home_slot_group_code: string | null;
-  away_slot_group_code: string | null;
-  home_slot_group_rank: number | null;
-  away_slot_group_rank: number | null;
-  winner_registration_id: number | null;
-  loser_registration_id: number | null;
-  dependency_match_a_id: number | null;
-  dependency_match_b_id: number | null;
-  start_at: string | null;
-  end_at: string | null;
-  tentative_start_at: string | null;
-  tentative_end_at: string | null;
-  score_json: PublicScore;
-};
-
-type PublicGeneratedTeam = {
-  id: string;
-  name: string;
-  player_ids: string[];
-};
-
-type PublicFormat = {
-  id: number;
-  name: string;
-  format_type: 'SINGLES' | 'DOUBLES' | 'MIXED_DOUBLES';
-  status: string | null;
-  scheduling_model: string | null;
-  config_json: Record<string, unknown>;
-  schedule_generated_at: string | null;
-  schedule_published_at: string | null;
-  allowed_court_ids: number[];
-  registrations: PublicRegistration[];
-  matches: PublicMatch[];
-};
-
-type PublicCourtsidePayload = {
-  tournament: PublicTournament;
-  courts: PublicCourt[];
-  formats: PublicFormat[];
-  generated_at: string | null;
-};
-
-type DecoratedMatch = {
-  format: PublicFormat;
-  match: PublicMatch;
-  homeLabel: string;
-  awayLabel: string;
-};
-
-const LIVE_STATUSES = new Set(['IN_PROGRESS']);
-const UPCOMING_STATUSES = new Set(['SCHEDULED']);
-const COMPLETED_STATUSES = new Set(['COMPLETED', 'FINALIZED']);
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
-
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function readGeneratedTeams(format: PublicFormat): PublicGeneratedTeam[] {
-  const config = asObject(format.config_json) ?? {};
-  const pool = asObject(config.pool) ?? {};
-  const raw = Array.isArray(pool.generatedTeams) ? pool.generatedTeams : [];
-  return raw
-    .map((entry) => {
-      const item = asObject(entry);
-      if (!item) return null;
-      const id = typeof item.id === 'string' ? item.id : '';
-      const name = typeof item.name === 'string' ? item.name : '';
-      const playerIds = Array.isArray(item.playerIds) ? item.playerIds.map((value) => String(value)) : [];
-      if (!id || !name) return null;
-      return {
-        id,
-        name,
-        player_ids: playerIds,
-      };
-    })
-    .filter((entry): entry is PublicGeneratedTeam => entry !== null);
-}
-
-function matchMoment(match: PublicMatch): number {
-  const value = match.start_at ?? match.tentative_start_at ?? match.end_at ?? match.tentative_end_at;
-  if (!value) return Number.POSITIVE_INFINITY;
-  const parsed = new Date(value).getTime();
-  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
-}
-
-function scoreValue(raw: unknown): number | null {
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
-function formatTournamentDate(value: string | null, timezone: string, options: Intl.DateTimeFormatOptions): string {
-  if (!value) return 'TBD';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'TBD';
-  return new Intl.DateTimeFormat(undefined, { timeZone: timezone, ...options }).format(parsed);
-}
-
-function formatClock(timezone: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone: timezone,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date());
-}
-
-function formatTypeLabel(value: PublicFormat['format_type']): string {
-  return value.replaceAll('_', ' ');
-}
-
-function stageLabel(match: PublicMatch): string {
-  if (match.group_code) return `Group ${match.group_code}`;
-  if (match.round_label) return match.round_label;
-  return match.stage_code.replaceAll('_', ' ');
-}
-
-function registrationLabel(format: PublicFormat, registrationId: number | null): string {
-  if (!registrationId) return 'TBD';
-  const registration = format.registrations.find((entry) => entry.id === registrationId) ?? null;
-  if (!registration) return `R${registrationId}`;
-  if (format.format_type === 'SINGLES') return registration.player_name;
-  const team = readGeneratedTeams(format).find((entry) => entry.player_ids.includes(String(registration.player_id)));
-  return team?.name ?? registration.player_name;
-}
-
-function slotLabel(format: PublicFormat, match: PublicMatch, side: 'home' | 'away'): string {
-  const registrationId = side === 'home' ? match.home_registration_id : match.away_registration_id;
-  if (registrationId) return registrationLabel(format, registrationId);
-
-  const source = side === 'home' ? match.home_slot_source : match.away_slot_source;
-  const groupCode = side === 'home' ? match.home_slot_group_code : match.away_slot_group_code;
-  const groupRank = side === 'home' ? match.home_slot_group_rank : match.away_slot_group_rank;
-  const dependencyId = side === 'home' ? match.dependency_match_a_id : match.dependency_match_b_id;
-
-  if (source === 'GROUP_RANK' && groupCode && groupRank) return `${groupCode}${groupRank}`;
-  if (source === 'MATCH_WINNER' && dependencyId) return `Winner M${dependencyId}`;
-  return 'TBD';
-}
-
-function decorateMatch(format: PublicFormat, match: PublicMatch): DecoratedMatch {
-  return {
-    format,
-    match,
-    homeLabel: slotLabel(format, match, 'home'),
-    awayLabel: slotLabel(format, match, 'away'),
-  };
-}
+import {
+  COMPLETED_STATUSES,
+  LIVE_STATUSES,
+  UPCOMING_STATUSES,
+  featuredMatches,
+  formatClock,
+  formatTournamentDate,
+  formatTypeLabel,
+  matchMoment,
+  scoreValue,
+  stageLabel,
+  useTournamentPublicPayload,
+} from './publicTournamentViews';
 
 function matchStatusClass(status: string): string {
   if (LIVE_STATUSES.has(status)) return `${styles.matchBadge} ${styles.live}`;
@@ -215,23 +31,10 @@ function matchStatusLabel(status: string): string {
   return status.replaceAll('_', ' ');
 }
 
-function featuredMatches(formats: PublicFormat[]): DecoratedMatch[] {
-  return formats
-    .flatMap((format) => format.matches.map((match) => decorateMatch(format, match)))
-    .sort((left, right) => {
-      const leftLive = LIVE_STATUSES.has(left.match.status) ? 0 : UPCOMING_STATUSES.has(left.match.status) ? 1 : 2;
-      const rightLive = LIVE_STATUSES.has(right.match.status) ? 0 : UPCOMING_STATUSES.has(right.match.status) ? 1 : 2;
-      if (leftLive !== rightLive) return leftLive - rightLive;
-      return matchMoment(left.match) - matchMoment(right.match);
-    });
-}
-
 export function CourtsidePublicView() {
   const params = useParams<{ tournamentId: string }>();
   const tournamentId = Number.parseInt(params?.tournamentId ?? '', 10);
-  const [payload, setPayload] = useState<PublicCourtsidePayload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { payload, loading, error } = useTournamentPublicPayload(tournamentId, 20000);
   const [selectedFormatId, setSelectedFormatId] = useState<'all' | number>('all');
   const [clock, setClock] = useState('');
 
@@ -243,46 +46,6 @@ export function CourtsidePublicView() {
     }, 30000);
     return () => window.clearInterval(timer);
   }, [payload?.tournament.timezone]);
-
-  useEffect(() => {
-    if (!Number.isInteger(tournamentId)) {
-      setLoading(false);
-      setError('Invalid tournament URL.');
-      return;
-    }
-
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const response = await fetch(`${API_BASE}/tournaments/public/${tournamentId}/courtside`, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Unable to load courtside display (HTTP ${response.status}).`);
-        }
-        const nextPayload = (await response.json()) as PublicCourtsidePayload;
-        if (cancelled) return;
-        startTransition(() => {
-          setPayload(nextPayload);
-          setError('');
-          setLoading(false);
-        });
-      } catch (loadError) {
-        if (cancelled) return;
-        setLoading(false);
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load courtside display.');
-      }
-    }
-
-    void load();
-    const timer = window.setInterval(() => {
-      void load();
-    }, 20000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [tournamentId]);
 
   useEffect(() => {
     if (!payload) return;
