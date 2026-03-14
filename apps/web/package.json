@@ -9,7 +9,12 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "node --test components/addGameLogic.test.ts",
-    "test:e2e": "playwright test -c playwright.config.ts"
+    "test:e2e": "playwright test -c playwright.config.ts",
+    "test:e2e:all": "playwright test -c playwright.config.ts",
+    "test:e2e:global-admin": "playwright test -c playwright.config.ts e2e/global-admin",
+    "test:e2e:league-admin": "playwright test -c playwright.config.ts e2e/league-admin",
+    "test:e2e:player": "playwright test -c playwright.config.ts e2e/player",
+    "test:e2e:tournaments": "playwright test -c playwright.tournaments.config.ts"
   },
   "dependencies": {
     "@leagueos/api": "workspace:*",

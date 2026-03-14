@@ -1,22 +1,12 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { loginViaUi, resolveCredentialForRole } from '../../role-auth';
 
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
-const EMAIL = process.env.E2E_PLAYER_EMAIL || 'playerone@leagueos.local';
-const PASSWORD = process.env.E2E_PLAYER_PASSWORD || 'PlayerOne@123';
-
-async function apiLogin(request: APIRequestContext, email: string, password: string) {
-  const res = await request.post(`${API_BASE}/auth/login`, { data: { email, password } });
-  expect(res.ok()).toBeTruthy();
-  return (await res.json()) as { token: string };
-}
 
 test('LOS-106 proof: show_on_leaderboard preference persists via profile API', async ({ page, request }) => {
-  await page.goto('/');
-  await page.getByLabel('Email').fill(EMAIL);
-  await page.getByPlaceholder('Enter your password').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-
-  const auth = await apiLogin(request, EMAIL, PASSWORD);
+  const { creds, login } = await resolveCredentialForRole(request, 'USER');
+  await loginViaUi(page, creds);
+  const auth = { token: login.token };
 
   const setFalse = await request.put(`${API_BASE}/profile`, {
     headers: { Authorization: `Bearer ${auth.token}` },

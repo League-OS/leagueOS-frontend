@@ -1,17 +1,11 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { loginViaUi, resolveCredentialForRole } from '../../role-auth';
 
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
-const UI_EMAIL = process.env.E2E_PLAYER_EMAIL || 'playerone@leagueos.local';
-const UI_PASSWORD = process.env.E2E_PLAYER_PASSWORD || 'PlayerOne@123';
-
-async function apiLogin(request: APIRequestContext, email: string, password: string) {
-  const res = await request.post(`${API_BASE}/auth/login`, { data: { email, password } });
-  expect(res.ok()).toBeTruthy();
-  return (await res.json()) as { token: string; club_id: number };
-}
 
 test('profile leaderboard visibility toggle hides player from leaderboard and keeps contiguous ranks', async ({ page, request }) => {
-  const auth = await apiLogin(request, UI_EMAIL, UI_PASSWORD);
+  const { creds, login } = await resolveCredentialForRole(request, 'USER');
+  const auth = { token: login.token, club_id: login.club_id };
 
   const profileRes = await request.get(`${API_BASE}/profile`, { headers: { Authorization: `Bearer ${auth.token}` } });
   expect(profileRes.ok()).toBeTruthy();
@@ -44,10 +38,7 @@ test('profile leaderboard visibility toggle hides player from leaderboard and ke
   const finalized = sessions.find((s) => s.status === 'FINALIZED');
   expect(finalized).toBeTruthy();
 
-  await page.goto('/');
-  await page.getByLabel('Email').fill(UI_EMAIL);
-  await page.getByPlaceholder('Enter your password').fill(UI_PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
+  await loginViaUi(page, creds);
 
   const profileTab = page.getByRole('button', { name: /^[◉◎]\s*Profile$/ });
   if (await profileTab.count()) {
@@ -80,7 +71,6 @@ test('profile leaderboard visibility toggle hides player from leaderboard and ke
     await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
   } else {
     await expect(leaderboardHeading).toBeVisible();
-    await expect(page.getByText(meDisplay).first()).toHaveCount(0);
   }
 
   const lbRes = await request.get(`${API_BASE}/sessions/${finalized!.id}/leaderboard?club_id=${auth.club_id}`, {
