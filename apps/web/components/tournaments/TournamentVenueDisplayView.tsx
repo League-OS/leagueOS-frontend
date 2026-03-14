@@ -94,7 +94,7 @@ function buildBracketRounds(matches: DecoratedMatch[]): DecoratedMatch[][] {
 export function TournamentVenueDisplayView() {
   const params = useParams<{ tournamentId: string }>();
   const tournamentId = Number.parseInt(params?.tournamentId ?? '', 10);
-  const { payload, loading, error } = useTournamentPublicPayload(tournamentId, 15000);
+  const { payload, loading, error } = useTournamentPublicPayload(tournamentId, ROTATE_MS);
   const [slideIndex, setSlideIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [clock, setClock] = useState('');

@@ -244,7 +244,10 @@ export function findDefaultOperatorMatch(payload: PublicCourtsidePayload): Decor
     ?? null;
 }
 
-export function useTournamentPublicPayload(tournamentId: number, refreshMs = 20000): TournamentViewLoadState {
+export function useTournamentPublicPayload(
+  tournamentId: number,
+  refreshMs: number | null = 20000,
+): TournamentViewLoadState {
   const [payload, setPayload] = useState<PublicCourtsidePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -279,13 +282,15 @@ export function useTournamentPublicPayload(tournamentId: number, refreshMs = 200
     }
 
     void load();
-    const timer = window.setInterval(() => {
-      void load();
-    }, refreshMs);
+    const timer = refreshMs && refreshMs > 0
+      ? window.setInterval(() => {
+        void load();
+      }, refreshMs)
+      : null;
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
     };
   }, [tournamentId, refreshMs]);
 

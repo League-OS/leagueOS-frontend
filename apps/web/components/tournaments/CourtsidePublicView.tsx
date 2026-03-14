@@ -34,7 +34,7 @@ function matchStatusLabel(status: string): string {
 export function CourtsidePublicView() {
   const params = useParams<{ tournamentId: string }>();
   const tournamentId = Number.parseInt(params?.tournamentId ?? '', 10);
-  const { payload, loading, error } = useTournamentPublicPayload(tournamentId, 20000);
+  const { payload, loading, error } = useTournamentPublicPayload(tournamentId, 3000);
   const [selectedFormatId, setSelectedFormatId] = useState<'all' | number>('all');
   const [clock, setClock] = useState('');
 
