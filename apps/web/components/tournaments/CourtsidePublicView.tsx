@@ -22,6 +22,8 @@ import {
   type PublicScore,
 } from './publicTournamentViews';
 
+type MatchTab = 'live' | 'upcoming' | 'completed';
+
 function matchStatusClass(status: string): string {
   if (LIVE_STATUSES.has(status)) return `${styles.matchBadge} ${styles.live}`;
   if (COMPLETED_STATUSES.has(status)) return `${styles.matchBadge} ${styles.done}`;
@@ -121,6 +123,7 @@ export function CourtsidePublicView() {
   const tournamentId = Number.parseInt(params?.tournamentId ?? '', 10);
   const { payload, loading, error } = useTournamentPublicPayload(tournamentId, 3000);
   const [selectedFormatId, setSelectedFormatId] = useState<'all' | number>('all');
+  const [selectedMatchTab, setSelectedMatchTab] = useState<MatchTab>('live');
   const [clock, setClock] = useState('');
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
 
@@ -186,6 +189,20 @@ export function CourtsidePublicView() {
   const liveMatches = decorated.filter((entry) => LIVE_STATUSES.has(entry.match.status));
   const upcomingMatches = decorated.filter((entry) => UPCOMING_STATUSES.has(entry.match.status)).slice(0, 8);
   const completedMatches = decorated.filter((entry) => COMPLETED_STATUSES.has(entry.match.status)).slice(0, 6);
+  const activeTabMatches =
+    selectedMatchTab === 'live' ? liveMatches : selectedMatchTab === 'upcoming' ? upcomingMatches : completedMatches;
+  const matchTabConfig = {
+    live: { label: 'Live', count: liveMatches.length, emptyText: 'No matches are live right now.' },
+    upcoming: { label: 'Upcoming', count: upcomingMatches.length, emptyText: 'No upcoming public matches are queued right now.' },
+    completed: { label: 'Completed', count: completedMatches.length, emptyText: 'Results will populate here once matches finish.' },
+  } as const;
+  const activeTabConfig = matchTabConfig[selectedMatchTab];
+  const activeTabLabel =
+    selectedMatchTab === 'live'
+      ? 'Live Matches'
+      : selectedMatchTab === 'upcoming'
+        ? 'Upcoming Matches'
+        : 'Completed Matches';
 
   const courtSource = payload.courts.filter((court) => court.is_active);
   const courts = (courtSource.length ? courtSource : payload.courts).map((court) => {
@@ -212,7 +229,7 @@ export function CourtsidePublicView() {
             <span className={styles.kicker}>Tournament Courtside</span>
             <h1 className={styles.title}>{payload.tournament.name}</h1>
             <p className={styles.support}>
-              Mobile-first public scoreboard for players and spectators. Tap any live, queued, or completed match card for full detail.
+              Mobile-first public scoreboard for players and spectators. Tap any match card for full detail.
             </p>
           </div>
           <div className={styles.headerMeta}>
@@ -319,13 +336,48 @@ export function CourtsidePublicView() {
           </span>
         </section>
 
+        <section className={styles.tabNavSection}>
+          <div className={styles.tabNav} role="tablist" aria-label="Match view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedMatchTab === 'live'}
+              className={selectedMatchTab === 'live' ? `${styles.matchTab} ${styles.matchTabActive}` : styles.matchTab}
+              onClick={() => setSelectedMatchTab('live')}
+            >
+              Live
+              <span className={styles.matchTabCount}>{liveMatches.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedMatchTab === 'upcoming'}
+              className={selectedMatchTab === 'upcoming' ? `${styles.matchTab} ${styles.matchTabActive}` : styles.matchTab}
+              onClick={() => setSelectedMatchTab('upcoming')}
+            >
+              Upcoming
+              <span className={styles.matchTabCount}>{upcomingMatches.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedMatchTab === 'completed'}
+              className={selectedMatchTab === 'completed' ? `${styles.matchTab} ${styles.matchTabActive}` : styles.matchTab}
+              onClick={() => setSelectedMatchTab('completed')}
+            >
+              Completed
+              <span className={styles.matchTabCount}>{completedMatches.length}</span>
+            </button>
+          </div>
+        </section>
+
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h3>Live Now</h3>
-            <span>{liveMatches.length} active match{liveMatches.length === 1 ? '' : 'es'}</span>
+            <h3>{activeTabLabel}</h3>
+            <span>{activeTabConfig.count} match{activeTabConfig.count === 1 ? '' : 'es'}</span>
           </div>
           <div className={styles.matchStack}>
-            {liveMatches.length ? liveMatches.map((entry) => (
+            {activeTabMatches.length ? activeTabMatches.map((entry) => (
               <button
                 key={entry.match.id}
                 type="button"
@@ -337,22 +389,37 @@ export function CourtsidePublicView() {
                   <span className={styles.tapHint}>Tap for detail</span>
                 </div>
                 <div className={styles.cardMain}>
-                  <div className={styles.cardMeta}>{entry.format.name} · {stageLabel(entry.match)}</div>
-                  <div className={styles.scoreRow}>
-                    <span>{entry.homeLabel}</span>
-                    <strong>{scoreValue(entry.match.score_json?.score_a) ?? '-'}</strong>
+                  <div className={styles.cardMeta}>
+                    {entry.format.name} · {selectedMatchTab === 'upcoming'
+                      ? formatTournamentDate(entry.match.start_at ?? entry.match.tentative_start_at, payload.tournament.timezone, { hour: '2-digit', minute: '2-digit' }) || 'TBD'
+                      : selectedMatchTab === 'completed'
+                        ? winnerLabel(entry) || 'Winner pending'
+                        : stageLabel(entry.match)}
                   </div>
-                  <div className={styles.scoreRow}>
-                    <span>{entry.awayLabel}</span>
-                    <strong>{scoreValue(entry.match.score_json?.score_b) ?? '-'}</strong>
-                  </div>
+                  {selectedMatchTab === 'upcoming' ? (
+                    <>
+                      <div className={styles.teamList}>{entry.homeLabel}</div>
+                      <div className={styles.teamList}>{entry.awayLabel}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={styles.scoreRow}>
+                        <span>{entry.homeLabel}</span>
+                        <strong>{scoreValue(entry.match.score_json?.score_a) ?? '-'}</strong>
+                      </div>
+                      <div className={styles.scoreRow}>
+                        <span>{entry.awayLabel}</span>
+                        <strong>{scoreValue(entry.match.score_json?.score_b) ?? '-'}</strong>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className={styles.cardFooter}>
                   <span>{entry.match.court_name || `Court ${entry.match.court_id ?? 'TBD'}`}</span>
                   <span>Match {entry.match.match_number}</span>
                 </div>
               </button>
-            )) : <div className={styles.emptyInline}>No matches are live right now.</div>}
+            )) : <div className={styles.emptyInline}>{activeTabConfig.emptyText}</div>}
           </div>
         </section>
 
@@ -416,78 +483,6 @@ export function CourtsidePublicView() {
             })}
           </div>
         </section>
-
-        <div className={styles.contentGrid}>
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h3>Up Next</h3>
-              <span>Queued matches</span>
-            </div>
-            <div className={styles.matchStack}>
-              {upcomingMatches.length ? upcomingMatches.map((entry) => (
-                <button
-                  key={entry.match.id}
-                  type="button"
-                  className={styles.matchCard}
-                  onClick={() => setSelectedMatchId(entry.match.id)}
-                >
-                  <div className={styles.cardTop}>
-                    <span className={matchStatusClass(entry.match.status)}>{matchStatusLabel(entry.match.status)}</span>
-                    <span className={styles.cardMeta}>
-                      {formatTournamentDate(entry.match.start_at ?? entry.match.tentative_start_at, payload.tournament.timezone, { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <div className={styles.cardMain}>
-                    <div className={styles.cardMeta}>{entry.match.court_name || `Court ${entry.match.court_id ?? 'TBD'}`}</div>
-                    <div className={styles.teamList}>{entry.homeLabel}</div>
-                    <div className={styles.teamList}>{entry.awayLabel}</div>
-                  </div>
-                  <div className={styles.cardFooter}>
-                    <span>{entry.format.name}</span>
-                    <span>{stageLabel(entry.match)}</span>
-                  </div>
-                </button>
-              )) : <div className={styles.emptyInline}>No upcoming public matches are queued right now.</div>}
-            </div>
-          </section>
-
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h3>Recent Results</h3>
-              <span>Latest completed matches</span>
-            </div>
-            <div className={styles.matchStack}>
-              {completedMatches.length ? completedMatches.map((entry) => (
-                <button
-                  key={entry.match.id}
-                  type="button"
-                  className={styles.matchCard}
-                  onClick={() => setSelectedMatchId(entry.match.id)}
-                >
-                  <div className={styles.cardTop}>
-                    <span className={matchStatusClass(entry.match.status)}>{matchStatusLabel(entry.match.status)}</span>
-                    <span className={styles.tapHint}>Tap for detail</span>
-                  </div>
-                  <div className={styles.cardMain}>
-                    <div className={styles.cardMeta}>{entry.format.name} · {entry.match.court_name || `Court ${entry.match.court_id ?? 'TBD'}`}</div>
-                    <div className={styles.scoreRow}>
-                      <span>{entry.homeLabel}</span>
-                      <strong>{scoreValue(entry.match.score_json?.score_a) ?? '-'}</strong>
-                    </div>
-                    <div className={styles.scoreRow}>
-                      <span>{entry.awayLabel}</span>
-                      <strong>{scoreValue(entry.match.score_json?.score_b) ?? '-'}</strong>
-                    </div>
-                  </div>
-                  <div className={styles.cardFooter}>
-                    <span>{winnerLabel(entry) || 'Winner pending'}</span>
-                    <span>{stageLabel(entry.match)}</span>
-                  </div>
-                </button>
-              )) : <div className={styles.emptyInline}>Results will populate here once matches finish.</div>}
-            </div>
-          </section>
-        </div>
 
         <section className={styles.section}>
           <div className={styles.sectionHeader}>

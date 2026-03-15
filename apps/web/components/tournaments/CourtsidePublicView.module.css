@@ -352,6 +352,56 @@
   border-color: transparent;
 }
 
+.tabNavSection {
+  display: grid;
+  gap: 8px;
+}
+
+.tabNav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.matchTab {
+  appearance: none;
+  border: 1px solid rgba(19, 51, 111, 0.12);
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.matchTabActive {
+  color: #fff;
+  background: linear-gradient(135deg, var(--navy), var(--cobalt));
+  border-color: transparent;
+}
+
+.matchTabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: rgba(16, 28, 56, 0.14);
+}
+
+.matchTabActive .matchTabCount {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .sectionHeader h3 {
   font-size: 1.35rem;
 }
@@ -368,8 +418,7 @@
 
 .matchStack,
 .courtGrid,
-.formatGrid,
-.contentGrid {
+.formatGrid {
   display: grid;
   gap: 12px;
 }
@@ -542,10 +591,6 @@
   }
 
   .courtGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .contentGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
