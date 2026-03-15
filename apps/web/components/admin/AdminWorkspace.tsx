@@ -25,7 +25,7 @@ import {
   primaryBtn,
 } from './AdminShellParts';
 import type { AdminNavKey } from './AdminShellParts';
-import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
+import { adminPageTitle, buildAdminBreadcrumbs, buildSeasonPlayerStats, buildSessionStatsById, filterSeasonPlayerEntries, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
 
@@ -1022,6 +1022,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
           <SeasonDetailPanel
             season={selectedSeason}
             sessions={sessions.filter((s) => s.season_id === selectedSeason?.id)}
+            games={games}
+            participantsByGame={participantsByGame}
             players={players}
             leaderboardRows={seasonLeaderboardRows}
             leaderboardSession={seasonLeaderboardSession}
@@ -2215,6 +2217,8 @@ function SeasonsPanel(props: {
 function SeasonDetailPanel(props: {
   season: Season | null;
   sessions: Session[];
+  games: Game[];
+  participantsByGame: Record<number, GameParticipant[]>;
   players: Player[];
   onSessionCreate: () => Promise<void>;
   newSessionDate: string;
@@ -2236,6 +2240,8 @@ function SeasonDetailPanel(props: {
   const {
     season,
     sessions,
+    games,
+    participantsByGame,
     players,
     onSessionCreate,
     newSessionDate,
@@ -2254,12 +2260,91 @@ function SeasonDetailPanel(props: {
     onRenameSeason,
     onRenameSession,
   } = props;
+  const COLLAPSED_PLAYERS_ROW_COUNT = 10;
+  const COLLAPSED_LEADERBOARD_ROW_COUNT = 10;
+  const seasonPlayerStats = useMemo(() => buildSeasonPlayerStats({
+    players,
+    seasonFormat: season?.format ?? 'DOUBLES',
+    sessions,
+    games,
+    participantsByGame,
+    leaderboardRows,
+  }), [games, leaderboardRows, participantsByGame, players, season?.format, sessions]);
+
+  const sessionStatsById = useMemo(
+    () => buildSessionStatsById({ sessions, games, participantsByGame }),
+    [games, participantsByGame, sessions],
+  );
+  const playerSeasonEntries = useMemo(
+    () => players.map((p) => {
+      const playerStats = seasonPlayerStats.get(p.id) ?? { matchesPlayed: 0, eloScore: 1000 };
+      return {
+        id: p.id,
+        displayName: p.display_name,
+        matchesPlayed: playerStats.matchesPlayed,
+        playerStatus: p.player_type || '-',
+        eloScore: playerStats.eloScore,
+      };
+    }),
+    [players, seasonPlayerStats],
+  );
+  const leaderboardTableRows = useMemo(
+    () => leaderboardRows.map((row, i) => [
+      i + 1,
+      row.display_name,
+      row.season_elo_delta > 0 ? `+${row.season_elo_delta}` : String(row.season_elo_delta),
+      row.matches_played ?? 0,
+      row.matches_won,
+      row.total_points,
+      row.global_elo_score ?? 1000,
+    ]),
+    [leaderboardRows],
+  );
+
   const [showCreateSessionModal, setShowCreateSessionModal] = useState(false);
   const [newSessionEndTime, setNewSessionEndTime] = useState(() => defaultSessionTimes().endTimeHHMM);
   const [renamingSeasonName, setRenamingSeasonName] = useState(false);
   const [renameSeasonNameValue, setRenameSeasonNameValue] = useState('');
   const [renamingSessionId, setRenamingSessionId] = useState<number | null>(null);
   const [renameSessionValue, setRenameSessionValue] = useState('');
+  const [playersTableExpanded, setPlayersTableExpanded] = useState(false);
+  const [leaderboardTableExpanded, setLeaderboardTableExpanded] = useState(false);
+  const [selectedSeasonPlayerId, setSelectedSeasonPlayerId] = useState<number | ''>('');
+  const sectionToggleStyle = {
+    width: '100%',
+    border: '1px solid #bfd5cc',
+    borderRadius: 16,
+    background: '#f6fbf8',
+    color: '#1f3430',
+    padding: '12px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    cursor: 'pointer',
+    fontSize: 15,
+  } as const;
+  useEffect(() => {
+    setPlayersTableExpanded(false);
+    setLeaderboardTableExpanded(false);
+    setSelectedSeasonPlayerId('');
+  }, [season?.id]);
+  const filteredPlayerSeasonEntries = useMemo(
+    () => filterSeasonPlayerEntries(playerSeasonEntries, selectedSeasonPlayerId),
+    [playerSeasonEntries, selectedSeasonPlayerId],
+  );
+  const filteredPlayerSeasonRows = useMemo(
+    () => filteredPlayerSeasonEntries.map((entry) => [
+      entry.displayName,
+      entry.id,
+      entry.matchesPlayed,
+      entry.playerStatus,
+      entry.eloScore,
+    ]),
+    [filteredPlayerSeasonEntries],
+  );
+  const playersCountLabel = selectedSeasonPlayerId === ''
+    ? String(playerSeasonEntries.length)
+    : `${filteredPlayerSeasonEntries.length} of ${playerSeasonEntries.length}`;
   const openCreateSessionModal = () => {
     const defaults = defaultSessionTimes();
     setNewSessionDate(defaults.date);
@@ -2318,41 +2403,44 @@ function SeasonDetailPanel(props: {
       <AdminCard title="Sessions in Season" action={<button style={primaryBtn} onClick={openCreateSessionModal}>Add Session</button>}>
         <AdminTable
           columns={['Session Name', 'Session Date', 'Start Time', 'Status', 'Matches', 'Players']}
-          rows={sessions.map((s) => [
-            renamingSessionId === s.id ? (
-              <span key={`sess-rename-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  autoFocus
-                  value={renameSessionValue}
-                  onChange={(e) => setRenameSessionValue(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === 'Enter' && renameSessionValue.trim()) {
-                      await onRenameSession(s.id, renameSessionValue.trim());
-                      setRenamingSessionId(null);
-                    }
-                    if (e.key === 'Escape') setRenamingSessionId(null);
-                  }}
-                  style={{ fontSize: 13, border: '1.5px solid #0d9488', borderRadius: 5, padding: '2px 7px', minWidth: 130 }}
-                />
-                <button style={{ ...primaryBtn, padding: '2px 10px', fontSize: 12 }} onClick={async () => {
-                  if (!renameSessionValue.trim()) return;
-                  await onRenameSession(s.id, renameSessionValue.trim());
-                  setRenamingSessionId(null);
-                }}>✓</button>
-                <button style={{ ...outlineBtn, padding: '2px 8px', fontSize: 12 }} onClick={() => setRenamingSessionId(null)}>✗</button>
-              </span>
-            ) : (
-              <span key={`sess-link-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <Link href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>
-                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, padding: '1px 4px' }} title="Rename" onClick={() => { setRenameSessionValue(s.location || ''); setRenamingSessionId(s.id); }}>✏</button>
-              </span>
-            ),
-            fmtDate(s.session_date),
-            s.start_time_local,
-            s.status,
-            '-', // match count can be derived later from games
-            '-', // session player count can be derived later from participants
-          ])}
+          rows={sessions.map((s) => {
+            const sessionStats = sessionStatsById.get(s.id) ?? { matches: 0, players: 0 };
+            return [
+              renamingSessionId === s.id ? (
+                <span key={`sess-rename-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    autoFocus
+                    value={renameSessionValue}
+                    onChange={(e) => setRenameSessionValue(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && renameSessionValue.trim()) {
+                        await onRenameSession(s.id, renameSessionValue.trim());
+                        setRenamingSessionId(null);
+                      }
+                      if (e.key === 'Escape') setRenamingSessionId(null);
+                    }}
+                    style={{ fontSize: 13, border: '1.5px solid #0d9488', borderRadius: 5, padding: '2px 7px', minWidth: 130 }}
+                  />
+                  <button style={{ ...primaryBtn, padding: '2px 10px', fontSize: 12 }} onClick={async () => {
+                    if (!renameSessionValue.trim()) return;
+                    await onRenameSession(s.id, renameSessionValue.trim());
+                    setRenamingSessionId(null);
+                  }}>✓</button>
+                  <button style={{ ...outlineBtn, padding: '2px 8px', fontSize: 12 }} onClick={() => setRenamingSessionId(null)}>✗</button>
+                </span>
+              ) : (
+                <span key={`sess-link-${s.id}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Link href={`/admin/sessions/${s.id}`} style={{ color: '#0d9488', textDecoration: 'none', fontWeight: 700 }}>{s.location || `Session ${s.id}`}</Link>
+                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 12, padding: '1px 4px' }} title="Rename" onClick={() => { setRenameSessionValue(s.location || ''); setRenamingSessionId(s.id); }}>✏</button>
+                </span>
+              ),
+              fmtDate(s.session_date),
+              s.start_time_local,
+              s.status,
+              sessionStats.matches,
+              sessionStats.players,
+            ];
+          })}
         />
       </AdminCard>
       {showCreateSessionModal ? (
@@ -2411,10 +2499,37 @@ function SeasonDetailPanel(props: {
       ) : null}
 
       <AdminCard title="Players in Season" action={<Link href="/admin/players" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Manage Club Players</Link>}>
-        <AdminTable
-          columns={['Player Name', 'ID', 'Matches Played', 'Player Status', 'ELO Score']}
-          rows={players.map((p) => [p.display_name, p.id, '-', p.player_type || '-', '-'])}
-        />
+        {filteredPlayerSeasonRows.length > COLLAPSED_PLAYERS_ROW_COUNT ? (
+          <button style={sectionToggleStyle} onClick={() => setPlayersTableExpanded((prev) => !prev)}>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#1b2f2b' }}>Players in Season ({playersCountLabel})</span>
+            <span style={{ fontSize: 16 }}>{playersTableExpanded ? 'Collapse' : 'Expand'}</span>
+          </button>
+        ) : null}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginTop: 10 }}>
+          <select
+            value={selectedSeasonPlayerId}
+            onChange={(e) => setSelectedSeasonPlayerId(e.target.value ? Number(e.target.value) : '')}
+            style={field}
+          >
+            <option value="">Select club player</option>
+            {playerSeasonEntries.map((entry) => (
+              <option key={entry.id} value={entry.id}>{entry.displayName}</option>
+            ))}
+          </select>
+          <button
+            style={outlineBtn}
+            onClick={() => setSelectedSeasonPlayerId('')}
+            disabled={selectedSeasonPlayerId === ''}
+          >
+            Reset Players
+          </button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <AdminTable
+            columns={['Player Name', 'ID', 'Matches Played', 'Player Status', 'ELO Score']}
+            rows={playersTableExpanded ? filteredPlayerSeasonRows : filteredPlayerSeasonRows.slice(0, COLLAPSED_PLAYERS_ROW_COUNT)}
+          />
+        </div>
       </AdminCard>
 
       <AdminCard title="Season Leaderboard">
@@ -2424,18 +2539,18 @@ function SeasonDetailPanel(props: {
           </div>
         ) : null}
         {leaderboardRows.length ? (
-          <AdminTable
-            columns={['#', 'Player', 'Delta', 'Played', 'Won', 'Points', 'Global ELO']}
-            rows={leaderboardRows.map((row, i) => [
-              i + 1,
-              row.display_name,
-              row.season_elo_delta > 0 ? `+${row.season_elo_delta}` : String(row.season_elo_delta),
-              row.matches_played ?? 0,
-              row.matches_won,
-              row.total_points,
-              row.global_elo_score ?? 1000,
-            ])}
-          />
+          <>
+            {leaderboardTableRows.length > COLLAPSED_LEADERBOARD_ROW_COUNT ? (
+              <button style={sectionToggleStyle} onClick={() => setLeaderboardTableExpanded((prev) => !prev)}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: '#1b2f2b' }}>Season Leaderboard ({leaderboardTableRows.length})</span>
+                <span style={{ fontSize: 16 }}>{leaderboardTableExpanded ? 'Collapse' : 'Expand'}</span>
+              </button>
+            ) : null}
+            <AdminTable
+              columns={['#', 'Player', 'Delta', 'Played', 'Won', 'Points', 'Global ELO']}
+              rows={leaderboardTableRows.slice(0, leaderboardTableExpanded ? undefined : COLLAPSED_LEADERBOARD_ROW_COUNT)}
+            />
+          </>
         ) : (
           <AdminEmptyState title="No leaderboard data yet" description="Finalize at least one session in this season to populate leaderboard rankings." />
         )}

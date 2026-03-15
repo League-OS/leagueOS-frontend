@@ -1,4 +1,4 @@
-import type { Game, GameParticipant, Player, Season, Session } from '@leagueos/schemas';
+import type { Game, GameParticipant, LeaderboardEntry, Player, Season, Session } from '@leagueos/schemas';
 
 export type AdminPage =
   | 'dashboard'
@@ -66,6 +66,78 @@ export function countUniquePlayersInSessionGames(sessionGames: Game[], participa
   return new Set(
     sessionGames.flatMap((g) => (participantsByGame[g.id] ?? []).map((p) => p.player_id)),
   ).size;
+}
+
+export function buildSessionStatsById(args: {
+  sessions: Session[];
+  games: Game[];
+  participantsByGame: Record<number, GameParticipant[]>;
+}): Map<number, { matches: number; players: number }> {
+  const { sessions, games, participantsByGame } = args;
+  const groupedGames = new Map<number, Game[]>();
+  for (const game of games) {
+    const bucket = groupedGames.get(game.session_id);
+    if (bucket) bucket.push(game);
+    else groupedGames.set(game.session_id, [game]);
+  }
+  const statsBySessionId = new Map<number, { matches: number; players: number }>();
+  for (const session of sessions) {
+    const sessionGames = groupedGames.get(session.id) ?? [];
+    statsBySessionId.set(session.id, {
+      matches: sessionGames.length,
+      players: countUniquePlayersInSessionGames(sessionGames, participantsByGame),
+    });
+  }
+  return statsBySessionId;
+}
+
+export type SeasonPlayerEntry = {
+  id: number;
+  displayName: string;
+  matchesPlayed: number;
+  playerStatus: string;
+  eloScore: number;
+};
+
+export function filterSeasonPlayerEntries(entries: SeasonPlayerEntry[], selectedPlayerId: number | ''): SeasonPlayerEntry[] {
+  if (selectedPlayerId === '') return entries;
+  return entries.filter((entry) => entry.id === selectedPlayerId);
+}
+
+export function buildSeasonPlayerStats(args: {
+  players: Player[];
+  seasonFormat: Season['format'];
+  sessions: Session[];
+  games: Game[];
+  participantsByGame: Record<number, GameParticipant[]>;
+  leaderboardRows: LeaderboardEntry[];
+}): Map<number, { matchesPlayed: number; eloScore: number }> {
+  const { players, seasonFormat, sessions, games, participantsByGame, leaderboardRows } = args;
+  const seasonSessionIds = new Set(sessions.map((session) => session.id));
+  const matchesByPlayerId = new Map<number, number>();
+
+  for (const game of games) {
+    if (!seasonSessionIds.has(game.session_id)) continue;
+    const participantIds = new Set((participantsByGame[game.id] ?? []).map((participant) => participant.player_id));
+    for (const playerId of participantIds) {
+      matchesByPlayerId.set(playerId, (matchesByPlayerId.get(playerId) ?? 0) + 1);
+    }
+  }
+
+  const leaderboardByPlayerId = new Map(leaderboardRows.map((row) => [row.player_id, row]));
+  const stats = new Map<number, { matchesPlayed: number; eloScore: number }>();
+  for (const player of players) {
+    const leaderboardRow = leaderboardByPlayerId.get(player.id);
+    const initialElo =
+      seasonFormat === 'SINGLES' ? player.elo_initial_singles
+      : seasonFormat === 'MIXED_DOUBLES' ? player.elo_initial_mixed
+      : player.elo_initial_doubles;
+    stats.set(player.id, {
+      matchesPlayed: matchesByPlayerId.get(player.id) ?? leaderboardRow?.matches_played ?? 0,
+      eloScore: leaderboardRow?.global_elo_score ?? initialElo ?? 1000,
+    });
+  }
+  return stats;
 }
 
 /** Display label for game status in the admin Session Detail match table. */
