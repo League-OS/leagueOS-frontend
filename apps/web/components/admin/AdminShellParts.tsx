@@ -65,6 +65,8 @@ export function AdminTopbar({
   onSeasonChange,
   canSelectClub,
   showSeasonFilter = true,
+  notificationUnreadCount = 0,
+  onOpenNotifications,
   onRefresh,
   onLogout,
   loading,
@@ -80,6 +82,8 @@ export function AdminTopbar({
   onSeasonChange: (seasonId: number | null) => void;
   canSelectClub: boolean;
   showSeasonFilter?: boolean;
+  notificationUnreadCount?: number;
+  onOpenNotifications?: () => void;
   onRefresh: () => void;
   onLogout: () => void;
   loading: boolean;
@@ -117,6 +121,45 @@ export function AdminTopbar({
           </select>
         ) : null}
         <span style={roleBadge}>{roleLabel}</span>
+        {onOpenNotifications ? (
+          <button
+            style={{
+              ...outlineBtn,
+              position: 'relative',
+              minWidth: 42,
+              padding: '10px 12px',
+              fontSize: 18,
+              lineHeight: 1,
+            }}
+            onClick={onOpenNotifications}
+            aria-label="Open notifications"
+            title="Notifications"
+          >
+            <span aria-hidden="true">🔔</span>
+            {notificationUnreadCount > 0 ? (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  minWidth: 20,
+                  height: 20,
+                  padding: '0 6px',
+                  borderRadius: 999,
+                  background: '#dc2626',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  display: 'grid',
+                  placeItems: 'center',
+                  border: '2px solid #fff',
+                }}
+              >
+                {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
         <button style={outlineBtn} onClick={onRefresh} disabled={loading}>Refresh</button>
         <button style={outlineBtn} onClick={onLogout}>Logout</button>
       </div>

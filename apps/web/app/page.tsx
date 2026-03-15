@@ -11,7 +11,7 @@ import {
   DEFAULT_TIMEZONE,
   FEATURE_FLAGS,
 } from '@leagueos/config';
-import type { Club, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
+import type { Club, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, NotificationInboxItem, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import {
   combineSessionDateAndTimeToIso,
   listOpenSeasons,
@@ -21,6 +21,7 @@ import {
   LeaderboardView,
   type EloHistoryRow,
   type HomeGameRow,
+  type InboxNotificationRow,
   type PlayerTournamentRow,
   type ProfileStatSummary,
   type UpcomingRow,
@@ -153,6 +154,7 @@ export default function Page() {
   const [recentGames, setRecentGames] = useState<HomeGameRow[]>([]);
   const [allGames, setAllGames] = useState<HomeGameRow[]>([]);
   const [openTournaments, setOpenTournaments] = useState<PlayerTournamentRow[]>([]);
+  const [inboxNotifications, setInboxNotifications] = useState<InboxNotificationRow[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [allUpcomingSessions, setAllUpcomingSessions] = useState<UpcomingRow[]>([]);
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<number | null>(null);
@@ -170,6 +172,7 @@ export default function Page() {
     setProfile(null);
     setError(null);
     setSuccessMessage(null);
+    setInboxNotifications([]);
   }
 
   const enableTeamRanking = useMemo(
@@ -181,12 +184,13 @@ export default function Page() {
     setLoading(true);
     setError(null);
     try {
-      const [meRes, seasonsRes, playersRes, courtsRes, tournamentsRes] = await Promise.allSettled([
+      const [meRes, seasonsRes, playersRes, courtsRes, tournamentsRes, inboxRes] = await Promise.allSettled([
         client.profile(token),
         client.seasons(token, clubId),
         client.players(token, clubId),
         client.courts(token, clubId),
         client.tournaments(token, clubId),
+        client.notificationInbox(token, clubId),
       ]);
 
       if (meRes.status === 'fulfilled') {
@@ -264,6 +268,25 @@ export default function Page() {
         setOpenTournaments([]);
       }
 
+      if (inboxRes.status === 'fulfilled') {
+        setInboxNotifications(
+          inboxRes.value.map((row: NotificationInboxItem): InboxNotificationRow => ({
+            id: row.id,
+            title: row.title,
+            body: row.body,
+            isRead: row.is_read,
+            readAt: row.read_at ?? null,
+            createdAt: row.created_at,
+            createdByLabel: row.created_by_label,
+            attachmentFileName: row.attachment_file_name ?? null,
+            attachmentContentType: row.attachment_content_type ?? null,
+            attachmentSizeBytes: row.attachment_size_bytes ?? null,
+          })),
+        );
+      } else {
+        setInboxNotifications([]);
+      }
+
       const seasonList = seasonsRes.value;
       const seasonById = new Map<number, Season>(seasonList.map((season) => [season.id, season]));
       const activeSeasons = seasonList.filter((season) => season.is_active);
@@ -281,6 +304,7 @@ export default function Page() {
         setAllGames([]);
         setOpenTournaments([]);
         updateRecord({ existingGames: [] });
+        setInboxNotifications([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setProfileStats({
@@ -977,6 +1001,22 @@ export default function Page() {
     }
   }
 
+  async function handleUpdateProfileDetails(payload: { full_name?: string; display_name?: string }) {
+    if (!auth) return;
+    const previousProfile = profile;
+    try {
+      setError(null);
+      const updated = await client.updateProfile(auth.token, payload);
+      setProfile(updated);
+      setSuccessMessage('Profile settings updated.');
+    } catch (e) {
+      setProfile(previousProfile);
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to update profile settings.';
+      setError(msg);
+      throw new Error(msg);
+    }
+  }
+
   if (hydratingAuth) {
     return (
       <main
@@ -1032,6 +1072,7 @@ export default function Page() {
       recentGames={recentGames}
       allGames={allGames}
       openTournaments={openTournaments}
+      inboxNotifications={inboxNotifications}
       recordExistingGames={record.existingGames}
       upcomingSessions={upcomingSessions}
       allUpcomingSessions={allUpcomingSessions}
@@ -1056,6 +1097,26 @@ export default function Page() {
       onOpenSession={handleOpenRecordSession}
       onProfilePlayerChange={handleProfilePlayerChange}
       onToggleLeaderboardVisibility={handleToggleLeaderboardVisibility}
+      onUpdateProfileDetails={handleUpdateProfileDetails}
+      onMarkNotificationRead={async (notificationId) => {
+        if (!auth) return;
+        await client.markNotificationRead(auth.token, auth.clubId, notificationId);
+        setInboxNotifications((prev) => prev.map((item) => (
+          item.id === notificationId
+            ? { ...item, isRead: true, readAt: item.readAt ?? new Date().toISOString() }
+            : item
+        )));
+      }}
+      onMarkAllNotificationsRead={async () => {
+        if (!auth) return;
+        await client.markAllNotificationsRead(auth.token, auth.clubId);
+        const readAt = new Date().toISOString();
+        setInboxNotifications((prev) => prev.map((item) => ({ ...item, isRead: true, readAt })));
+      }}
+      onLoadNotificationAttachment={async (notificationId) => {
+        if (!auth) throw new Error('Not authenticated');
+        return client.fetchNotificationAttachment(auth.token, auth.clubId, notificationId);
+      }}
       onLogout={() => {
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem(PLAYER_STORAGE_AUTH);
@@ -1079,6 +1140,7 @@ export default function Page() {
         setRecentGames([]);
         setAllGames([]);
         setOpenTournaments([]);
+        setInboxNotifications([]);
         setUpcomingSessions([]);
         setAllUpcomingSessions([]);
         setSelectedProfilePlayerId(null);

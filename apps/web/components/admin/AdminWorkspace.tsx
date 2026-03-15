@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, LeagueOsApiClient } from '@leagueos/api';
 import { DEFAULT_API_BASE_URL, DEFAULT_CLUB_ID } from '@leagueos/config';
-import type { AdminUser, Club, ClubUser, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, Player, Profile, Season, Session } from '@leagueos/schemas';
+import type { AdminUser, Club, ClubUser, Court, FeatureFlag, Game, GameParticipant, LeaderboardEntry, NotificationInboxItem, NotificationSentItem, Player, Profile, Season, Session } from '@leagueos/schemas';
 import type { AuthState } from '../types';
 import { LoginView } from '../LoginView';
 import { canAccessAdmin, canManageClubs, toAdminEffectiveRole } from '../../lib/adminPermissions';
@@ -28,6 +28,7 @@ import type { AdminNavKey } from './AdminShellParts';
 import { adminPageTitle, buildAdminBreadcrumbs, countUniquePlayersInSessionGames, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
+import { SafeNotificationHtml } from '../lib/SafeNotificationHtml';
 import { TournamentsWorkspace } from './TournamentsWorkspace';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
@@ -206,6 +207,16 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
   const [lastPlayerInvite, setLastPlayerInvite] = useState<null | { email: string; temporary_password?: string | null; invite_link: string; status: string }>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [clubUsers, setClubUsers] = useState<ClubUser[]>([]);
+  const [adminInboxNotifications, setAdminInboxNotifications] = useState<NotificationInboxItem[]>([]);
+  const [sentNotifications, setSentNotifications] = useState<NotificationSentItem[]>([]);
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationBody, setNotificationBody] = useState('');
+  const [notificationAudienceType, setNotificationAudienceType] = useState<'ALL_USERS' | 'ROLE' | 'SELECTED_USERS'>('ALL_USERS');
+  const [notificationTargetRole, setNotificationTargetRole] = useState<'CLUB_ADMIN' | 'RECORDER' | 'USER'>('USER');
+  const [notificationSelectedUserIds, setNotificationSelectedUserIds] = useState<number[]>([]);
+  const [notificationAttachment, setNotificationAttachment] = useState<File | null>(null);
+  const [notificationAttachmentError, setNotificationAttachmentError] = useState<string | null>(null);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
@@ -244,6 +255,22 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     : ['dashboard', 'clubs', 'users', 'seasons', 'sessions', 'courts', 'tournaments', 'players'];
   const selectedSeason = seasons.find((s) => s.id === (seasonId ?? ctx.selectedSeasonId)) ?? null;
   const selectedSession = sessions.find((s) => s.id === sessionId) ?? null;
+  const selectedClub = clubs.find((club) => club.id === selectedClubId) ?? null;
+  const clubScopedUsers = adminUsers.filter((u) => (u.memberships ?? []).some((m) => m.club_id === selectedClubId));
+  const clubNotificationUsers = isGlobalAdmin
+    ? clubScopedUsers.map((u) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name || u.display_name || u.email,
+        role: (u.memberships ?? []).find((m) => m.club_id === selectedClubId)?.role ?? 'USER',
+      }))
+    : clubUsers.map((u) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name || u.email,
+        role: u.role_in_club,
+      }));
+  const adminUnreadNotificationCount = adminInboxNotifications.filter((item) => !item.is_read).length;
 
   const sessionsInSeason = useMemo(() => {
     const target = seasonId ?? ctx.selectedSeasonId;
@@ -328,13 +355,18 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       }
 
       if (me.role === 'GLOBAL_ADMIN') {
-        const [usersList, featureFlagList] = await Promise.all([
+        const [usersList, featureFlagList, scopedClubUsers, inboxRows, sentRows] = await Promise.all([
           client.adminUsers(effectiveToken).catch(() => [] as AdminUser[]),
           client.featureFlags(effectiveToken).catch(() => [] as FeatureFlag[]),
+          activeClubId > 0 ? client.clubUsers(effectiveToken, activeClubId).catch(() => [] as ClubUser[]) : Promise.resolve([] as ClubUser[]),
+          activeClubId > 0 ? client.notificationInbox(effectiveToken, activeClubId).catch(() => [] as NotificationInboxItem[]) : Promise.resolve([] as NotificationInboxItem[]),
+          activeClubId > 0 ? client.sentNotifications(effectiveToken, activeClubId).catch(() => [] as NotificationSentItem[]) : Promise.resolve([] as NotificationSentItem[]),
         ]);
         setAdminUsers(usersList);
         setFeatureFlags(featureFlagList);
-        setClubUsers([]);
+        setClubUsers(scopedClubUsers);
+        setAdminInboxNotifications(inboxRows);
+        setSentNotifications(sentRows);
         setPlayers([]);
         setCourts([]);
         setSeasons([]);
@@ -347,7 +379,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         return;
       }
 
-      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames, clubUsersList] = await Promise.all([
+      const [activePlayers, inactivePlayers, clubCourts, clubSeasons, clubSessions, clubGames, clubUsersList, inboxRows, sentRows] = await Promise.all([
         client.players(token, activeClubId, true),
         client.players(token, activeClubId, false).catch(() => [] as Player[]),
         client.courts(token, activeClubId),
@@ -355,6 +387,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         client.sessions(token, activeClubId),
         client.games(token, activeClubId, undefined, undefined, undefined, true).catch(() => [] as Game[]),
         client.clubUsers(token, activeClubId).catch(() => [] as ClubUser[]),
+        client.notificationInbox(token, activeClubId).catch(() => [] as NotificationInboxItem[]),
+        client.sentNotifications(token, activeClubId).catch(() => [] as NotificationSentItem[]),
       ]);
       const clubPlayers = mergeAdminPlayers(activePlayers, inactivePlayers);
 
@@ -365,6 +399,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setGames(clubGames);
       setAdminUsers([]);
       setClubUsers(clubUsersList);
+      setAdminInboxNotifications(inboxRows);
+      setSentNotifications(sentRows);
       setFeatureFlags([]);
       setNewSessionSeasonId((prev) => prev ?? clubSeasons[0]?.id ?? null);
 
@@ -410,6 +446,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
       setGames([]);
       setAdminUsers([]);
       setClubUsers([]);
+      setAdminInboxNotifications([]);
+      setSentNotifications([]);
       setFeatureFlags([]);
       setParticipantsByGame({});
       setSeasonLeaderboardRows([]);
@@ -502,6 +540,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     setGames([]);
     setAdminUsers([]);
     setClubUsers([]);
+    setAdminInboxNotifications([]);
+    setSentNotifications([]);
     setFeatureFlags([]);
     setParticipantsByGame({});
     setError(null);
@@ -644,6 +684,7 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
     : [];
 
   const showClubSelector = role === 'GLOBAL_ADMIN' && page !== 'clubs';
+  const canOpenNotifications = selectedClubId > 0;
 
   return (
     <main style={adminPageShell}>
@@ -661,6 +702,8 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
           onSeasonChange={(id) => setCtx((prev) => ({ ...prev, selectedSeasonId: id }))}
           canSelectClub={showClubSelector}
           showSeasonFilter={!isGlobalAdmin}
+          notificationUnreadCount={adminUnreadNotificationCount}
+          onOpenNotifications={canOpenNotifications ? () => setShowNotificationsPanel(true) : undefined}
           onRefresh={() => void refresh()}
           onLogout={logout}
           loading={loading}
@@ -668,6 +711,62 @@ export function AdminWorkspace({ page, seasonId, sessionId }: Props) {
         <AdminBreadcrumbs items={breadcrumbs} />
         {error ? <div style={adminAlertError}>{error}</div> : null}
         {success ? <div style={adminAlertSuccess}>{success}</div> : null}
+        <NotificationCenterModal
+          isOpen={showNotificationsPanel}
+          onClose={() => setShowNotificationsPanel(false)}
+          selectedClubLabel={selectedClub?.name ?? `Club ${selectedClubId}`}
+          adminInboxNotifications={adminInboxNotifications}
+          unreadCount={adminUnreadNotificationCount}
+          sentNotifications={sentNotifications}
+          clubNotificationUsers={clubNotificationUsers}
+          notificationTitle={notificationTitle}
+          setNotificationTitle={setNotificationTitle}
+          notificationBody={notificationBody}
+          setNotificationBody={setNotificationBody}
+          notificationAudienceType={notificationAudienceType}
+          setNotificationAudienceType={setNotificationAudienceType}
+          notificationTargetRole={notificationTargetRole}
+          setNotificationTargetRole={setNotificationTargetRole}
+          notificationSelectedUserIds={notificationSelectedUserIds}
+          setNotificationSelectedUserIds={setNotificationSelectedUserIds}
+          notificationAttachment={notificationAttachment}
+          setNotificationAttachment={setNotificationAttachment}
+          notificationAttachmentError={notificationAttachmentError}
+          setNotificationAttachmentError={setNotificationAttachmentError}
+          onCreateNotification={async (payload) => {
+            await client.createNotification(auth!.token, selectedClubId, payload);
+            setNotificationTitle('');
+            setNotificationBody('');
+            setNotificationAudienceType('ALL_USERS');
+            setNotificationTargetRole('USER');
+            setNotificationSelectedUserIds([]);
+            setNotificationAttachment(null);
+            setNotificationAttachmentError(null);
+            setSuccess('Notification sent.');
+            const [inboxRows, sentRows] = await Promise.all([
+              client.notificationInbox(auth!.token, selectedClubId).catch(() => [] as NotificationInboxItem[]),
+              client.sentNotifications(auth!.token, selectedClubId).catch(() => [] as NotificationSentItem[]),
+            ]);
+            setAdminInboxNotifications(inboxRows);
+            setSentNotifications(sentRows);
+          }}
+          onMarkNotificationRead={async (notificationId) => {
+            if (!auth) return;
+            await client.markNotificationRead(auth.token, selectedClubId, notificationId);
+            const readAt = new Date().toISOString();
+            setAdminInboxNotifications((prev) => prev.map((item) => (
+              item.id === notificationId
+                ? { ...item, is_read: true, read_at: item.read_at ?? readAt }
+                : item
+            )));
+          }}
+          onMarkAllNotificationsRead={async () => {
+            if (!auth) return;
+            await client.markAllNotificationsRead(auth.token, selectedClubId);
+            const readAt = new Date().toISOString();
+            setAdminInboxNotifications((prev) => prev.map((item) => ({ ...item, is_read: true, read_at: readAt })));
+          }}
+        />
 
         {page === 'dashboard' ? (
           <DashboardPanel clubs={clubs} players={players} courts={courts} seasons={seasons} sessions={sessions} />
@@ -1450,6 +1549,310 @@ function ClubsPanel({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+
+function NotificationCenterModal(props: {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedClubLabel: string;
+  adminInboxNotifications: NotificationInboxItem[];
+  unreadCount: number;
+  sentNotifications: NotificationSentItem[];
+  clubNotificationUsers: Array<{ id: number; email: string; full_name: string; role: string }>;
+  notificationTitle: string;
+  setNotificationTitle: (v: string) => void;
+  notificationBody: string;
+  setNotificationBody: (v: string) => void;
+  notificationAudienceType: 'ALL_USERS' | 'ROLE' | 'SELECTED_USERS';
+  setNotificationAudienceType: (v: 'ALL_USERS' | 'ROLE' | 'SELECTED_USERS') => void;
+  notificationTargetRole: 'CLUB_ADMIN' | 'RECORDER' | 'USER';
+  setNotificationTargetRole: (v: 'CLUB_ADMIN' | 'RECORDER' | 'USER') => void;
+  notificationSelectedUserIds: number[];
+  setNotificationSelectedUserIds: (v: number[]) => void;
+  notificationAttachment: File | null;
+  setNotificationAttachment: (v: File | null) => void;
+  notificationAttachmentError: string | null;
+  setNotificationAttachmentError: (v: string | null) => void;
+  onCreateNotification: (payload: {
+    title: string;
+    body: string;
+    audience_type: 'ALL_USERS' | 'ROLE' | 'SELECTED_USERS';
+    target_role?: 'CLUB_ADMIN' | 'RECORDER' | 'USER';
+    user_ids?: number[];
+    attachment?: File | null;
+  }) => Promise<void>;
+  onMarkNotificationRead: (notificationId: number) => Promise<void>;
+  onMarkAllNotificationsRead: () => Promise<void>;
+}) {
+  const {
+    isOpen,
+    onClose,
+    selectedClubLabel,
+    adminInboxNotifications,
+    unreadCount,
+    sentNotifications,
+    clubNotificationUsers,
+    notificationTitle,
+    setNotificationTitle,
+    notificationBody,
+    setNotificationBody,
+    notificationAudienceType,
+    setNotificationAudienceType,
+    notificationTargetRole,
+    setNotificationTargetRole,
+    notificationSelectedUserIds,
+    setNotificationSelectedUserIds,
+    notificationAttachment,
+    setNotificationAttachment,
+    notificationAttachmentError,
+    setNotificationAttachmentError,
+    onCreateNotification,
+    onMarkNotificationRead,
+    onMarkAllNotificationsRead,
+  } = props;
+  const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+
+  function handleNotificationAttachmentFile(file: File | null, resetInput?: HTMLInputElement | null) {
+    if (!file) {
+      setNotificationAttachment(null);
+      setNotificationAttachmentError(null);
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      setNotificationAttachment(null);
+      setNotificationAttachmentError('Attachment must be 500KB or smaller.');
+      if (resetInput) resetInput.value = '';
+      return;
+    }
+    const isAllowed = file.type.startsWith('image/') || file.type === 'application/pdf';
+    if (!isAllowed) {
+      setNotificationAttachment(null);
+      setNotificationAttachmentError('Only image files and PDFs are supported.');
+      if (resetInput) resetInput.value = '';
+      return;
+    }
+    setNotificationAttachment(file);
+    setNotificationAttachmentError(null);
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.35)', display: 'grid', placeItems: 'center', zIndex: 1100, padding: 16 }}>
+      <div style={{ width: 'min(1100px, 100%)', maxHeight: 'min(90vh, 920px)', overflow: 'auto', background: '#fff', border: '1px solid #dbe3ef', borderRadius: 18, padding: 18, display: 'grid', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <h2 style={{ margin: 0, color: '#0f172a', fontSize: 24 }}>Notifications</h2>
+            <div style={{ marginTop: 4, color: '#64748b', fontSize: 14 }}>
+              Send targeted messages to {selectedClubLabel} members and review inbox activity.
+            </div>
+          </div>
+          <button style={outlineBtn} onClick={onClose}>Close</button>
+        </div>
+
+        <AdminCard
+          title={`Inbox${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+          action={<button style={outlineBtn} disabled={unreadCount === 0} onClick={() => void onMarkAllNotificationsRead()}>Mark all read</button>}
+        >
+          {adminInboxNotifications.length ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {adminInboxNotifications.slice(0, 8).map((item) => (
+                <div key={item.id} style={{ border: item.is_read ? '1px solid #dbe3ef' : '1px solid #a7f3d0', borderRadius: 12, padding: 12, background: item.is_read ? '#fff' : '#f0fdf4' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#0f172a', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span>{item.title}</span>
+                        {!item.is_read ? <span style={{ fontSize: 11, fontWeight: 800, color: '#047857', background: '#dcfce7', padding: '3px 8px', borderRadius: 999 }}>NEW</span> : null}
+                      </div>
+                      <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                        {fmtDateTime(item.created_at)} · {item.created_by_label}
+                      </div>
+                    </div>
+                    {!item.is_read ? <button style={outlineBtn} onClick={() => void onMarkNotificationRead(item.id)}>Mark read</button> : null}
+                  </div>
+                  <SafeNotificationHtml
+                    html={item.body}
+                    style={{ marginTop: 10, color: '#334155', lineHeight: 1.6 }}
+                  />
+                  {item.attachment_file_name ? (
+                    <div style={{ marginTop: 10, color: '#1d4ed8', fontSize: 12, fontWeight: 700 }}>
+                      Attachment: {item.attachment_file_name}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <AdminEmptyState title="No messages yet" description="Club and system notifications sent to this admin account will appear here." />
+          )}
+        </AdminCard>
+
+        <AdminCard title={`Message ${selectedClubLabel} members`}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Title</span>
+              <input value={notificationTitle} onChange={(e) => setNotificationTitle(e.target.value)} style={field} placeholder="e.g. Session moved to Court 2" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Message</span>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsAttachmentDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setIsAttachmentDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsAttachmentDragOver(false);
+                  const file = e.dataTransfer.files?.[0] ?? null;
+                  handleNotificationAttachmentFile(file);
+                }}
+                style={{
+                  borderRadius: 10,
+                  border: isAttachmentDragOver ? '2px dashed #14b8a6' : '1px dashed transparent',
+                  background: isAttachmentDragOver ? '#ecfeff' : 'transparent',
+                  padding: isAttachmentDragOver ? 6 : 0,
+                  transition: 'border-color .15s ease, background .15s ease',
+                }}
+              >
+                <textarea
+                  value={notificationBody}
+                  onChange={(e) => setNotificationBody(e.target.value)}
+                  style={{ ...field, minHeight: 120, resize: 'vertical', width: '100%' }}
+                  placeholder="Write the message club members should receive. You can also drag and drop an image or PDF here."
+                />
+              </div>
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                HTML is supported. Allowed tags: p, br, strong, em, u, ul, ol, li, blockquote, code, pre, h1-h3, and links.
+              </span>
+              <span style={{ fontSize: 12, color: isAttachmentDragOver ? '#0f766e' : '#64748b', fontWeight: isAttachmentDragOver ? 700 : 500 }}>
+                Drop an image or PDF into the message area to attach it.
+              </span>
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>Attachment (optional)</span>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => {
+                  handleNotificationAttachmentFile(e.target.files?.[0] ?? null, e.currentTarget);
+                }}
+                style={field}
+              />
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                Upload a tournament poster or PDF handout. Max size 500KB.
+              </span>
+              {notificationAttachment ? (
+                <div style={{ fontSize: 12, color: '#0f766e', fontWeight: 700 }}>
+                  Attached: {notificationAttachment.name} ({Math.max(1, Math.round(notificationAttachment.size / 1024))}KB)
+                </div>
+              ) : null}
+              {notificationAttachmentError ? (
+                <div style={{ fontSize: 12, color: '#b91c1c', fontWeight: 700 }}>{notificationAttachmentError}</div>
+              ) : null}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '220px 220px', gap: 10 }}>
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Audience</span>
+                <select
+                  value={notificationAudienceType}
+                  onChange={(e) => {
+                    const next = e.target.value as 'ALL_USERS' | 'ROLE' | 'SELECTED_USERS';
+                    setNotificationAudienceType(next);
+                    if (next !== 'ROLE') setNotificationTargetRole('USER');
+                    if (next !== 'SELECTED_USERS') setNotificationSelectedUserIds([]);
+                  }}
+                  style={field}
+                >
+                  <option value="ALL_USERS">All club users</option>
+                  <option value="ROLE">By role</option>
+                  <option value="SELECTED_USERS">Selected users</option>
+                </select>
+              </label>
+              {notificationAudienceType === 'ROLE' ? (
+                <label style={{ display: 'grid', gap: 4 }}>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>Role</span>
+                  <select value={notificationTargetRole} onChange={(e) => setNotificationTargetRole(e.target.value as 'CLUB_ADMIN' | 'RECORDER' | 'USER')} style={field}>
+                    <option value="USER">USER</option>
+                    <option value="RECORDER">RECORDER</option>
+                    <option value="CLUB_ADMIN">CLUB_ADMIN</option>
+                  </select>
+                </label>
+              ) : null}
+            </div>
+            {notificationAudienceType === 'SELECTED_USERS' ? (
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b' }}>Selected users</span>
+                <select
+                  multiple
+                  value={notificationSelectedUserIds.map(String)}
+                  onChange={(e) => {
+                    const ids = Array.from(e.target.selectedOptions).map((option) => Number(option.value));
+                    setNotificationSelectedUserIds(ids);
+                  }}
+                  style={{ ...field, minHeight: 160 }}
+                >
+                  {clubNotificationUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.full_name} · {user.email} · {user.role}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                style={primaryBtn}
+                disabled={!notificationTitle.trim() || !notificationBody.trim() || Boolean(notificationAttachmentError) || (notificationAudienceType === 'SELECTED_USERS' && notificationSelectedUserIds.length === 0)}
+                onClick={() => void onCreateNotification({
+                  title: notificationTitle.trim(),
+                  body: notificationBody.trim(),
+                  audience_type: notificationAudienceType,
+                  target_role: notificationAudienceType === 'ROLE' ? notificationTargetRole : undefined,
+                  user_ids: notificationAudienceType === 'SELECTED_USERS' ? notificationSelectedUserIds : undefined,
+                  attachment: notificationAttachment,
+                })}
+              >
+                Send Message
+              </button>
+            </div>
+          </div>
+        </AdminCard>
+
+        <AdminCard title="Sent Notifications">
+          {sentNotifications.length ? (
+            <AdminTable
+              columns={['Title', 'Audience', 'Recipients', 'Unread', 'Sent']}
+              rows={sentNotifications.slice(0, 12).map((item) => [
+                <div key={`title-${item.id}`} style={{ display: 'grid', gap: 4 }}>
+                  <strong style={{ color: '#0f172a' }}>{item.title}</strong>
+                  <SafeNotificationHtml
+                    html={item.body}
+                    style={{ color: '#64748b', fontSize: 12, maxWidth: 420 }}
+                  />
+                  {item.attachment_file_name ? (
+                    <span style={{ color: '#1d4ed8', fontSize: 12, fontWeight: 700 }}>
+                      Attachment: {item.attachment_file_name}
+                    </span>
+                  ) : null}
+                </div>,
+                item.audience_type === 'ROLE' ? `Role: ${item.target_role}` : item.audience_type === 'SELECTED_USERS' ? 'Selected users' : 'All users',
+                item.recipient_count,
+                item.unread_count,
+                fmtDateTime(item.created_at),
+              ])}
+            />
+          ) : (
+            <AdminEmptyState title="No sent notifications" description="Messages you send to club members will appear here with recipient and unread counts." />
+          )}
+        </AdminCard>
+      </div>
     </div>
   );
 }
