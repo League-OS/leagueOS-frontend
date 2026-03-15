@@ -1,5 +1,6 @@
 {
   "name": "leagueos-frontend",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "scripts": {
@@ -8,7 +9,8 @@
     "dev:mobile": "turbo run dev --filter=@leagueos/mobile",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "version:sync": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
     "turbo": "^2.1.3",
