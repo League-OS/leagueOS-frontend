@@ -116,6 +116,40 @@ export const featureFlagSchema = z.object({
   updated_by_email: z.string().nullable().optional(),
 });
 
+export const notificationInboxItemSchema = z.object({
+  id: z.number(),
+  club_id: z.number(),
+  title: z.string(),
+  body: z.string(),
+  audience_type: z.enum(['ALL_USERS', 'ROLE', 'SELECTED_USERS']),
+  target_role: clubRoleSchema.nullable().optional(),
+  created_at: z.string(),
+  created_by_user_id: z.number().nullable().optional(),
+  created_by_label: z.string(),
+  is_read: z.boolean(),
+  read_at: z.string().nullable().optional(),
+  attachment_file_name: z.string().nullable().optional(),
+  attachment_content_type: z.string().nullable().optional(),
+  attachment_size_bytes: z.number().nullable().optional(),
+});
+
+export const notificationSentItemSchema = z.object({
+  id: z.number(),
+  club_id: z.number(),
+  title: z.string(),
+  body: z.string(),
+  audience_type: z.enum(['ALL_USERS', 'ROLE', 'SELECTED_USERS']),
+  target_role: clubRoleSchema.nullable().optional(),
+  created_at: z.string(),
+  created_by_user_id: z.number().nullable().optional(),
+  created_by_label: z.string(),
+  recipient_count: z.number(),
+  unread_count: z.number(),
+  attachment_file_name: z.string().nullable().optional(),
+  attachment_content_type: z.string().nullable().optional(),
+  attachment_size_bytes: z.number().nullable().optional(),
+});
+
 export const profileSchema = z.object({
   id: z.number(),
   email: z.string(),
@@ -223,6 +257,8 @@ export type Session = z.infer<typeof sessionSchema>;
 export type LeaderboardEntry = z.infer<typeof leaderboardEntrySchema>;
 export type TeamLeaderboardEntry = z.infer<typeof teamLeaderboardEntrySchema>;
 export type FeatureFlag = z.infer<typeof featureFlagSchema>;
+export type NotificationInboxItem = z.infer<typeof notificationInboxItemSchema>;
+export type NotificationSentItem = z.infer<typeof notificationSentItemSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Club = z.infer<typeof clubSchema>;
 export type AdminUser = z.infer<typeof adminUserSchema>;

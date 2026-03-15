@@ -1,6 +1,8 @@
 import type { RuntimeConfig } from '@leagueos/config';
 import {
   featureFlagSchema,
+  notificationInboxItemSchema,
+  notificationSentItemSchema,
   authResponseSchema,
   adminUserSchema,
   clubUserSchema,
@@ -18,6 +20,8 @@ import {
   sessionSchema,
   type AuthResponse,
   type FeatureFlag,
+  type NotificationInboxItem,
+  type NotificationSentItem,
   type AdminUser,
   type ClubUser,
   type Club,
@@ -42,6 +46,7 @@ type RequestOptions = {
   token?: string;
   clubId?: number;
   body?: unknown;
+  headers?: Record<string, string>;
 };
 
 export type Tournament = {
@@ -226,16 +231,21 @@ export class LeagueOsApiClient {
       url.searchParams.set(key, String(value));
     }
 
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(options.headers ?? {}),
     };
+
+    if (!isFormData && options.body !== undefined && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (options.token) headers.Authorization = `Bearer ${options.token}`;
 
     const res = await fetch(url.toString(), {
       method: options.method ?? 'GET',
       headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: options.body === undefined ? undefined : (isFormData ? options.body as FormData : JSON.stringify(options.body)),
     });
 
     if (!res.ok) {
@@ -274,6 +284,62 @@ export class LeagueOsApiClient {
     }
 
     return (await res.json()) as T;
+  }
+
+  private async requestBlob(
+    path: string,
+    options: RequestOptions = {},
+  ): Promise<{ blob: Blob; contentType: string | null; fileName: string | null }> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    const query = options.query ?? {};
+
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined) continue;
+      url.searchParams.set(key, String(value));
+    }
+
+    const headers: Record<string, string> = {
+      ...(options.headers ?? {}),
+    };
+    if (options.token) headers.Authorization = `Bearer ${options.token}`;
+
+    const res = await fetch(url.toString(), {
+      method: options.method ?? 'GET',
+      headers,
+    });
+
+    if (!res.ok) {
+      const raw = await res.text();
+      let parsed: unknown = raw;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        // keep raw string if not JSON
+      }
+      const detail = (parsed as { detail?: unknown })?.detail;
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        const d = detail as { code?: string; message?: string };
+        throw new ApiError({
+          status: res.status,
+          code: d.code,
+          message: d.message ?? `API ${res.status} ${res.statusText}`,
+          detail,
+        });
+      }
+      throw new ApiError({
+        status: res.status,
+        message: typeof parsed === 'string' ? parsed : `API ${res.status} ${res.statusText}`,
+        detail: parsed,
+      });
+    }
+
+    const disposition = res.headers.get('content-disposition') ?? '';
+    const fileNameMatch = disposition.match(/filename=\"?([^\";]+)\"?/i);
+    return {
+      blob: await res.blob(),
+      contentType: res.headers.get('content-type'),
+      fileName: fileNameMatch?.[1] ?? null,
+    };
   }
 
   async login(input: LoginRequest): Promise<AuthResponse> {
@@ -363,6 +429,82 @@ export class LeagueOsApiClient {
       body: { enabled },
     });
     return featureFlagSchema.parse(data);
+  }
+
+  async notificationInbox(token: string, clubId: number): Promise<NotificationInboxItem[]> {
+    const data = await this.request<unknown[]>('/notifications/inbox', {
+      token,
+      query: { club_id: clubId },
+    });
+    return data.map((d) => notificationInboxItemSchema.parse(d));
+  }
+
+  async markNotificationRead(token: string, clubId: number, notificationId: number): Promise<{ id: number; is_read: boolean; read_at?: string | null }> {
+    return this.request<{ id: number; is_read: boolean; read_at?: string | null }>(`/notifications/${notificationId}/read`, {
+      method: 'POST',
+      token,
+      query: { club_id: clubId },
+    });
+  }
+
+  async markAllNotificationsRead(token: string, clubId: number): Promise<{ ok: boolean; updated_count: number }> {
+    return this.request<{ ok: boolean; updated_count: number }>('/notifications/read-all', {
+      method: 'POST',
+      token,
+      query: { club_id: clubId },
+    });
+  }
+
+  async sentNotifications(token: string, clubId: number): Promise<NotificationSentItem[]> {
+    const data = await this.request<unknown[]>('/notifications/sent', {
+      token,
+      query: { club_id: clubId },
+    });
+    return data.map((d) => notificationSentItemSchema.parse(d));
+  }
+
+  async createNotification(
+    token: string,
+    clubId: number,
+    payload: {
+      title: string;
+      body: string;
+      audience_type: 'ALL_USERS' | 'ROLE' | 'SELECTED_USERS';
+      target_role?: 'GLOBAL_ADMIN' | 'CLUB_ADMIN' | 'RECORDER' | 'USER' | null;
+      user_ids?: number[];
+      attachment?: File | null;
+    },
+  ): Promise<NotificationSentItem> {
+    const body = payload.attachment
+      ? (() => {
+          const form = new FormData();
+          form.append('title', payload.title);
+          form.append('body', payload.body);
+          form.append('audience_type', payload.audience_type);
+          if (payload.target_role) form.append('target_role', payload.target_role);
+          if (payload.user_ids?.length) form.append('user_ids', JSON.stringify(payload.user_ids));
+          form.append('attachment', payload.attachment);
+          return form;
+        })()
+      : payload;
+    const data = await this.request<unknown>('/notifications', {
+      method: 'POST',
+      token,
+      query: { club_id: clubId },
+      body,
+    });
+    return notificationSentItemSchema.parse(data);
+  }
+
+  async fetchNotificationAttachment(
+    token: string,
+    clubId: number,
+    notificationId: number,
+  ): Promise<{ blob: Blob; contentType: string | null; fileName: string | null }> {
+    return this.requestBlob(`/notifications/${notificationId}/attachment`, {
+      token,
+      query: { club_id: clubId },
+    });
   }
 
   async clubs(token: string): Promise<Club[]> {

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@leagueos/api';
 import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import { floorToFiveMinuteIncrement, validateAddGameInput, validateBadmintonEndScore } from './addGameLogic';
+import { SafeNotificationHtml } from './lib/SafeNotificationHtml';
 import { isPlayerTab, type PlayerTab } from './playerTournamentSignupLogic';
 
 type TabKey = PlayerTab;
@@ -71,6 +72,19 @@ export type PlayerTournamentRow = {
   registrationLink: string;
 };
 
+export type InboxNotificationRow = {
+  id: number;
+  title: string;
+  body: string;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  createdByLabel: string;
+  attachmentFileName: string | null;
+  attachmentContentType: string | null;
+  attachmentSizeBytes: number | null;
+};
+
 type Props = {
   profile: Profile | null;
   clubs: Club[];
@@ -96,6 +110,7 @@ type Props = {
   recentGames: HomeGameRow[];
   allGames: HomeGameRow[];
   openTournaments: PlayerTournamentRow[];
+  inboxNotifications: InboxNotificationRow[];
   recordExistingGames: HomeGameRow[];
   upcomingSessions: UpcomingRow[];
   allUpcomingSessions: UpcomingRow[];
@@ -140,6 +155,10 @@ type Props = {
   onOpenSession: (args: { fromDate: string; toDate: string; startTime: string }) => Promise<void>;
   onProfilePlayerChange: (playerId: number) => Promise<void>;
   onToggleLeaderboardVisibility: (visible: boolean) => Promise<void>;
+  onUpdateProfileDetails: (payload: { full_name?: string; display_name?: string }) => Promise<void>;
+  onMarkNotificationRead: (notificationId: number) => Promise<void>;
+  onMarkAllNotificationsRead: () => Promise<void>;
+  onLoadNotificationAttachment: (notificationId: number) => Promise<{ blob: Blob; contentType: string | null; fileName: string | null }>;
   onLogout: () => void;
 };
 
@@ -178,6 +197,7 @@ export function LeaderboardView(props: Props) {
     recentGames,
     allGames,
     openTournaments,
+    inboxNotifications,
     recordExistingGames,
     upcomingSessions,
     allUpcomingSessions,
@@ -202,6 +222,10 @@ export function LeaderboardView(props: Props) {
     onOpenSession,
     onProfilePlayerChange,
     onToggleLeaderboardVisibility,
+    onUpdateProfileDetails,
+    onMarkNotificationRead,
+    onMarkAllNotificationsRead,
+    onLoadNotificationAttachment,
     onLogout,
   } = props;
 
@@ -224,6 +248,15 @@ export function LeaderboardView(props: Props) {
   const [homeResetSignal, setHomeResetSignal] = useState(0);
   const [profileFocusSection, setProfileFocusSection] = useState<'preferences' | null>(null);
   const [preferencesExpanded, setPreferencesExpanded] = useState(false);
+  const [profileFullName, setProfileFullName] = useState('');
+  const [profileDisplayNameDraft, setProfileDisplayNameDraft] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFormError, setProfileFormError] = useState<string | null>(null);
+  const [activeInboxNotificationId, setActiveInboxNotificationId] = useState<number | null>(null);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const [attachmentMeta, setAttachmentMeta] = useState<Record<number, { fileName: string | null; contentType: string | null }>>({});
+  const [attachmentLoadingId, setAttachmentLoadingId] = useState<number | null>(null);
+  const [attachmentErrors, setAttachmentErrors] = useState<Record<number, string>>({});
   const preferencesSectionRef = useRef<HTMLDivElement | null>(null);
   const profileDisplayName = profile?.display_name || profile?.full_name || 'LeagueOS User';
   const profileInitials = profileDisplayName
@@ -250,6 +283,21 @@ export function LeaderboardView(props: Props) {
   const avatarStorageKey = profile?.email ? `leagueos.profile.avatar.${profile.email.toLowerCase()}` : null;
   const showOnLeaderboard = profile?.show_on_leaderboard ?? true;
   const hideFromLeaderboard = !showOnLeaderboard;
+  const effectiveRoleLabel = String(profile?.club_role || profile?.role || 'USER').replaceAll('_', ' ');
+  const activeClubName = clubs.find((club) => club.id === selectedClubId)?.name || 'No club selected';
+
+  useEffect(() => {
+    setProfileFullName(profile?.full_name || '');
+    setProfileDisplayNameDraft(profile?.display_name || '');
+    setProfileFormError(null);
+  }, [profile?.full_name, profile?.display_name]);
+  const unreadInboxCount = inboxNotifications.filter((item) => !item.isRead).length;
+
+  useEffect(() => {
+    return () => {
+      Object.values(attachmentUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [attachmentUrls]);
 
   useEffect(() => {
     if (!enableTeamRanking && leaderboardMode !== 'player') {
@@ -907,6 +955,108 @@ export function LeaderboardView(props: Props) {
           ) : null}
 
           <section style={{ maxWidth: 1100, margin: '-12px auto 0', padding: '0 16px 16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16, marginBottom: 16 }}>
+              <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.06)', padding: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#64748b' }}>Account</div>
+                <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
+                  <ProfileInfoRow label="Email" value={profile?.email || '-'} />
+                  <ProfileInfoRow label="Role" value={effectiveRoleLabel} />
+                  <ProfileInfoRow label="Active Club" value={activeClubName} />
+                  <ProfileInfoRow label="Leaderboard Visibility" value={showOnLeaderboard ? 'Visible' : 'Hidden'} />
+                </div>
+              </div>
+
+              <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.06)', padding: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#64748b' }}>Club Memberships</div>
+                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {clubs.length ? clubs.map((club) => (
+                    <span
+                      key={club.id}
+                      style={{
+                        borderRadius: 999,
+                        padding: '8px 12px',
+                        border: club.id === selectedClubId ? '1px solid #14b8a6' : '1px solid #dbe3ef',
+                        background: club.id === selectedClubId ? '#ecfeff' : '#fff',
+                        color: club.id === selectedClubId ? '#0f766e' : '#334155',
+                        fontWeight: 700,
+                        fontSize: 13,
+                      }}
+                    >
+                      {club.name}
+                    </span>
+                  )) : <div style={{ color: '#64748b' }}>No clubs available.</div>}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.06)', padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 22 }}>Profile Settings</h2>
+                  <div style={{ marginTop: 6, color: '#64748b', fontSize: 14 }}>
+                    Update how your account appears across leaderboards, notifications, and tournament views.
+                  </div>
+                </div>
+                <button
+                  style={primaryBtn}
+                  disabled={
+                    profileSaving ||
+                    (!profileFullName.trim() && !profileDisplayNameDraft.trim()) ||
+                    (profileFullName.trim() === (profile?.full_name || '').trim() &&
+                      profileDisplayNameDraft.trim() === (profile?.display_name || '').trim())
+                  }
+                  onClick={async () => {
+                    const fullName = profileFullName.trim();
+                    const displayName = profileDisplayNameDraft.trim();
+                    if (!fullName) {
+                      setProfileFormError('Full name is required.');
+                      return;
+                    }
+                    if (!displayName) {
+                      setProfileFormError('Display name is required.');
+                      return;
+                    }
+                    try {
+                      setProfileSaving(true);
+                      setProfileFormError(null);
+                      await onUpdateProfileDetails({
+                        full_name: fullName,
+                        display_name: displayName,
+                      });
+                    } catch (e) {
+                      setProfileFormError(e instanceof Error ? e.message : 'Failed to update profile.');
+                    } finally {
+                      setProfileSaving(false);
+                    }
+                  }}
+                >
+                  {profileSaving ? 'Saving…' : 'Save Settings'}
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12, marginTop: 16 }}>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Full Name</span>
+                  <input
+                    value={profileFullName}
+                    onChange={(e) => setProfileFullName(e.target.value)}
+                    style={modalInput}
+                    placeholder="Your full name"
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Display Name</span>
+                  <input
+                    value={profileDisplayNameDraft}
+                    onChange={(e) => setProfileDisplayNameDraft(e.target.value)}
+                    style={modalInput}
+                    placeholder="How your name appears in the app"
+                  />
+                </label>
+              </div>
+              {profileFormError ? <div style={{ marginTop: 10, color: 'var(--bad)', fontSize: 13, fontWeight: 700 }}>{profileFormError}</div> : null}
+            </div>
+
             <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,.06)', padding: 16 }}>
               <h2 style={{ margin: 0, fontSize: 22 }}>Headline Statistics</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 10, marginTop: 12 }}>
@@ -1057,24 +1207,139 @@ export function LeaderboardView(props: Props) {
           <header style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', padding: '24px 16px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
-                <h1 style={{ margin: 0, fontSize: 22 }}>Inbox</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <h1 style={{ margin: 0, fontSize: 22 }}>Inbox</h1>
+                  {unreadInboxCount > 0 ? (
+                    <span style={{ padding: '4px 10px', borderRadius: 999, background: 'rgba(125,211,252,0.16)', color: '#bae6fd', fontSize: 12, fontWeight: 700 }}>
+                      {unreadInboxCount} unread
+                    </span>
+                  ) : null}
+                </div>
                 <p style={{ margin: '4px 0 0', opacity: 0.92, fontSize: 14 }}>
-                  Placeholder for alerts, invites, and system messages.
+                  Alerts, tournament updates, and club messages.
                 </p>
               </div>
-              <button onClick={onLogout} style={ghostBtn}>Logout</button>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button onClick={() => void onMarkAllNotificationsRead()} style={ghostBtn} disabled={unreadInboxCount === 0}>Mark all read</button>
+                <button onClick={onLogout} style={ghostBtn}>Logout</button>
+              </div>
             </div>
           </header>
 
           <section style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 16px' }}>
-            <div style={{ marginTop: -12, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 12px 30px rgba(15,23,42,.08)', padding: 24 }}>
-              <div style={{ width: 56, height: 56, borderRadius: 18, background: '#e0f2fe', display: 'grid', placeItems: 'center', color: '#0369a1' }}>
-                <BellIcon active />
-              </div>
-              <h2 style={{ margin: '18px 0 0', fontSize: 24, color: '#0f172a' }}>Coming Soon</h2>
-              <p style={{ margin: '10px 0 0', maxWidth: 520, color: '#475569', lineHeight: 1.6 }}>
-                Inbox will hold notifications and tournament updates. Profile access remains available from the avatar on the home screen.
-              </p>
+            <div style={{ marginTop: -12, display: 'grid', gap: 14 }}>
+              {inboxNotifications.length ? inboxNotifications.map((item) => (
+                <article
+                  key={item.id}
+                  style={{
+                    background: '#fff',
+                    borderRadius: 20,
+                    border: item.isRead ? '1px solid var(--border)' : '1px solid #a7f3d0',
+                    boxShadow: '0 12px 30px rgba(15,23,42,.08)',
+                    padding: 24,
+                    cursor: item.attachmentFileName ? 'pointer' : 'default',
+                  }}
+                  onClick={() => {
+                    if (!item.attachmentFileName) return;
+                    const nextId = activeInboxNotificationId === item.id ? null : item.id;
+                    setActiveInboxNotificationId(nextId);
+                    if (!nextId || attachmentUrls[item.id] || attachmentLoadingId === item.id) return;
+                    setAttachmentLoadingId(item.id);
+                    setAttachmentErrors((prev) => ({ ...prev, [item.id]: '' }));
+                    void onLoadNotificationAttachment(item.id)
+                      .then((result) => {
+                        const objectUrl = URL.createObjectURL(result.blob);
+                        setAttachmentUrls((prev) => {
+                          if (prev[item.id]) URL.revokeObjectURL(prev[item.id]);
+                          return { ...prev, [item.id]: objectUrl };
+                        });
+                        setAttachmentMeta((prev) => ({
+                          ...prev,
+                          [item.id]: {
+                            fileName: result.fileName ?? item.attachmentFileName,
+                            contentType: result.contentType ?? item.attachmentContentType,
+                          },
+                        }));
+                      })
+                      .catch((error) => {
+                        const message = error instanceof ApiError ? error.message : 'Failed to load attachment.';
+                        setAttachmentErrors((prev) => ({ ...prev, [item.id]: message }));
+                      })
+                      .finally(() => setAttachmentLoadingId((prev) => (prev === item.id ? null : prev)));
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <h2 style={{ margin: 0, fontSize: 22, color: '#0f172a' }}>{item.title}</h2>
+                        {!item.isRead ? (
+                          <span style={{ padding: '4px 10px', borderRadius: 999, background: '#ecfdf5', color: '#047857', fontSize: 12, fontWeight: 700 }}>
+                            New
+                          </span>
+                        ) : null}
+                      </div>
+                      <div style={{ marginTop: 8, color: '#64748b', fontSize: 13 }}>
+                        {new Date(item.createdAt).toLocaleString()} · {item.createdByLabel}
+                      </div>
+                      {item.attachmentFileName ? (
+                        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 999, background: '#eff6ff', color: '#1d4ed8', fontSize: 12, fontWeight: 700 }}>
+                          {(item.attachmentContentType || '').startsWith('image/') ? 'Image' : 'PDF'} · {item.attachmentFileName}
+                          {typeof item.attachmentSizeBytes === 'number' ? ` · ${Math.max(1, Math.round(item.attachmentSizeBytes / 1024))}KB` : ''}
+                        </div>
+                      ) : null}
+                    </div>
+                    {!item.isRead ? (
+                      <button
+                        style={outlineBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onMarkNotificationRead(item.id);
+                        }}
+                      >
+                        Mark read
+                      </button>
+                    ) : null}
+                  </div>
+                  <SafeNotificationHtml
+                    html={item.body}
+                    style={{ margin: '14px 0 0', color: '#334155', lineHeight: 1.7 }}
+                  />
+                  {activeInboxNotificationId === item.id && item.attachmentFileName ? (
+                    <div style={{ marginTop: 18, borderTop: '1px solid #e2e8f0', paddingTop: 18, display: 'grid', gap: 12 }}>
+                      {attachmentLoadingId === item.id ? <div style={{ color: '#64748b' }}>Loading attachment...</div> : null}
+                      {attachmentErrors[item.id] ? <div style={{ color: '#b91c1c', fontWeight: 600 }}>{attachmentErrors[item.id]}</div> : null}
+                      {attachmentUrls[item.id] ? (
+                        ((attachmentMeta[item.id]?.contentType || item.attachmentContentType || '').startsWith('image/')) ? (
+                          <img
+                            src={attachmentUrls[item.id]}
+                            alt={attachmentMeta[item.id]?.fileName || item.attachmentFileName || 'Notification attachment'}
+                            style={{ maxWidth: '100%', borderRadius: 16, border: '1px solid #dbe3ef', boxShadow: '0 10px 24px rgba(15,23,42,.08)' }}
+                          />
+                        ) : (
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <a href={attachmentUrls[item.id]} target="_blank" rel="noreferrer" style={outlineBtn}>
+                              Open PDF
+                            </a>
+                            <span style={{ color: '#64748b', fontSize: 13 }}>
+                              {attachmentMeta[item.id]?.fileName || item.attachmentFileName}
+                            </span>
+                          </div>
+                        )
+                      ) : null}
+                    </div>
+                  ) : null}
+                </article>
+              )) : (
+                <div style={{ background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 12px 30px rgba(15,23,42,.08)', padding: 24 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: 18, background: '#e0f2fe', display: 'grid', placeItems: 'center', color: '#0369a1' }}>
+                    <BellIcon active />
+                  </div>
+                  <h2 style={{ margin: '18px 0 0', fontSize: 24, color: '#0f172a' }}>No notifications yet</h2>
+                  <p style={{ margin: '10px 0 0', maxWidth: 560, color: '#475569', lineHeight: 1.6 }}>
+                    Club messages and tournament updates will appear here when league admins send them.
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         </section>
@@ -1092,7 +1357,7 @@ export function LeaderboardView(props: Props) {
         />
         <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon={<TrophyIcon active={tab === 'leaderboard'} />} label="Leaderboard" />
         <TabButton active={tab === 'tournaments'} onClick={() => setTab('tournaments')} icon={<TicketIcon active={tab === 'tournaments'} />} label="Tournaments" />
-        <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')} icon={<BellIcon active={tab === 'inbox'} />} label="Inbox" />
+        <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')} icon={<BellIcon active={tab === 'inbox'} />} label="Inbox" badgeCount={unreadInboxCount} />
       </nav>
 
       {createSeasonOpen ? (
@@ -1699,6 +1964,15 @@ function HomeTableCard({
           ))}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ProfileInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color: '#0f172a', fontSize: 15, fontWeight: 700, wordBreak: 'break-word' }}>{value}</div>
     </div>
   );
 }
@@ -2911,11 +3185,43 @@ function ModernTimeSelect({
   );
 }
 
-function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: ReactNode; label: string }) {
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  badgeCount = 0,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+  badgeCount?: number;
+}) {
   return (
-    <button onClick={onClick} style={active ? playerTabButtonActive : playerTabButton}>
+    <button onClick={onClick} style={{ ...(active ? playerTabButtonActive : playerTabButton), position: 'relative' }}>
       <span style={active ? playerTabIconShellActive : playerTabIconShell}>{icon}</span>
       <span style={{ fontSize: 13 }}>{label}</span>
+      {badgeCount > 0 ? (
+        <span style={{
+          position: 'absolute',
+          top: 8,
+          right: 16,
+          minWidth: 20,
+          height: 20,
+          borderRadius: 999,
+          background: active ? '#7dd3fc' : '#ef4444',
+          color: active ? '#082f49' : '#fff',
+          fontSize: 11,
+          fontWeight: 800,
+          display: 'grid',
+          placeItems: 'center',
+          padding: '0 6px',
+        }}
+        >
+          {badgeCount}
+        </span>
+      ) : null}
     </button>
   );
 }
