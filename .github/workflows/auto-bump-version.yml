@@ -1,0 +1,63 @@
+name: Auto Bump Version
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump patch version
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must be x.y.z, got: $current"
+            exit 1
+          fi
+          IFS='.' read -r major minor patch <<< "$current"
+          next="${major}.${minor}.$((patch + 1))"
+          node scripts/sync-version.mjs "$next"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag, and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          next="${{ steps.bump.outputs.next }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION package.json apps/web/package.json apps/mobile/package.json packages/api/package.json packages/config/package.json packages/schemas/package.json packages/ui/package.json
+          if git diff --cached --quiet; then
+            echo "No version changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(version): bump frontend to v${next} [skip ci]"
+          if git rev-parse "v${next}" >/dev/null 2>&1; then
+            echo "Tag v${next} already exists; skipping tag creation."
+          else
+            git tag "v${next}"
+          fi
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          if git rev-parse "v${next}" >/dev/null 2>&1; then
+            git push origin "v${next}" || true
+          fi

@@ -31,39 +31,69 @@ export const seasonSchema = z.object({
   created_at: z.string(),
 });
 
-export const sessionSchema = z.object({
+const sessionStatusSchema = z.enum(['UPCOMING', 'OPEN', 'CLOSED', 'FINALIZED', 'CANCELLED']);
+
+const sessionCommonSchema = z.object({
   id: z.number(),
   season_id: z.number(),
-  session_start_time: z.string(),
-  session_end_time: z.string().nullable().optional(),
-  status: z.enum(['UPCOMING', 'OPEN', 'CLOSED', 'FINALIZED', 'CANCELLED']),
+  status: sessionStatusSchema,
   location: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
   opened_at: z.string().nullable().optional(),
   closed_at: z.string().nullable().optional(),
   finalized_at: z.string().nullable().optional(),
   created_at: z.string().nullable().optional(),
-}).transform((row) => {
-  const dt = new Date(row.session_start_time);
-  if (Number.isNaN(dt.getTime())) {
-    return {
-      ...row,
-      session_date: '',
-      start_time_local: '',
-    };
+  session_end_time: z.string().nullable().optional(),
+});
+
+const sessionLegacySchema = sessionCommonSchema.extend({
+  session_start_time: z.string(),
+});
+
+const sessionDateSchema = sessionCommonSchema.extend({
+  session_date: z.string(),
+  start_time_local: z.string().optional(),
+  session_start_time: z.string().optional(),
+});
+
+export const sessionSchema = z.union([sessionLegacySchema, sessionDateSchema]).transform((row) => {
+  if ('session_start_time' in row && typeof row.session_start_time === 'string' && row.session_start_time) {
+    const dt = new Date(row.session_start_time);
+    if (!Number.isNaN(dt.getTime())) {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mm = String(dt.getMinutes()).padStart(2, '0');
+      const ss = String(dt.getSeconds()).padStart(2, '0');
+      return {
+        ...row,
+        session_start_time: row.session_start_time,
+        session_date: `${y}-${m}-${d}`,
+        start_time_local: `${hh}:${mm}:${ss}`,
+      };
+    }
   }
 
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, '0');
-  const d = String(dt.getDate()).padStart(2, '0');
-  const hh = String(dt.getHours()).padStart(2, '0');
-  const mm = String(dt.getMinutes()).padStart(2, '0');
-  const ss = String(dt.getSeconds()).padStart(2, '0');
+  const sessionDate = 'session_date' in row && typeof row.session_date === 'string' ? row.session_date : '';
+  const startTimeLocal = 'start_time_local' in row && typeof row.start_time_local === 'string'
+    ? row.start_time_local
+    : '';
+  const normalizedTime = /^\d{2}:\d{2}:\d{2}$/.test(startTimeLocal)
+    ? startTimeLocal
+    : /^\d{2}:\d{2}$/.test(startTimeLocal)
+      ? `${startTimeLocal}:00`
+      : '00:00:00';
+  const sessionStartTime =
+    'session_start_time' in row && typeof row.session_start_time === 'string' && row.session_start_time
+      ? row.session_start_time
+      : (sessionDate ? `${sessionDate}T${normalizedTime}` : '');
 
   return {
     ...row,
-    session_date: `${y}-${m}-${d}`,
-    start_time_local: `${hh}:${mm}:${ss}`,
+    session_start_time: sessionStartTime,
+    session_date: sessionDate,
+    start_time_local: startTimeLocal,
   };
 });
 
