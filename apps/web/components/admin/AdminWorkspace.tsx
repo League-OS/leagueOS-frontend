@@ -25,7 +25,7 @@ import {
   primaryBtn,
 } from './AdminShellParts';
 import type { AdminNavKey } from './AdminShellParts';
-import { adminPageTitle, buildAdminBreadcrumbs, buildSeasonPlayerStats, countUniquePlayersInSessionGames, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
+import { adminPageTitle, buildAdminBreadcrumbs, buildSeasonPlayerStats, buildSessionStatsById, filterSeasonPlayerEntries, gameStatusDisplay, mergeAdminPlayers, type AdminPage } from './adminWorkspaceLogic';
 import { combineSessionDateAndTimeToIso, floorToFiveMinuteIncrement, validateAddGameInput } from '../addGameLogic';
 import { formatSequentialFinalizeBlockedError } from '../lib/apiErrorMessages';
 
@@ -2271,23 +2271,10 @@ function SeasonDetailPanel(props: {
     leaderboardRows,
   }), [games, leaderboardRows, participantsByGame, players, season?.format, sessions]);
 
-  const sessionStatsById = useMemo(() => {
-    const groupedGames = new Map<number, Game[]>();
-    for (const game of games) {
-      const bucket = groupedGames.get(game.session_id);
-      if (bucket) bucket.push(game);
-      else groupedGames.set(game.session_id, [game]);
-    }
-    const stats = new Map<number, { matches: number; players: number }>();
-    for (const session of sessions) {
-      const sessionGames = groupedGames.get(session.id) ?? [];
-      stats.set(session.id, {
-        matches: sessionGames.length,
-        players: countUniquePlayersInSessionGames(sessionGames, participantsByGame),
-      });
-    }
-    return stats;
-  }, [games, participantsByGame, sessions]);
+  const sessionStatsById = useMemo(
+    () => buildSessionStatsById({ sessions, games, participantsByGame }),
+    [games, participantsByGame, sessions],
+  );
   const playerSeasonEntries = useMemo(
     () => players.map((p) => {
       const playerStats = seasonPlayerStats.get(p.id) ?? { matchesPlayed: 0, eloScore: 1000 };
@@ -2342,9 +2329,7 @@ function SeasonDetailPanel(props: {
     setSelectedSeasonPlayerId('');
   }, [season?.id]);
   const filteredPlayerSeasonEntries = useMemo(
-    () => selectedSeasonPlayerId === ''
-      ? playerSeasonEntries
-      : playerSeasonEntries.filter((entry) => entry.id === selectedSeasonPlayerId),
+    () => filterSeasonPlayerEntries(playerSeasonEntries, selectedSeasonPlayerId),
     [playerSeasonEntries, selectedSeasonPlayerId],
   );
   const filteredPlayerSeasonRows = useMemo(

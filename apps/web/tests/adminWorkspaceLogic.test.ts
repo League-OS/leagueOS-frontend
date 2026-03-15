@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   adminPageTitle,
   buildSeasonPlayerStats,
+  buildSessionStatsById,
   buildAdminBreadcrumbs,
   countUniquePlayersInSessionGames,
+  filterSeasonPlayerEntries,
   gameStatusDisplay,
   mergeAdminPlayers,
 } from '../components/admin/adminWorkspaceLogic.ts';
@@ -111,4 +113,40 @@ test('buildSeasonPlayerStats computes matches played and ELO fallback by season 
 
   assert.deepEqual(stats.get(10), { matchesPlayed: 2, eloScore: 1125 });
   assert.deepEqual(stats.get(11), { matchesPlayed: 1, eloScore: 980 });
+});
+
+test('buildSessionStatsById computes per-session match and unique player counts', () => {
+  const sessions = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  const games = [
+    { id: 10, session_id: 1 },
+    { id: 11, session_id: 1 },
+    { id: 12, session_id: 2 },
+    { id: 13, session_id: 99 },
+  ];
+  const participantsByGame = {
+    10: [{ player_id: 7 }, { player_id: 8 }, { player_id: 9 }, { player_id: 10 }],
+    11: [{ player_id: 7 }, { player_id: 11 }, { player_id: 12 }, { player_id: 10 }],
+    12: [{ player_id: 5 }, { player_id: 6 }, { player_id: 6 }],
+  };
+
+  const stats = buildSessionStatsById({
+    sessions: sessions as never,
+    games: games as never,
+    participantsByGame: participantsByGame as never,
+  });
+
+  assert.deepEqual(stats.get(1), { matches: 2, players: 6 });
+  assert.deepEqual(stats.get(2), { matches: 1, players: 2 });
+  assert.deepEqual(stats.get(3), { matches: 0, players: 0 });
+});
+
+test('filterSeasonPlayerEntries returns all or selected player row', () => {
+  const entries = [
+    { id: 1, displayName: 'A', matchesPlayed: 2, playerStatus: 'ROSTER', eloScore: 1002 },
+    { id: 2, displayName: 'B', matchesPlayed: 0, playerStatus: 'DROP_IN', eloScore: 998 },
+  ];
+
+  assert.deepEqual(filterSeasonPlayerEntries(entries, ''), entries);
+  assert.deepEqual(filterSeasonPlayerEntries(entries, 2), [entries[1]]);
+  assert.deepEqual(filterSeasonPlayerEntries(entries, 99), []);
 });

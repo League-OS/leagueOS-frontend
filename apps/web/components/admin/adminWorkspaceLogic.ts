@@ -68,6 +68,42 @@ export function countUniquePlayersInSessionGames(sessionGames: Game[], participa
   ).size;
 }
 
+export function buildSessionStatsById(args: {
+  sessions: Session[];
+  games: Game[];
+  participantsByGame: Record<number, GameParticipant[]>;
+}): Map<number, { matches: number; players: number }> {
+  const { sessions, games, participantsByGame } = args;
+  const groupedGames = new Map<number, Game[]>();
+  for (const game of games) {
+    const bucket = groupedGames.get(game.session_id);
+    if (bucket) bucket.push(game);
+    else groupedGames.set(game.session_id, [game]);
+  }
+  const statsBySessionId = new Map<number, { matches: number; players: number }>();
+  for (const session of sessions) {
+    const sessionGames = groupedGames.get(session.id) ?? [];
+    statsBySessionId.set(session.id, {
+      matches: sessionGames.length,
+      players: countUniquePlayersInSessionGames(sessionGames, participantsByGame),
+    });
+  }
+  return statsBySessionId;
+}
+
+export type SeasonPlayerEntry = {
+  id: number;
+  displayName: string;
+  matchesPlayed: number;
+  playerStatus: string;
+  eloScore: number;
+};
+
+export function filterSeasonPlayerEntries(entries: SeasonPlayerEntry[], selectedPlayerId: number | ''): SeasonPlayerEntry[] {
+  if (selectedPlayerId === '') return entries;
+  return entries.filter((entry) => entry.id === selectedPlayerId);
+}
+
 export function buildSeasonPlayerStats(args: {
   players: Player[];
   seasonFormat: Season['format'];
