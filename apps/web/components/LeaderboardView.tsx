@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@leagueos/api';
 import type { Club, Court, LeaderboardEntry, Player, Profile, Season, Session, TeamLeaderboardEntry } from '@leagueos/schemas';
 import { floorToFiveMinuteIncrement, validateAddGameInput, validateBadmintonEndScore } from './addGameLogic';
+import { isPlayerTab, type PlayerTab } from './playerTournamentSignupLogic';
 
-type TabKey = 'home' | 'leaderboard' | 'tournaments' | 'profile';
+type TabKey = PlayerTab;
 type LeaderboardMode = 'player' | 'team';
 type HomeMode = 'main' | 'addGame' | 'allGames' | 'gameDetail' | 'allUpcoming' | 'upcomingDetail';
 
@@ -296,7 +297,7 @@ export function LeaderboardView(props: Props) {
       const stored = tabStorageProfileKey
         ? window.localStorage.getItem(tabStorageProfileKey) ?? window.localStorage.getItem(tabStorageGlobalKey)
         : window.localStorage.getItem(tabStorageGlobalKey);
-      if (stored === 'home' || stored === 'leaderboard' || stored === 'tournaments' || stored === 'profile') {
+      if (isPlayerTab(stored)) {
         setTab(stored);
       }
     } catch {
@@ -326,7 +327,7 @@ export function LeaderboardView(props: Props) {
   }, [tab, profileFocusSection]);
 
   return (
-    <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 90 }}>
+    <main style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: 118 }}>
       {tab === 'home' ? (
         <HomeScreen
           resetSignal={homeResetSignal}
@@ -1051,19 +1052,47 @@ export function LeaderboardView(props: Props) {
         </section>
       ) : null}
 
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: '1px solid var(--border)', background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', maxWidth: 1100, margin: '0 auto', zIndex: 90 }}>
+      {tab === 'inbox' ? (
+        <section>
+          <header style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', color: 'white', padding: '24px 16px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: 22 }}>Inbox</h1>
+                <p style={{ margin: '4px 0 0', opacity: 0.92, fontSize: 14 }}>
+                  Placeholder for alerts, invites, and system messages.
+                </p>
+              </div>
+              <button onClick={onLogout} style={ghostBtn}>Logout</button>
+            </div>
+          </header>
+
+          <section style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 16px' }}>
+            <div style={{ marginTop: -12, background: '#fff', borderRadius: 20, border: '1px solid var(--border)', boxShadow: '0 12px 30px rgba(15,23,42,.08)', padding: 24 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 18, background: '#e0f2fe', display: 'grid', placeItems: 'center', color: '#0369a1' }}>
+                <BellIcon active />
+              </div>
+              <h2 style={{ margin: '18px 0 0', fontSize: 24, color: '#0f172a' }}>Coming Soon</h2>
+              <p style={{ margin: '10px 0 0', maxWidth: 520, color: '#475569', lineHeight: 1.6 }}>
+                Inbox will hold notifications and tournament updates. Profile access remains available from the avatar on the home screen.
+              </p>
+            </div>
+          </section>
+        </section>
+      ) : null}
+
+      <nav style={playerBottomNav}>
         <TabButton
           active={tab === 'home'}
           onClick={() => {
             setTab('home');
             setHomeResetSignal((prev) => prev + 1);
           }}
-          icon="⌂"
+          icon={<HomeIcon active={tab === 'home'} />}
           label="Home"
         />
-        <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon="🏆" label="Leaderboard" />
-        <TabButton active={tab === 'tournaments'} onClick={() => setTab('tournaments')} icon="🎟️" label="Tournaments" />
-        <TabButton active={tab === 'profile'} onClick={() => setTab('profile')} icon="◉" label="Profile" />
+        <TabButton active={tab === 'leaderboard'} onClick={() => setTab('leaderboard')} icon={<TrophyIcon active={tab === 'leaderboard'} />} label="Leaderboard" />
+        <TabButton active={tab === 'tournaments'} onClick={() => setTab('tournaments')} icon={<TicketIcon active={tab === 'tournaments'} />} label="Tournaments" />
+        <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')} icon={<BellIcon active={tab === 'inbox'} />} label="Inbox" />
       </nav>
 
       {createSeasonOpen ? (
@@ -2882,12 +2911,71 @@ function ModernTimeSelect({
   );
 }
 
-function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) {
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: ReactNode; label: string }) {
   return (
-    <button onClick={onClick} style={{ border: 0, background: '#fff', padding: '8px 4px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: active ? '#0d9488' : '#6b7280', fontWeight: active ? 700 : 500, cursor: 'pointer' }}>
-      <span style={{ fontSize: 20 }}>{icon}</span>
+    <button onClick={onClick} style={active ? playerTabButtonActive : playerTabButton}>
+      <span style={active ? playerTabIconShellActive : playerTabIconShell}>{icon}</span>
       <span style={{ fontSize: 13 }}>{label}</span>
     </button>
+  );
+}
+
+function NavGlyph({ active, children }: { active: boolean; children: ReactNode }) {
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={active ? '#7dd3fc' : 'rgba(255,255,255,0.82)'}
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function HomeIcon({ active }: { active: boolean }) {
+  return (
+    <NavGlyph active={active}>
+      <path d="M3.5 11.5 12 4l8.5 7.5" />
+      <path d="M6.5 10.5V20h11v-9.5" />
+      <path d="M10 20v-5h4v5" />
+    </NavGlyph>
+  );
+}
+
+function TrophyIcon({ active }: { active: boolean }) {
+  return (
+    <NavGlyph active={active}>
+      <path d="M8 5h8v3a4 4 0 0 1-8 0V5Z" />
+      <path d="M9 16h6" />
+      <path d="M12 12v4" />
+      <path d="M7 6H5a2 2 0 0 0 2 3" />
+      <path d="M17 6h2a2 2 0 0 1-2 3" />
+      <path d="M9 20h6" />
+    </NavGlyph>
+  );
+}
+
+function TicketIcon({ active }: { active: boolean }) {
+  return (
+    <NavGlyph active={active}>
+      <path d="M5 8.5A2.5 2.5 0 0 0 5 13.5v2.5a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 16v-2.5a2.5 2.5 0 0 1 0-5V6a1.5 1.5 0 0 0-1.5-1.5h-11A1.5 1.5 0 0 0 5 6v2.5Z" />
+      <path d="M12 4.5v13" strokeDasharray="2.4 2.4" />
+    </NavGlyph>
+  );
+}
+
+function BellIcon({ active }: { active: boolean }) {
+  return (
+    <NavGlyph active={active}>
+      <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+      <path d="M6 16h12l-1.3-1.8a5.8 5.8 0 0 1-1.1-3.4V9.7a3.6 3.6 0 0 0-7.2 0v1.1a5.8 5.8 0 0 1-1.1 3.4L6 16Z" />
+    </NavGlyph>
   );
 }
 
@@ -3036,4 +3124,58 @@ const seasonModalCard: React.CSSProperties = {
   background: 'linear-gradient(180deg, #f0fdfa 0%, #ffffff 100%)',
   boxShadow: '0 20px 50px rgba(15, 118, 110, 0.28)',
   padding: 16,
+};
+
+const playerBottomNav: React.CSSProperties = {
+  position: 'fixed',
+  bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  width: 'min(560px, calc(100% - 24px))',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 30,
+  background: 'rgba(15, 23, 42, 0.92)',
+  boxShadow: '0 24px 60px rgba(15, 23, 42, 0.28)',
+  backdropFilter: 'blur(18px)',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  padding: 8,
+  zIndex: 90,
+};
+
+const playerTabButton: React.CSSProperties = {
+  border: 0,
+  background: 'transparent',
+  padding: '8px 4px',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  color: 'rgba(255,255,255,0.76)',
+  fontWeight: 600,
+  cursor: 'pointer',
+  borderRadius: 22,
+  transition: 'background 140ms ease, color 140ms ease, transform 140ms ease',
+};
+
+const playerTabButtonActive: React.CSSProperties = {
+  ...playerTabButton,
+  color: '#e0f2fe',
+  background: 'linear-gradient(180deg, rgba(37, 99, 235, 0.28), rgba(30, 41, 59, 0.42))',
+  transform: 'translateY(-1px)',
+};
+
+const playerTabIconShell: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 17,
+  display: 'grid',
+  placeItems: 'center',
+};
+
+const playerTabIconShellActive: React.CSSProperties = {
+  ...playerTabIconShell,
+  background: 'rgba(125, 211, 252, 0.12)',
+  boxShadow: 'inset 0 0 0 1px rgba(125, 211, 252, 0.1)',
 };

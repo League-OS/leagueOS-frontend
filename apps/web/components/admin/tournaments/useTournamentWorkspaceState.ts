@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LeagueOsApiClient,
   type Tournament as ApiTournament,
@@ -44,15 +44,11 @@ import type {
   ViewTab,
   WinCondition,
 } from './types';
+import { mergePoolPlayersWithRegistrations, type PoolRegistrationRow } from './poolDraftMerge';
 
 type AdminAuth = { token: string; clubId: number };
 type TournamentWindowOverrides = Record<string, { startAt?: string; endAt?: string }>;
-type FormatRegistrationRow = {
-  id: number;
-  player_id: number;
-  player_name: string;
-  status: string;
-};
+type FormatRegistrationRow = PoolRegistrationRow;
 type TournamentEditability = {
   canEditIdentity: boolean;
   canEditTimezone: boolean;
@@ -830,6 +826,7 @@ export function useTournamentWorkspaceState() {
   const [activeCourtId, setActiveCourtId] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
+  const poolDraftLoadTokenRef = useRef(0);
 
   const [slotDraft, setSlotDraft] = useState<SlotDraft>(defaultSlotDraft);
   const client = useMemo(
@@ -1078,6 +1075,31 @@ export function useTournamentWorkspaceState() {
     return clubSeasons.length ? String(clubSeasons[0].id) : '';
   }
 
+  function refreshPoolDraftFromRegistrations(format: Format, nextPool: PoolConfig) {
+    const auth = readAdminAuth();
+    const parsedTournamentId = activeTournamentId ? Number.parseInt(activeTournamentId, 10) : Number.NaN;
+    const parsedFormatId = Number.parseInt(format.id, 10);
+    if (!auth || !Number.isInteger(parsedTournamentId) || !Number.isInteger(parsedFormatId)) {
+      setFormatRegistrations([]);
+      return;
+    }
+
+    const loadId = ++poolDraftLoadTokenRef.current;
+    void (async () => {
+      try {
+        const registrations = await listFormatRegistrations(auth.token, auth.clubId, parsedTournamentId, parsedFormatId);
+        if (loadId !== poolDraftLoadTokenRef.current) return;
+        setFormatRegistrations(registrations);
+        const merged = mergePoolPlayersWithRegistrations(nextPool, registrations);
+        if (loadId !== poolDraftLoadTokenRef.current) return;
+        setPoolDraft(merged);
+      } catch {
+        if (loadId !== poolDraftLoadTokenRef.current) return;
+        setFormatRegistrations([]);
+      }
+    })();
+  }
+
   function loadDrafts(format: Format) {
     setFormatNameDraft(format.name);
     setConfigDraft(clone(format.config));
@@ -1098,6 +1120,7 @@ export function useTournamentWorkspaceState() {
     setFormatRegistrations([]);
     setBracketMatchesOpen(false);
     resetDirtyFlags();
+    refreshPoolDraftFromRegistrations(format, nextPool);
   }
 
   function toFormatFormDraft(format: Format): FormatFormDraft {

@@ -9,6 +9,16 @@ import {
 } from './lifecycleUi';
 import type { Format, TournamentLifecycleStatus, TournamentRecord } from './types';
 
+export type TournamentShareLink = {
+  id: string;
+  label: string;
+  url: string;
+  description: string;
+  qrFileSuffix: string;
+  authRequired?: boolean;
+  showQr?: boolean;
+};
+
 type FormatDirectoryPanelProps = {
   activeTournament: TournamentRecord | null;
   formats: Format[];
@@ -20,7 +30,7 @@ type FormatDirectoryPanelProps = {
   lifecycleStatusOptions: TournamentLifecycleStatus[];
   allowedLifecycleStatuses: (current: TournamentLifecycleStatus) => TournamentLifecycleStatus[];
   updateTournamentStatus: (tournamentId: string, status: TournamentLifecycleStatus) => void;
-  tournamentSignupLink: string;
+  shareLinks: TournamentShareLink[];
   requestEditTournament: (tournamentId: string) => void;
 };
 
@@ -35,12 +45,17 @@ export function FormatDirectoryPanel({
   lifecycleStatusOptions,
   allowedLifecycleStatuses,
   updateTournamentStatus,
-  tournamentSignupLink,
+  shareLinks,
   requestEditTournament,
 }: FormatDirectoryPanelProps) {
   const [copyStatus, setCopyStatus] = useState('');
-  const [qrDataUrl, setQrDataUrl] = useState('');
-  const [qrStatus, setQrStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [shareLinksExpanded, setShareLinksExpanded] = useState(true);
+  const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
+  const [qrStatuses, setQrStatuses] = useState<Record<string, 'idle' | 'loading' | 'error'>>({});
+
+  const activeShareLinks = shareLinks.filter((link) => link.url);
+  const qrEnabledLinks = activeShareLinks.filter((link) => link.showQr !== false);
+  const shareLinkFingerprint = qrEnabledLinks.map((link) => `${link.id}:${link.url}`).join('|');
 
   const iconBtn = {
     width: 28,
@@ -56,40 +71,71 @@ export function FormatDirectoryPanel({
     cursor: 'pointer',
   } as const;
   useEffect(() => {
+    if (!activeFormatId) return;
+    setShareLinksExpanded(false);
+  }, [activeFormatId]);
+
+  useEffect(() => {
     let cancelled = false;
-    if (!tournamentSignupLink) {
-      setQrDataUrl('');
-      setQrStatus('idle');
+    if (!qrEnabledLinks.length) {
+      setQrDataUrls({});
+      setQrStatuses({});
       return;
     }
-    setQrStatus('loading');
+    setQrStatuses(
+      qrEnabledLinks.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, link) => {
+        acc[link.id] = 'loading';
+        return acc;
+      }, {}),
+    );
     void import('qrcode')
-      .then((QRCode) => QRCode.toDataURL(tournamentSignupLink, {
-        width: 280,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-        color: {
-          dark: '#17302a',
-          light: '#ffffff',
-        },
-      }))
-      .then((nextDataUrl) => {
+      .then(async (QRCode) => Promise.all(
+        qrEnabledLinks.map(async (link) => ({
+          id: link.id,
+          dataUrl: await QRCode.toDataURL(link.url, {
+            width: 280,
+            margin: 1,
+            errorCorrectionLevel: 'M',
+            color: {
+              dark: '#17302a',
+              light: '#ffffff',
+            },
+          }),
+        })),
+      ))
+      .then((entries) => {
         if (cancelled) return;
-        setQrDataUrl(nextDataUrl);
-        setQrStatus('idle');
+        setQrDataUrls(
+          entries.reduce<Record<string, string>>((acc, entry) => {
+            acc[entry.id] = entry.dataUrl;
+            return acc;
+          }, {}),
+        );
+        setQrStatuses(
+          entries.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, entry) => {
+            acc[entry.id] = 'idle';
+            return acc;
+          }, {}),
+        );
       })
       .catch(() => {
         if (cancelled) return;
-        setQrDataUrl('');
-        setQrStatus('error');
+        setQrDataUrls({});
+        setQrStatuses(
+          qrEnabledLinks.reduce<Record<string, 'idle' | 'loading' | 'error'>>((acc, link) => {
+            acc[link.id] = 'error';
+            return acc;
+          }, {}),
+        );
       });
 
     return () => {
       cancelled = true;
     };
-  }, [tournamentSignupLink]);
+  }, [qrEnabledLinks.length, shareLinkFingerprint]);
 
-  function downloadQrPng() {
+  function downloadQrPng(linkId: string, qrFileSuffix: string) {
+    const qrDataUrl = qrDataUrls[linkId];
     if (!qrDataUrl) return;
     const safeName = (activeTournament?.name || 'tournament')
       .toLowerCase()
@@ -97,7 +143,7 @@ export function FormatDirectoryPanel({
       .replace(/(^-|-$)/g, '');
     const link = document.createElement('a');
     link.href = qrDataUrl;
-    link.download = `${safeName || 'tournament'}-signup-qr.png`;
+    link.download = `${safeName || 'tournament'}-${qrFileSuffix}-qr.png`;
     link.click();
   }
 
@@ -158,65 +204,145 @@ export function FormatDirectoryPanel({
         </div>
       </div>
 
-      <section style={{ ...subCard, marginTop: 10 }}>
-        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr auto', alignItems: 'start' }}>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <strong style={{ fontSize: 13 }}>Tournament Signup</strong>
-            <input value={tournamentSignupLink} readOnly style={{ ...field, background: '#f7faf8' }} />
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <button
-                style={iconBtn}
-                title="Copy signup link"
-                aria-label="Copy signup link"
-                onClick={() => {
-                  if (!tournamentSignupLink) return;
-                  void navigator.clipboard.writeText(tournamentSignupLink)
-                    .then(() => {
-                      setCopyStatus('Copied');
-                      window.setTimeout(() => setCopyStatus(''), 1200);
-                    })
-                    .catch(() => {
-                      setCopyStatus('Copy failed');
-                      window.setTimeout(() => setCopyStatus(''), 1200);
-                    });
-                }}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-                  <rect x="5" y="5" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-                </svg>
-              </button>
-              <button
-                style={{
-                  ...iconBtn,
-                  color: qrDataUrl ? '#17302a' : '#7d8a84',
-                  background: qrDataUrl ? '#fff' : '#f1f5f3',
-                  cursor: qrDataUrl ? 'pointer' : 'not-allowed',
-                }}
-                disabled={!qrDataUrl}
-                title="Download QR as PNG"
-                aria-label="Download QR as PNG"
-                onClick={downloadQrPng}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M12 4v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  <path d="m8 10 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </button>
-              {copyStatus ? <span style={{ color: '#5a6b64', fontSize: 12 }}>{copyStatus}</span> : null}
-            </div>
+      <section style={{ ...subCard, marginTop: 10, padding: 0, overflow: 'hidden' }}>
+        <button
+          type="button"
+          onClick={() => setShareLinksExpanded((value) => !value)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 14px',
+            border: 0,
+            borderBottom: shareLinksExpanded ? '1px solid #d7e4dd' : '0',
+            background: '#f9fcfa',
+            cursor: 'pointer',
+            color: '#17302a',
+          }}
+        >
+          <span style={{ display: 'grid', gap: 2, textAlign: 'left' }}>
+            <strong style={{ fontSize: 13 }}>Share URLs</strong>
+            <span style={{ color: '#5a6b64', fontSize: 12 }}>
+              {activeShareLinks.length} active now. This list is ready for more tournament-facing views.
+            </span>
+          </span>
+          <span style={{ color: '#4a5c54', fontSize: 12, fontWeight: 700 }}>
+            {shareLinksExpanded ? 'Collapse' : 'Expand'}
+          </span>
+        </button>
+
+        {shareLinksExpanded ? (
+          <div
+            style={{
+              display: 'grid',
+              gap: 10,
+              padding: 12,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(430px, 1fr))',
+            }}
+          >
+            {activeShareLinks.map((shareLink) => {
+              const showQr = shareLink.showQr !== false;
+              const qrDataUrl = qrDataUrls[shareLink.id] || '';
+              const qrStatus = showQr ? (qrStatuses[shareLink.id] || 'idle') : 'idle';
+              return (
+                <article
+                  key={shareLink.id}
+                  style={{
+                    border: '1px solid #d7e4dd',
+                    borderRadius: 12,
+                    background: '#fff',
+                    padding: 10,
+                    display: 'grid',
+                    gap: 8,
+                    gridTemplateColumns: showQr ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
+                    alignItems: 'start',
+                  }}
+                >
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: 13 }}>{shareLink.label}</strong>
+                      {shareLink.authRequired ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: '#6a4b04',
+                            background: '#fff4ce',
+                            border: '1px solid #f1d58d',
+                            borderRadius: 999,
+                            padding: '3px 8px',
+                          }}
+                        >
+                          Admin auth required
+                        </span>
+                      ) : null}
+                    </div>
+                    <input value={shareLink.url} readOnly style={{ ...field, background: '#f7faf8' }} />
+                    <span style={{ color: '#5a6b64', fontSize: 12 }}>{shareLink.description}</span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        style={iconBtn}
+                        title={`Copy ${shareLink.label}`}
+                        aria-label={`Copy ${shareLink.label}`}
+                        onClick={() => {
+                          if (!shareLink.url) return;
+                          void navigator.clipboard.writeText(shareLink.url)
+                            .then(() => {
+                              setCopyStatus(`${shareLink.label} copied`);
+                              window.setTimeout(() => setCopyStatus(''), 1400);
+                            })
+                            .catch(() => {
+                              setCopyStatus('Copy failed');
+                              window.setTimeout(() => setCopyStatus(''), 1400);
+                            });
+                        }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                          <rect x="5" y="5" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                        </svg>
+                      </button>
+                      {showQr ? (
+                        <button
+                          style={{
+                            ...iconBtn,
+                            color: qrDataUrl ? '#17302a' : '#7d8a84',
+                            background: qrDataUrl ? '#fff' : '#f1f5f3',
+                            cursor: qrDataUrl ? 'pointer' : 'not-allowed',
+                          }}
+                          disabled={!qrDataUrl}
+                          title="Download QR as PNG"
+                          aria-label="Download QR as PNG"
+                          onClick={() => downloadQrPng(shareLink.id, shareLink.qrFileSuffix)}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M12 4v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                            <path d="m8 10 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      ) : null}
+                      {copyStatus ? <span style={{ color: '#5a6b64', fontSize: 12 }}>{copyStatus}</span> : null}
+                    </div>
+                  </div>
+                  {showQr ? (
+                    <div style={{ border: '1px solid #d4dfd9', borderRadius: 10, padding: 6, background: '#fff' }}>
+                      {qrDataUrl ? (
+                        <img src={qrDataUrl} alt={`${shareLink.label} QR code`} width={84} height={84} />
+                      ) : (
+                        <div style={{ width: 84, height: 84, display: 'grid', placeItems: 'center', color: '#6b7d75', fontSize: 11 }}>
+                          {qrStatus === 'loading' ? 'Generating...' : 'No QR'}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
-          <div style={{ border: '1px solid #d4dfd9', borderRadius: 10, padding: 6, background: '#fff' }}>
-            {qrDataUrl ? (
-              <img src={qrDataUrl} alt="Tournament signup QR code" width={84} height={84} />
-            ) : (
-              <div style={{ width: 84, height: 84, display: 'grid', placeItems: 'center', color: '#6b7d75', fontSize: 11 }}>
-                {qrStatus === 'loading' ? 'Generating...' : 'No QR'}
-              </div>
-            )}
-          </div>
-        </div>
+        ) : null}
       </section>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>

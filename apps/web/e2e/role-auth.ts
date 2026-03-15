@@ -120,7 +120,7 @@ export async function waitForPlayerShell(page: Page, timeout = 15_000) {
     if (signInVisible && emailVisible) return 'login';
 
     const tabVisible =
-      await page.getByRole('button', { name: /home|leaderboard|tournaments|profile/i }).first().isVisible().catch(() => false);
+      await page.getByRole('button', { name: /home|leaderboard|tournaments|inbox/i }).first().isVisible().catch(() => false);
     const logoutVisible = await page.getByRole('button', { name: /logout|sign out/i }).isVisible().catch(() => false);
     return tabVisible || logoutVisible ? 'ready' : 'pending';
   }, { timeout, message: 'Player shell was not ready after login.' }).toBe('ready');
