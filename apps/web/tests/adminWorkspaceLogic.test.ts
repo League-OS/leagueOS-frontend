@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adminPageTitle,
+  buildSeasonPlayerStats,
   buildAdminBreadcrumbs,
   countUniquePlayersInSessionGames,
   gameStatusDisplay,
@@ -77,4 +78,37 @@ test('gameStatusDisplay reflects API game.status for session match table', () =>
   assert.equal(gameStatusDisplay({ status: 'CREATED' }), 'Created');
   assert.equal(gameStatusDisplay({}), 'Created');
   assert.equal(gameStatusDisplay({ status: undefined }), 'Created');
+});
+
+test('buildSeasonPlayerStats computes matches played and ELO fallback by season format', () => {
+  const players = [
+    { id: 10, elo_initial_doubles: 1010, elo_initial_singles: 990, elo_initial_mixed: 1005 },
+    { id: 11, elo_initial_doubles: 980, elo_initial_singles: 1000, elo_initial_mixed: 975 },
+  ];
+  const sessions = [{ id: 1 }, { id: 2 }];
+  const games = [
+    { id: 100, session_id: 1 },
+    { id: 101, session_id: 1 },
+    { id: 102, session_id: 99 },
+  ];
+  const participantsByGame = {
+    100: [{ player_id: 10 }, { player_id: 11 }, { player_id: 10 }],
+    101: [{ player_id: 10 }],
+    102: [{ player_id: 11 }],
+  };
+  const leaderboardRows = [
+    { player_id: 10, matches_played: 3, global_elo_score: 1125 },
+  ];
+
+  const stats = buildSeasonPlayerStats({
+    players: players as never,
+    seasonFormat: 'DOUBLES',
+    sessions: sessions as never,
+    games: games as never,
+    participantsByGame: participantsByGame as never,
+    leaderboardRows: leaderboardRows as never,
+  });
+
+  assert.deepEqual(stats.get(10), { matchesPlayed: 2, eloScore: 1125 });
+  assert.deepEqual(stats.get(11), { matchesPlayed: 1, eloScore: 980 });
 });
